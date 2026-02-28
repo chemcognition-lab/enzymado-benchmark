@@ -19,13 +19,25 @@
  - [] Scripts for metrics (Manuel)
  - [] Access to PC in San Diego (Ricardo)
  - [] Model script embedding (Ricardo)
-    - [] ESM2
-    - [] ESM3
-    - [] ProsT5
-    - [] ProT5
+    - [x] ESM2--DONE
+    - [X] ESM3--DONE
+    - [X] ProsT5--DONE
+    - [X] ProT5--DONE
     - [] ProFluent
-    - [] ESMC
-    - [] Ankh
+    - [X] ESMC--DONE
+    - [X] Ankh--DONE
+    - Utility scripts:
+         - [] json_to_fasta.py
+         - [] out_to_json.py
+         - [] general runner
+    - Enviroments files:
+     - [] ESM2--DONE 
+     - [] ESM3--DONE 
+     - [] ProsT5--DONE 
+     - [] ProT5--DONE
+     - [] ProFluent
+     - [] ESMC--DONE 
+     - [] Ankh--DONE 
  - [] Baseline script (Ricardo)
     - [] Task specific models (CatPred, etc...)
  - [] Rating script

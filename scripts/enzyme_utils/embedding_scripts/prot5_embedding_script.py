@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Sep 23 18:33:22 2020
+
+@author: mheinzinger
+"""
+
+import argparse
+import time
+from pathlib import Path
+
+import torch
+import h5py
+from transformers import T5EncoderModel, T5Tokenizer
+
+if torch.cuda.is_available():
+    device = torch.device('cuda:0')
+elif torch.backends.mps.is_available():
+    device = torch.device('mps')
+else:
+    device = torch.device('cpu')
+print("Using device: {}".format(device))
+
+
+def get_T5_model(model_dir):
+    print("Loading T5 from: {}".format(model_dir))
+    model = T5EncoderModel.from_pretrained(model_dir)
+    if device == torch.device("cpu"):
+        print("Casting model to full precision for running on CPU ...")
+        model.to(torch.float32)
+    model = model.to(device).eval()
+    vocab = T5Tokenizer.from_pretrained(model_dir, do_lower_case=False)
+    return model, vocab
+
+
+def read_fasta( fasta_path ):
+    '''
+        Reads in fasta file containing multiple sequences.
+        Returns dictionary of holding multiple sequences or only single 
+        sequence, depending on input file.
+    '''
+    
+    sequences = dict()
+    with open( fasta_path, 'r' ) as fasta_f:
+        for line in fasta_f:
+            # get uniprot ID from header and create new entry
+            if line.startswith('>'):
+                uniprot_id = line.replace('>', '').strip()
+                # replace tokens that are mis-interpreted when loading h5
+                uniprot_id = uniprot_id.replace("/","_").replace(".","_")
+                sequences[ uniprot_id ] = ''
+            else:
+                # repl. all whie-space chars and join seqs spanning multiple lines
+                sequences[ uniprot_id ] += ''.join( line.split() ).upper().replace("-","") # drop gaps and cast to upper-case
+                
+    return sequences
+
+
+def get_embeddings(seq_path, emb_path, model_dir, per_protein,
+                   max_residues=4000, max_seq_len=1000, max_batch=100):
+
+    seq_dict = read_fasta(seq_path)
+    model, vocab = get_T5_model(model_dir)
+
+    print('########################################')
+    print('Example sequence: {}\n{}'.format(next(iter(seq_dict.keys())), next(iter(seq_dict.values()))))
+    print('########################################')
+    print('Total number of sequences: {}'.format(len(seq_dict)))
+
+    avg_length = sum(len(seq) for seq in seq_dict.values()) / len(seq_dict)
+    n_long = sum(1 for seq in seq_dict.values() if len(seq) > max_seq_len)
+    seq_dict = sorted(seq_dict.items(), key=lambda kv: len(kv[1]), reverse=True)
+
+    print("Average sequence length: {}".format(avg_length))
+    print("Number of sequences >{}: {}".format(max_seq_len, n_long))
+
+    start = time.time()
+    batch = list()
+    n_embeddings = 0
+
+    with h5py.File(str(emb_path), "w") as hf:
+        for seq_idx, (pdb_id, seq) in enumerate(seq_dict, 1):
+            seq = seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X')
+            seq_len = len(seq)
+            seq = ' '.join(list(seq))
+            batch.append((pdb_id, seq, seq_len))
+
+            n_res_batch = sum(s_len for _, _, s_len in batch) + seq_len
+            if len(batch) >= max_batch or n_res_batch >= max_residues or seq_idx == len(seq_dict) or seq_len > max_seq_len:
+                pdb_ids, seqs, seq_lens = zip(*batch)
+                batch = list()
+
+                token_encoding = vocab.batch_encode_plus(seqs, add_special_tokens=True, padding="longest")
+                input_ids = torch.tensor(token_encoding['input_ids']).to(device)
+                attention_mask = torch.tensor(token_encoding['attention_mask']).to(device)
+
+                try:
+                    with torch.no_grad():
+                        embedding_repr = model(input_ids, attention_mask=attention_mask)
+                except RuntimeError:
+                    print("RuntimeError during embedding for {} (L={}). Try lowering batch size.".format(pdb_id, seq_len))
+                    continue
+
+                for batch_idx, identifier in enumerate(pdb_ids):
+                    s_len = seq_lens[batch_idx]
+                    emb = embedding_repr.last_hidden_state[batch_idx, :s_len]
+
+                    if per_protein:
+                        emb = emb.mean(dim=0)
+
+                    hf.create_dataset(identifier, data=emb.detach().cpu().numpy().squeeze())
+                    n_embeddings += 1
+
+                    if n_embeddings == 1:
+                        print("Example: embedded {} with length {} to emb. of shape: {}".format(
+                            identifier, s_len, emb.shape))
+
+    end = time.time()
+
+    print('\n############# STATS #############')
+    print('Total number of embeddings: {}'.format(n_embeddings))
+    print('Total time: {:.2f}[s]; time/prot: {:.4f}[s]; avg. len= {:.2f}'.format(
+        end - start, (end - start) / n_embeddings, avg_length))
+    return True
+
+
+def create_arg_parser():
+    """"Creates and returns the ArgumentParser object."""
+
+    # Instantiate the parser
+    parser = argparse.ArgumentParser(description=( 
+            't5_embedder.py creates T5 embeddings for a given text '+
+            ' file containing sequence(s) in FASTA-format.') )
+    
+    # Required positional argument
+    parser.add_argument( '-i', '--input', required=True, type=str,
+                    help='A path to a fasta-formatted text file containing protein sequence(s).')
+
+    # Optional positional argument
+    parser.add_argument( '-o', '--output', required=True, type=str, 
+                    help='A path for saving the created embeddings as NumPy npz file.')
+
+    parser.add_argument('--model', required=False, type=str,
+                    default='Rostlab/prot_t5_xl_half_uniref50-enc',
+                    help='HuggingFace repo name or local path to a pre-trained model. '
+                         'Default: Rostlab/prot_t5_xl_half_uniref50-enc')
+
+    # Optional argument
+    parser.add_argument('--per_protein', type=int, 
+                    default=0,
+                    help="Whether to return per-residue embeddings (0: default) or the mean-pooled per-protein representation (1).")
+    return parser
+
+def main():
+    parser     = create_arg_parser()
+    args       = parser.parse_args()
+    
+    seq_path = Path(args.input)
+    emb_path = Path(args.output)
+    per_protein = False if int(args.per_protein) == 0 else True
+
+    get_embeddings(seq_path, emb_path, args.model, per_protein=per_protein)
+
+if __name__ == '__main__':
+    main()
