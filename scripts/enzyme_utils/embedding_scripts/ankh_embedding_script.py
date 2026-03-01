@@ -6,6 +6,7 @@ from pathlib import Path
 import ankh
 import h5py
 import torch
+from transformers import T5EncoderModel, AutoTokenizer
 
 if torch.cuda.is_available():
     device = torch.device('cuda:0')
@@ -15,9 +16,16 @@ else:
     device = torch.device('cpu')
 print("Using device: {}".format(device))
 
+def _load_hf_model(repo_id):
+    model = T5EncoderModel.from_pretrained(repo_id)
+    tokenizer = AutoTokenizer.from_pretrained(repo_id)
+    return model, tokenizer
+
 MODEL_LOADERS = {
-    'ankh_base': ankh.load_base_model,
-    'ankh_large': ankh.load_large_model,
+    'ankh_base':    ankh.load_base_model,
+    'ankh_large':   ankh.load_large_model,
+    'ankh3_large':  lambda: _load_hf_model("ElnaggarLab/ankh3-large"),
+    'ankh3_xl':     lambda: _load_hf_model("ElnaggarLab/ankh3-xl"),
 }
 
 
@@ -122,7 +130,7 @@ def create_arg_parser():
                         help='Path for saving the embeddings as an HDF5 (.h5) file.')
     parser.add_argument('--model', required=False, type=str,
                         default='ankh_large',
-                        help='Ankh model to use. Choices: ankh_base, ankh_large. Default: ankh_large')
+                        help='Ankh model to use. Choices: ankh_base, ankh_large, ankh3_large, ankh3_xl. Default: ankh_large')
     parser.add_argument('--per_protein', type=int, default=0,
                         help='0: per-residue embeddings (default). 1: mean-pooled per-protein embedding.')
     parser.add_argument('--split_char', type=str, default='!',

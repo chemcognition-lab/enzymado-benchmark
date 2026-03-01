@@ -23,7 +23,7 @@
     - [X] ESM3--DONE
     - [X] ProsT5--DONE
     - [X] ProT5--DONE
-    - [] ProFluent
+    - [X] ProFluent --DONE
     - [X] ESMC--DONE
     - [X] Ankh--DONE
     - Utility scripts:
