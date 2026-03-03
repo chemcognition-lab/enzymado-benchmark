@@ -36,5 +36,16 @@ class Paths:
             if isinstance(value, Path):
                 setattr(self, name, value)
 
+class Constants:
+    # Constants related to data processing
+    UNIPROT_BASE_URL = "https://www.uniprot.org/uniprot/{}.fasta"
 
-__all__ = ["Paths"]
+    # Constants related to modeling
+    dataset_id = "dataset_id"
+    uniprot_id = "uniprot_id"
+    protein_sequence = "protein_sequence"
+    ligand_id = "ligand_id_raw"
+    ligand_name = "ligand_name"
+    smiles = "smiles"
+
+__all__ = ["Paths", "Constants"]
