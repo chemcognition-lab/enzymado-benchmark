@@ -112,6 +112,9 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
 
     print('\n############# STATS #############')
     print('Total number of embeddings: {}'.format(n_embeddings))
+    if n_embeddings == 0:
+        print('No embeddings were generated. Check for GPU compatibility or RuntimeErrors above.')
+        return False
     print('Total time: {:.2f}[s]; time/prot: {:.4f}[s]; avg. len= {:.2f}'.format(
         end - start, (end - start) / n_embeddings, avg_length))
     return True

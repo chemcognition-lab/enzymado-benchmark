@@ -31,13 +31,13 @@
          - [] out_to_json.py
          - [] general runner
     - Enviroments files:
-     - [] ESM2--DONE 
-     - [] ESM3--DONE 
-     - [] ProsT5--DONE 
-     - [] ProT5--DONE
-     - [] ProFluent
-     - [] ESMC--DONE 
-     - [] Ankh--DONE 
+     - [X] ESM2--DONE 
+     - [X] ESM3--DONE 
+     - [X] ProsT5--DONE 
+     - [X] ProT5--DONE
+     - [X] ProFluent
+     - [X] ESMC--DONE 
+     - [X] Ankh--DONE 
  - [] Baseline script (Ricardo)
     - [] Task specific models (CatPred, etc...)
  - [] Rating script
