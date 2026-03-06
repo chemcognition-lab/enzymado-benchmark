@@ -5,39 +5,30 @@
 </a>
 
 # TODO
- - [] Clean some datasets (Manuel)
+ - [/] Clean some datasets (Manuel)
     - [x] pHopt
     - [pending] Azoreductase data (Ricardo)
-    - [pending] active sites
- - [] Dataset cards (json): dataset name / task type / path
-    - [] Metadata (key per dataset): dataset origin / date / size / information
-    - [] Task type (key per property): regression / class / ranking / metrics
-    - [] Features (key per dataset): sequence / smiles / identifier (for proteins and smiles)
-    - [] Labels (key per property): ec number / etc...
-    - [] Path: final dataset path
+    - [x] active sites
+    - [ ] add solubility
+    - [ ] add fluo
+ - [/] Dataset cards (json): dataset name / task type / path
+    - [x] Metadata (key per dataset): dataset origin / date / size / information
+    - [x] Task type (key per property): regression / class / ranking / metrics
+    - [x] Features (key per dataset): sequence / smiles / identifier (for proteins and smiles)
+    - [x] Labels (key per property): ec number / etc...
+    - [x] Path: final dataset path
         - [] To be defined depending on access (hugginface or Jinich lab)
  - [] Scripts for metrics (Manuel)
- - [] Access to PC in San Diego (Ricardo)
- - [] Model script embedding (Ricardo)
-    - [x] ESM2--DONE
-    - [X] ESM3--DONE
-    - [X] ProsT5--DONE
-    - [X] ProT5--DONE
-    - [X] ProFluent --DONE
-    - [X] ESMC--DONE
-    - [X] Ankh--DONE
-    - Utility scripts:
-         - [] json_to_fasta.py
-         - [] out_to_json.py
-         - [] general runner
-    - Enviroments files:
-     - [X] ESM2--DONE 
-     - [X] ESM3--DONE 
-     - [X] ProsT5--DONE 
-     - [X] ProT5--DONE
-     - [X] ProFluent
-     - [X] ESMC--DONE 
-     - [X] Ankh--DONE 
+ - [/] Access to PC in San Diego (Ricardo)
+   - [ ] Made an account waiting for answer (Manuel)
+ - [/] Model script embedding (Ricardo)
+    - [x] ESM2
+    - [x] ESM3
+    - [x] ProsT5
+    - [x] ProT5
+    - [/] ProFluent
+    - [x] ESMC
+    - [] Ankh
  - [] Baseline script (Ricardo)
     - [] Task specific models (CatPred, etc...)
  - [] Rating script

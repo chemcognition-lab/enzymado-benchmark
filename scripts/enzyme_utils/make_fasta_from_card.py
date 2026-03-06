@@ -24,7 +24,16 @@ def make_fastas(card_path: Path, output_dir: Path):
             id_col      = dataset["schema"]["protein_id_col"]
             seq_col     = dataset["schema"]["sequence_col"]
 
-            df = pd.read_csv(csv_path, usecols=[id_col, seq_col])
+            if not csv_path.exists():
+                print(f"[{prop_name}] {dataset_id}: SKIPPED — file not found: {dataset['path']}")
+                continue
+
+            try:
+                df = pd.read_csv(csv_path, usecols=[id_col, seq_col])
+            except ValueError as e:
+                print(f"[{prop_name}] {dataset_id}: SKIPPED — column mismatch: {e}")
+                continue
+
             df = df.dropna(subset=[id_col, seq_col])
             df = df.drop_duplicates(subset=[id_col])
 
