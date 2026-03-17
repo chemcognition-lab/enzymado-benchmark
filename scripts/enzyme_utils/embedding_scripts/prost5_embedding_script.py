@@ -128,7 +128,7 @@ def get_embeddings( seq_path, emb_path, model_dir, split_char, id_field,
                     if per_protein:
                         emb = emb.mean(dim=0)
                     emb_np = emb.detach().cpu().numpy().squeeze()
-                    hf.create_dataset(identifier, data=emb_np)
+                    hf.create_dataset(identifier, data=emb_np, compression="lzf")
                     n_embeddings += 1
                     if n_embeddings == 1:
                         print("Example: embedded protein {} with length {} to emb. of shape: {}".format(

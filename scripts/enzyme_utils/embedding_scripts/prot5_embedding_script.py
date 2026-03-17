@@ -109,7 +109,7 @@ def get_embeddings(seq_path, emb_path, model_dir, per_protein,
                     if per_protein:
                         emb = emb.mean(dim=0)
 
-                    hf.create_dataset(identifier, data=emb.detach().cpu().numpy().squeeze())
+                    hf.create_dataset(identifier, data=emb.detach().cpu().numpy().squeeze(), compression="lzf")
                     n_embeddings += 1
 
                     if n_embeddings == 1:

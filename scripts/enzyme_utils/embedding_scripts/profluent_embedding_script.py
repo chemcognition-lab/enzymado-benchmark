@@ -39,49 +39,59 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
     model.eval()
     batch_preparer = E1BatchPreparer()
 
-    emb_dict = {}
+    n_embeddings = 0
+    n_skipped = 0
     start = time.time()
 
-    with torch.no_grad():
-        for seq_idx, (identifier, seq) in enumerate(seq_dict.items(), 1):
-            print(f"Processing {seq_idx}/{len(seq_dict)}: {identifier} (L={len(seq)})")
-            batch = batch_preparer.get_batch_kwargs([seq], device=str(device))
+    with h5py.File(str(emb_path), "a") as hf:
+        with torch.no_grad():
+            for seq_idx, (identifier, seq) in enumerate(seq_dict.items(), 1):
+                if identifier in hf:
+                    n_embeddings += 1
+                    continue
+                print(f"Processing {seq_idx}/{len(seq_dict)}: {identifier} (L={len(seq)})")
+                try:
+                    batch = batch_preparer.get_batch_kwargs([seq], device=str(device))
 
-            use_autocast = device.type == "cuda"
-            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_autocast):
-                outputs = model(
-                    input_ids=batch["input_ids"],
-                    within_seq_position_ids=batch["within_seq_position_ids"],
-                    global_position_ids=batch["global_position_ids"],
-                    sequence_ids=batch["sequence_ids"],
-                    past_key_values=None,
-                    use_cache=False,
-                    output_attentions=False,
-                    output_hidden_states=False,
-                )
+                    use_autocast = device.type == "cuda"
+                    with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_autocast):
+                        outputs = model(
+                            input_ids=batch["input_ids"],
+                            within_seq_position_ids=batch["within_seq_position_ids"],
+                            global_position_ids=batch["global_position_ids"],
+                            sequence_ids=batch["sequence_ids"],
+                            past_key_values=None,
+                            use_cache=False,
+                            output_attentions=False,
+                            output_hidden_states=False,
+                        )
 
-            embeddings = outputs.embeddings  # (1, L, E)
-            residue_selector = ~(batch_preparer.get_boundary_token_mask(batch["input_ids"]))
-            emb = embeddings[0, residue_selector[0]]  # (seq_len, E)
+                    embeddings = outputs.embeddings  # (1, L, E)
+                    residue_selector = ~(batch_preparer.get_boundary_token_mask(batch["input_ids"]))
+                    emb = embeddings[0, residue_selector[0]]  # (seq_len, E)
 
-            if per_protein:
-                emb = emb.mean(dim=0)
-            emb_dict[identifier] = emb.cpu().float().numpy()
+                    if per_protein:
+                        emb = emb.mean(dim=0)
+                    emb_np = emb.cpu().float().numpy()
+                    hf.create_dataset(identifier, data=emb_np, compression="lzf")
+                    n_embeddings += 1
 
-            if seq_idx == 1:
-                print("Example: embedded {} with length {} to shape: {}".format(
-                    identifier, len(seq), emb.shape))
+                    if n_embeddings == 1:
+                        print("Example: embedded {} with length {} to shape: {}".format(
+                            identifier, len(seq), emb_np.shape))
+                except Exception as e:
+                    print(f"WARNING: skipping {identifier} (L={len(seq)}) — {type(e).__name__}: {e}")
+                    n_skipped += 1
+                    torch.cuda.empty_cache()
 
     end = time.time()
 
-    with h5py.File(str(emb_path), "w") as hf:
-        for sequence_id, embedding in emb_dict.items():
-            hf.create_dataset(sequence_id, data=embedding)
-
     print('\n############# STATS #############')
-    print('Total number of embeddings: {}'.format(len(emb_dict)))
-    print('Total time: {:.2f}[s]; time/prot: {:.4f}[s]'.format(
-        end - start, (end - start) / len(emb_dict)))
+    print('Total number of embeddings: {}'.format(n_embeddings))
+    print('Skipped sequences: {}'.format(n_skipped))
+    if n_embeddings > 0:
+        print('Total time: {:.2f}[s]; time/prot: {:.4f}[s]'.format(
+            end - start, (end - start) / n_embeddings))
     return True
 
 

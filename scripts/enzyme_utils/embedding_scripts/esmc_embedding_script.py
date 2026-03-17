@@ -38,37 +38,47 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
     client = ESMC.from_pretrained(model_name).to(device)
     client.eval()
 
-    emb_dict = {}
+    n_embeddings = 0
+    n_skipped = 0
     start = time.time()
 
-    with torch.no_grad():
-        for seq_idx, (identifier, seq) in enumerate(seq_dict.items(), 1):
-            print(f"Processing {seq_idx}/{len(seq_dict)}: {identifier} (L={len(seq)})")
-            protein = ESMProtein(sequence=seq)
-            protein_tensor = client.encode(protein)
-            logits_output = client.logits(
-                protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
-            )
-            emb = logits_output.embeddings[0, 1:-1, :]  # strip BOS and EOS tokens
+    with h5py.File(str(emb_path), "a") as hf:
+        with torch.no_grad():
+            for seq_idx, (identifier, seq) in enumerate(seq_dict.items(), 1):
+                if identifier in hf:
+                    n_embeddings += 1
+                    continue
+                print(f"Processing {seq_idx}/{len(seq_dict)}: {identifier} (L={len(seq)})")
+                try:
+                    protein = ESMProtein(sequence=seq)
+                    protein_tensor = client.encode(protein)
+                    logits_output = client.logits(
+                        protein_tensor, LogitsConfig(sequence=True, return_embeddings=True)
+                    )
+                    emb = logits_output.embeddings[0, 1:-1, :]  # strip BOS and EOS tokens
 
-            if per_protein:
-                emb = emb.mean(dim=0)
-            emb_dict[identifier] = emb.cpu().numpy()
+                    if per_protein:
+                        emb = emb.mean(dim=0)
+                    emb_np = emb.cpu().numpy()
+                    hf.create_dataset(identifier, data=emb_np, compression="lzf")
+                    n_embeddings += 1
 
-            if seq_idx == 1:
-                print("Example: embedded {} with length {} to shape: {}".format(
-                    identifier, len(seq), emb.shape))
+                    if n_embeddings == 1:
+                        print("Example: embedded {} with length {} to shape: {}".format(
+                            identifier, len(seq), emb_np.shape))
+                except Exception as e:
+                    print(f"WARNING: skipping {identifier} (L={len(seq)}) — {type(e).__name__}: {e}")
+                    n_skipped += 1
+                    torch.cuda.empty_cache()
 
     end = time.time()
 
-    with h5py.File(str(emb_path), "w") as hf:
-        for sequence_id, embedding in emb_dict.items():
-            hf.create_dataset(sequence_id, data=embedding)
-
     print('\n############# STATS #############')
-    print('Total number of embeddings: {}'.format(len(emb_dict)))
-    print('Total time: {:.2f}[s]; time/prot: {:.4f}[s]'.format(
-        end - start, (end - start) / len(emb_dict)))
+    print('Total number of embeddings: {}'.format(n_embeddings))
+    print('Skipped sequences: {}'.format(n_skipped))
+    if n_embeddings > 0:
+        print('Total time: {:.2f}[s]; time/prot: {:.4f}[s]'.format(
+            end - start, (end - start) / n_embeddings))
     return True
 
 
