@@ -1,4 +1,5 @@
 from src.dataset_splitting import (
+    build_split_assignment_rows,
     generate_random_split_rows,
     generate_similarity_split_from_clusters,
     validate_split_fractions,
@@ -107,3 +108,27 @@ def test_similarity_split_assigns_whole_clusters_to_one_split():
         for row in split_rows
     }
     assert split_by_protein["P1"] == split_by_protein["P2"]
+
+
+def test_build_split_assignment_rows_keeps_only_id_and_split():
+    fieldnames, rows = build_rows()
+    _, split_rows, _ = generate_random_split_rows(
+        rows,
+        fieldnames,
+        0.6,
+        0.2,
+        0.2,
+        sequence_col="protein_sequence",
+        group_col="uniprot_id",
+        seed=7,
+    )
+
+    output_fieldnames, output_rows = build_split_assignment_rows(
+        split_rows,
+        fieldnames,
+        id_col="uniprot_id",
+    )
+
+    assert output_fieldnames == ["uniprot_id", "split"]
+    assert len(output_rows) == 5
+    assert all(set(row) == {"uniprot_id", "split"} for row in output_rows)

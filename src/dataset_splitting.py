@@ -21,7 +21,14 @@ SEQUENCE_COLUMN_ALIASES = (
     "seq",
     "SEQ",
 )
-ID_COLUMN_ALIASES = ("uniprot_id", "dataset_id", "sequence_id", "id", "ID")
+ID_COLUMN_ALIASES = (
+    "protein_id",
+    "uniprot_id",
+    "sequence_id",
+    "dataset_id",
+    "id",
+    "ID",
+)
 
 
 def validate_split_fractions(
@@ -80,6 +87,52 @@ def detect_id_column(fieldnames: list[str]) -> str | None:
         if alias in fieldnames:
             return alias
     return None
+
+
+def can_use_id_column(
+    rows: list[dict[str, str]],
+    id_col: str,
+) -> bool:
+    assignment_by_id: dict[str, str] = {}
+    saw_value = False
+
+    for row in rows:
+        protein_id = str(row.get(id_col, "")).strip()
+        split_name = str(row.get("split", "")).strip()
+        if not protein_id:
+            return False
+
+        saw_value = True
+        previous_split = assignment_by_id.get(protein_id)
+        if previous_split is not None and previous_split != split_name:
+            return False
+        assignment_by_id[protein_id] = split_name
+
+    return saw_value
+
+
+def select_output_id_column(
+    rows: list[dict[str, str]],
+    fieldnames: list[str],
+    preferred_id_col: str | None = None,
+) -> str:
+    candidates: list[str] = []
+    if preferred_id_col:
+        candidates.append(preferred_id_col)
+
+    for alias in ID_COLUMN_ALIASES:
+        if alias in fieldnames and alias not in candidates:
+            candidates.append(alias)
+
+    for fieldname in fieldnames:
+        if fieldname not in candidates:
+            candidates.append(fieldname)
+
+    for candidate in candidates:
+        if can_use_id_column(rows, candidate):
+            return candidate
+
+    raise ValueError("Unable to find a valid identifier column for the split output.")
 
 
 def read_csv_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -226,6 +279,46 @@ def summarize_split_rows(
     return summary
 
 
+def build_split_assignment_rows(
+    rows: list[dict[str, str]],
+    fieldnames: list[str],
+    id_col: str | None = None,
+) -> tuple[list[str], list[dict[str, str]]]:
+    resolved_id_col = select_output_id_column(
+        rows,
+        fieldnames,
+        preferred_id_col=id_col,
+    )
+
+    assignment_by_id: dict[str, str] = {}
+    for row_index, row in enumerate(rows):
+        protein_id = str(row.get(resolved_id_col, "")).strip()
+        split_name = str(row.get("split", "")).strip()
+        if not protein_id:
+            raise ValueError(
+                f"Row {row_index} is missing a valid protein identifier in column "
+                f"'{resolved_id_col}'."
+            )
+        if split_name not in SPLIT_NAMES:
+            raise ValueError(
+                f"Row {row_index} has an invalid split value '{split_name}'."
+            )
+
+        previous_split = assignment_by_id.get(protein_id)
+        if previous_split is not None and previous_split != split_name:
+            raise ValueError(
+                f"Protein id '{protein_id}' was assigned to multiple splits: "
+                f"'{previous_split}' and '{split_name}'."
+            )
+        assignment_by_id[protein_id] = split_name
+
+    assignment_rows = [
+        {resolved_id_col: protein_id, "split": split_name}
+        for protein_id, split_name in assignment_by_id.items()
+    ]
+    return [resolved_id_col, "split"], assignment_rows
+
+
 def generate_random_split_rows(
     rows: list[dict[str, str]],
     fieldnames: list[str],
@@ -345,113 +438,16 @@ def cluster_sequences_with_mmseqs2(
         )
 
         return parse_mmseqs_cluster_tsv(cluster_tsv_path, set(sequence_id_to_sequence))
-
-
-def make_union_find(items: set[str]) -> tuple[dict[str, str], callable, callable]:
-    parent = {item: item for item in items}
-
-    def find(item: str) -> str:
-        while parent[item] != item:
-            parent[item] = parent[parent[item]]
-            item = parent[item]
-        return item
-
-    def union(left: str, right: str) -> None:
-        left_root = find(left)
-        right_root = find(right)
-        if left_root != right_root:
-            parent[right_root] = left_root
-
-    return parent, find, union
-
-
-def cluster_sequences_with_blastp(
-    sequence_id_to_sequence: dict[str, str],
-    identity_threshold: float,
-) -> dict[str, str]:
-    if shutil.which("makeblastdb") is None:
-        raise FileNotFoundError("makeblastdb is not available in PATH.")
-    if shutil.which("blastp") is None:
-        raise FileNotFoundError("blastp is not available in PATH.")
-
-    with tempfile.TemporaryDirectory(prefix="dataset-split-blast-") as tmp_dir_name:
-        tmp_dir = Path(tmp_dir_name)
-        fasta_path = tmp_dir / "sequences.fasta"
-        blast_db_prefix = tmp_dir / "blast_db"
-        blast_output_path = tmp_dir / "blast.tsv"
-
-        write_fasta(sequence_id_to_sequence, fasta_path)
-        subprocess.run(
-            [
-                "makeblastdb",
-                "-in",
-                str(fasta_path),
-                "-dbtype",
-                "prot",
-                "-out",
-                str(blast_db_prefix),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            [
-                "blastp",
-                "-query",
-                str(fasta_path),
-                "-db",
-                str(blast_db_prefix),
-                "-out",
-                str(blast_output_path),
-                "-outfmt",
-                "6 qseqid sseqid pident",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-        parent, find, union = make_union_find(set(sequence_id_to_sequence))
-        with blast_output_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                parts = line.rstrip("\n").split("\t")
-                if len(parts) != 3:
-                    continue
-
-                query_id, subject_id, identity = parts
-                if query_id == subject_id:
-                    continue
-                if float(identity) / 100.0 < identity_threshold:
-                    continue
-                union(query_id, subject_id)
-
-        return {
-            sequence_id: find(sequence_id)
-            for sequence_id in sequence_id_to_sequence
-        }
-
-
 def build_group_clusters(
     group_to_sequence: dict[str, str],
     *,
-    method: str,
     identity_threshold: float,
 ) -> dict[str, str]:
     group_to_sequence_id, sequence_id_to_sequence = build_sequence_dedup_index(group_to_sequence)
-
-    if method == "mmseqs2":
-        sequence_clusters = cluster_sequences_with_mmseqs2(
-            sequence_id_to_sequence,
-            identity_threshold,
-        )
-    elif method == "blastp":
-        sequence_clusters = cluster_sequences_with_blastp(
-            sequence_id_to_sequence,
-            identity_threshold,
-        )
-    else:
-        raise ValueError(f"Unsupported similarity backend: {method}.")
+    sequence_clusters = cluster_sequences_with_mmseqs2(
+        sequence_id_to_sequence,
+        identity_threshold,
+    )
 
     return {
         group_key: sequence_clusters[sequence_id]
@@ -514,7 +510,6 @@ def generate_similarity_split_rows(
     *,
     sequence_col: str,
     group_col: str | None = None,
-    method: str = "mmseqs2",
     identity_threshold: float = 0.3,
     seed: int = 42,
 ) -> tuple[list[str], list[dict[str, str]], dict[str, dict[str, int]]]:
@@ -528,7 +523,6 @@ def generate_similarity_split_rows(
 
     group_clusters = build_group_clusters(
         group_to_sequence,
-        method=method,
         identity_threshold=identity_threshold,
     )
     return generate_similarity_split_from_clusters(
@@ -545,61 +539,73 @@ def generate_similarity_split_rows(
 
 
 def write_split_outputs(
-    output_dir: Path,
-    dataset_name: str,
-    fieldnames: list[str],
+    output_csv_path: Path,
     rows: list[dict[str, str]],
-    summary: dict[str, dict[str, int]],
-    metadata: dict[str, object],
+    fieldnames: list[str],
+    id_col: str | None = None,
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
-    dataset_output_path = output_dir / f"{dataset_name}_with_splits.csv"
-    with dataset_output_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+    output_fieldnames, assignment_rows = build_split_assignment_rows(
+        rows,
+        fieldnames,
+        id_col=id_col,
+    )
+    with output_csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=output_fieldnames, lineterminator="\n")
         writer.writeheader()
-        writer.writerows(rows)
-
-    for split_name in SPLIT_NAMES:
-        split_output_path = output_dir / f"{split_name}.csv"
-        split_rows = [row for row in rows if row.get("split") == split_name]
-        with split_output_path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
-            writer.writeheader()
-            writer.writerows(split_rows)
-
-    summary_output_path = output_dir / "split_summary.json"
-    with summary_output_path.open("w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "summary": summary,
-                "metadata": metadata,
-            },
-            handle,
-            indent=2,
-        )
-        handle.write("\n")
+        writer.writerows(assignment_rows)
 
 
 def resolve_csv_inputs(input_path: Path) -> list[Path]:
+    def is_source_dataset(path: Path) -> bool:
+        return path.suffix == ".csv" and not path.name.endswith("_splits.csv")
+
     if input_path.is_file():
-        return [input_path]
+        return [input_path] if is_source_dataset(input_path) else []
     if input_path.is_dir():
-        return sorted(input_path.rglob("*.csv"))
+        return sorted(path for path in input_path.rglob("*.csv") if is_source_dataset(path))
     raise FileNotFoundError(f"Input path not found: {input_path}")
 
 
-def build_output_dir(output_root: Path, input_path: Path, input_base: Path) -> Path:
-    if input_base.is_file():
-        return output_root / input_path.stem
+def format_fraction_label(
+    train_fraction: float,
+    val_fraction: float,
+    test_fraction: float,
+) -> str:
+    return (
+        f"{int(round(train_fraction * 100))}_"
+        f"{int(round(val_fraction * 100))}_"
+        f"{int(round(test_fraction * 100))}"
+    )
 
-    relative_path = input_path.relative_to(input_base)
-    return output_root / relative_path.parent / input_path.stem
+
+def build_output_csv_path(
+    input_csv_path: Path,
+    *,
+    mode: str,
+    train_fraction: float,
+    val_fraction: float,
+    test_fraction: float,
+    output_root: Path | None = None,
+) -> Path:
+    fraction_label = format_fraction_label(train_fraction, val_fraction, test_fraction)
+    if mode == "random":
+        filename = f"{input_csv_path.stem}_random_{fraction_label}_splits.csv"
+    elif mode == "similarity":
+        filename = f"{input_csv_path.stem}_similarity_mmseqs2_{fraction_label}_splits.csv"
+    else:
+        raise ValueError(f"Unsupported split mode: {mode}.")
+
+    if output_root is None:
+        return input_csv_path.parent / filename
+
+    return output_root / filename
 
 
 def split_dataset_csv(
     input_csv_path: Path,
-    output_dir: Path,
+    output_csv_path: Path,
     *,
     mode: str,
     train_fraction: float,
@@ -607,13 +613,16 @@ def split_dataset_csv(
     test_fraction: float,
     sequence_col: str | None = None,
     group_col: str | None = None,
-    method: str = "mmseqs2",
     identity_threshold: float = 0.3,
     seed: int = 42,
 ) -> dict[str, dict[str, int]]:
     fieldnames, rows = read_csv_rows(input_csv_path)
+    if not rows:
+        raise ValueError(f"{input_csv_path} does not contain any data rows.")
+
     resolved_sequence_col = detect_sequence_column(fieldnames, sequence_col=sequence_col)
     resolved_group_col = group_col
+    resolved_id_col = detect_id_column(fieldnames)
 
     if mode == "random":
         output_fieldnames, split_rows, summary = generate_random_split_rows(
@@ -635,7 +644,6 @@ def split_dataset_csv(
             test_fraction,
             sequence_col=resolved_sequence_col,
             group_col=resolved_group_col,
-            method=method,
             identity_threshold=identity_threshold,
             seed=seed,
         )
@@ -643,23 +651,10 @@ def split_dataset_csv(
         raise ValueError(f"Unsupported split mode: {mode}.")
 
     write_split_outputs(
-        output_dir,
-        input_csv_path.stem,
-        output_fieldnames,
+        output_csv_path,
         split_rows,
-        summary,
-        metadata={
-            "input_csv": str(input_csv_path),
-            "mode": mode,
-            "sequence_col": resolved_sequence_col,
-            "group_col": resolved_group_col,
-            "train_fraction": train_fraction,
-            "val_fraction": val_fraction,
-            "test_fraction": test_fraction,
-            "similarity_backend": method if mode == "similarity" else None,
-            "identity_threshold": identity_threshold if mode == "similarity" else None,
-            "seed": seed,
-        },
+        output_fieldnames,
+        id_col=resolved_id_col,
     )
     return summary
 
@@ -668,7 +663,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Generate train/val/test splits for one CSV or a directory of CSV datasets. "
-            "Supports random grouped splits and similarity-aware splits using MMseqs2 or BLASTP."
+            "Supports random grouped splits and similarity-aware splits using MMseqs2."
         )
     )
     parser.add_argument(
@@ -680,8 +675,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("data/processed/splits"),
-        help="Root directory where generated split files will be written.",
+        default=None,
+        help=(
+            "Optional directory where generated split files will be written. "
+            "If omitted, each split CSV is written next to the source dataset."
+        ),
     )
     parser.add_argument(
         "--mode",
@@ -723,12 +721,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--similarity-backend",
-        choices=["mmseqs2", "blastp"],
-        default="mmseqs2",
-        help="Backend used for similarity-aware splitting.",
-    )
-    parser.add_argument(
         "--identity-threshold",
         type=float,
         default=0.3,
@@ -746,27 +738,54 @@ def build_argument_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_argument_parser().parse_args()
 
+    if args.mode == "similarity" and shutil.which("mmseqs") is None:
+        raise SystemExit(
+            "mmseqs is not available in PATH. Activate the conda environment where "
+            "you installed MMseqs2 and retry."
+        )
+
     csv_inputs = resolve_csv_inputs(args.input)
     if not csv_inputs:
         raise SystemExit(f"No CSV files found in {args.input}")
 
+    processed = 0
+    skipped: list[tuple[str, str]] = []
     for csv_input in csv_inputs:
-        output_dir = build_output_dir(args.output_root, csv_input, args.input)
-        summary = split_dataset_csv(
+        output_csv_path = build_output_csv_path(
             csv_input,
-            output_dir,
             mode=args.mode,
             train_fraction=args.train_fraction,
             val_fraction=args.val_fraction,
             test_fraction=args.test_fraction,
-            sequence_col=args.sequence_col,
-            group_col=args.group_col,
-            method=args.similarity_backend,
-            identity_threshold=args.identity_threshold,
-            seed=args.seed,
+            output_root=args.output_root,
         )
-        print(f"{csv_input} -> {output_dir}")
+        try:
+            summary = split_dataset_csv(
+                csv_input,
+                output_csv_path,
+                mode=args.mode,
+                train_fraction=args.train_fraction,
+                val_fraction=args.val_fraction,
+                test_fraction=args.test_fraction,
+                sequence_col=args.sequence_col,
+                group_col=args.group_col,
+                identity_threshold=args.identity_threshold,
+                seed=args.seed,
+            )
+        except Exception as exc:
+            skipped.append((str(csv_input), str(exc)))
+            print(f"SKIPPED {csv_input}: {exc}")
+            continue
+
+        processed += 1
+        print(f"{csv_input} -> {output_csv_path}")
         print(json.dumps(summary, indent=2))
+
+    print(f"Processed datasets: {processed}")
+    if skipped:
+        print("Skipped datasets:")
+        for path, reason in skipped:
+            print(f"- {path}: {reason}")
 
 
 if __name__ == "__main__":
