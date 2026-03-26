@@ -10,6 +10,9 @@ import pandas as pd
 from pathlib import Path
 
 
+SECTION_KEYS = ("properties", "real_case")
+
+
 def make_fastas(card_path: Path, output_dir: Path):
     with open(card_path) as f:
         card = json.load(f)
@@ -17,34 +20,44 @@ def make_fastas(card_path: Path, output_dir: Path):
     git_root = card_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for prop_name, prop in card["properties"].items():
-        for dataset in prop["datasets"]:
-            dataset_id  = dataset["dataset_id"]
-            csv_path    = git_root / dataset["path"]
-            id_col      = dataset["schema"]["protein_id_col"]
-            seq_col     = dataset["schema"]["sequence_col"]
+    for section_name in SECTION_KEYS:
+        for task_name, task in card.get(section_name, {}).items():
+            for dataset in task["datasets"]:
+                dataset_id  = dataset["dataset_id"]
+                csv_path    = git_root / dataset["path"]
+                id_col      = dataset["schema"]["protein_id_col"]
+                seq_col     = dataset["schema"]["sequence_col"]
 
-            if not csv_path.exists():
-                print(f"[{prop_name}] {dataset_id}: SKIPPED — file not found: {dataset['path']}")
-                continue
+                if not csv_path.exists():
+                    print(
+                        f"[{section_name}/{task_name}] {dataset_id}: "
+                        f"SKIPPED — file not found: {dataset['path']}"
+                    )
+                    continue
 
-            try:
-                df = pd.read_csv(csv_path, usecols=[id_col, seq_col])
-            except ValueError as e:
-                print(f"[{prop_name}] {dataset_id}: SKIPPED — column mismatch: {e}")
-                continue
+                try:
+                    df = pd.read_csv(csv_path, usecols=[id_col, seq_col])
+                except ValueError as e:
+                    print(
+                        f"[{section_name}/{task_name}] {dataset_id}: "
+                        f"SKIPPED — column mismatch: {e}"
+                    )
+                    continue
 
-            df = df.dropna(subset=[id_col, seq_col])
-            df = df.drop_duplicates(subset=[id_col])
+                df = df.dropna(subset=[id_col, seq_col])
+                df = df.drop_duplicates(subset=[id_col])
 
-            fasta_path = output_dir / f"{dataset_id}.fasta"
-            with open(fasta_path, "w") as fh:
-                for _, row in df.iterrows():
-                    pid = str(row[id_col]).replace("/", "_").replace(".", "_")
-                    seq = str(row[seq_col]).strip()
-                    fh.write(f">{pid}\n{seq}\n")
+                fasta_path = output_dir / f"{dataset_id}.fasta"
+                with open(fasta_path, "w") as fh:
+                    for _, row in df.iterrows():
+                        pid = str(row[id_col]).replace("/", "_").replace(".", "_")
+                        seq = str(row[seq_col]).strip()
+                        fh.write(f">{pid}\n{seq}\n")
 
-            print(f"[{prop_name}] {dataset_id}: {len(df)} sequences → {fasta_path.relative_to(git_root)}")
+                print(
+                    f"[{section_name}/{task_name}] {dataset_id}: "
+                    f"{len(df)} sequences → {fasta_path.relative_to(git_root)}"
+                )
 
 
 def main():

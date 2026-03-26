@@ -141,6 +141,7 @@ MODELS = {
 }
 
 SCRIPTS_REL = "scripts/enzyme_utils/embedding_scripts"
+SECTION_KEYS = ("properties", "real_case")
 
 
 def generate(card_path: Path, output_sh: Path, fasta_dir: Path,
@@ -160,41 +161,40 @@ def generate(card_path: Path, output_sh: Path, fasta_dir: Path,
         "",
     ]
 
-    for prop_name, prop in card["properties"].items():
-        lines.append(f"# {'─' * 68}")
-        lines.append(f"# Property: {prop_name}")
-        lines.append(f"# {'─' * 68}")
+    for section_name in SECTION_KEYS:
+        for task_name, task in card.get(section_name, {}).items():
+            lines.append(f"# {'─' * 68}")
+            lines.append(f"# Section: {section_name} / {task_name}")
+            lines.append(f"# {'─' * 68}")
 
-        for ds_idx, dataset in enumerate(prop["datasets"]):
-            dataset_id = dataset["dataset_id"]
-            fasta_rel  = (fasta_dir / f"{dataset_id}.fasta").relative_to(git_root)
+            for ds_idx, dataset in enumerate(task["datasets"]):
+                dataset_id = dataset["dataset_id"]
+                fasta_rel  = (fasta_dir / f"{dataset_id}.fasta").relative_to(git_root)
 
-            lines.append(f"\n# {dataset_id}")
-            embeddings_meta = {}
+                lines.append(f"\n# {dataset_id}")
+                embeddings_meta = {}
 
-            for model_key, m in MODELS.items():
-                out_rel = Path(emb_dir) / prop_name / dataset_id / f"{model_key}.h5"
+                for model_key, m in MODELS.items():
+                    out_rel = Path(emb_dir) / section_name / task_name / dataset_id / f"{model_key}.h5"
 
-                lines.append(
-                    f"conda run -n {m['env']} python $SCRIPTS/{m['script']} \\"
-                )
-                lines.append(f"    -i {fasta_rel} -o {out_rel} --model {m['model']}")
-                lines.append("")
+                    lines.append(
+                        f"conda run -n {m['env']} python $SCRIPTS/{m['script']} \\"
+                    )
+                    lines.append(f"    -i {fasta_rel} -o {out_rel} --model {m['model']}")
+                    lines.append("")
 
-                embeddings_meta[model_key] = {
-                    "path":          str(out_rel),
-                    "embedding_dim": m["dim"],
-                }
+                    embeddings_meta[model_key] = {
+                        "path":          str(out_rel),
+                        "embedding_dim": m["dim"],
+                    }
 
-            # Insert embeddings block after schema in the updated card
-            ds_updated = updated_card["properties"][prop_name]["datasets"][ds_idx]
-            # Rebuild dict to place embeddings right after schema
-            reordered = {}
-            for k, v in ds_updated.items():
-                reordered[k] = v
-                if k == "schema":
-                    reordered["embeddings"] = embeddings_meta
-            updated_card["properties"][prop_name]["datasets"][ds_idx] = reordered
+                ds_updated = updated_card[section_name][task_name]["datasets"][ds_idx]
+                reordered = {}
+                for k, v in ds_updated.items():
+                    reordered[k] = v
+                    if k == "schema":
+                        reordered["embeddings"] = embeddings_meta
+                updated_card[section_name][task_name]["datasets"][ds_idx] = reordered
 
     # Write shell script
     output_sh.parent.mkdir(parents=True, exist_ok=True)

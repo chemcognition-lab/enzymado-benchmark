@@ -17,7 +17,6 @@
     - [x] Features (key per dataset): sequence / smiles / identifier (for proteins and smiles)
     - [x] Labels (key per property): ec number / etc...
     - [x] Path: final dataset path
-    - [ ] Add huggingface link
     - [ ] Expand dataset cards with: (Paralelizable)
       - [ ] Amount of removed data
       - [ ] Statistics?
@@ -36,27 +35,40 @@
    - [x] Using Ricardo's account
  - [x] Scripts for splits (Manuel)
  - [ ] Dataloader and training scripts (Manuel)
+
  - [ ] Scripts for models (Ricardo)
    - [ ] Linear Regression/Logistic Regression
    - [ ] XGBoost
+
  - [ ] Scripts for metrics (Manuel)
+
  - [ ] Rating script (Manuel)
    - [ ] Packett-Luce
    - [ ] Percentages
+
  - [ ] Code revision check (Will)
    - [ ] move notebooks to scripts
    - [ ] Revise scripts
    - [ ] Test scripts
+
  - [ ] Leaderboards (Paralelizable)
+ 
    - [ ] Real case scenarios stream
       - [ ] Per dataset graphs
-      - [ ] Global graph
-   - [ ] Dataset stream
-      - Linear Regression
+      - [ ] Global graph\
+
+   - [ ] Datasets stream (principal)
+      - Linear/Logistic Regression (Only regression and classification metrics)
          - [ ] Per dataset graphs
          - [ ] Global graph
-      - XGBoost
+
+      - XGBoostRegressor / Classifier (Only regression and classification metrics)
          - [ ] Per dataset graphs
          - [ ] Global graph
+
+      - XGBoostRanker / Classifier (Only ranking and classification metrics)
+         - [ ] Per dataset graphs
+         - [ ] Global graph
+
  - [ ] Html Webpage (Paralelizable)
  - [ ] create a step by step cleaning process sheet or instruction sheet for the project (Paralelizable)
