@@ -11,8 +11,6 @@
     - [x] active sites
     - [x] add solubility
     - [x] add fluo
-    - [ ] move notebooks to scripts
-    - [ ] create a step by step cleaning progress
  - [x] Dataset cards (json): dataset name / task type / path
     - [x] Metadata (key per dataset): dataset origin / date / size / information
     - [x] Task type (key per property): regression / class / ranking / metrics
@@ -23,7 +21,7 @@
     - [ ] Expand dataset cards with: (Paralelizable)
       - [ ] Amount of removed data
       - [ ] Statistics?
-         - [ ] Ratio enzyme/properties
+         - [ ] Ratio enzyme/proteins
          - [ ] Nans/Dups
          - [ ] Label distributions per dataset
  - [x] Embedding scripts (Ricardo)
@@ -45,11 +43,11 @@
  - [ ] Rating script (Manuel)
    - [ ] Packett-Luce
    - [ ] Percentages
- - [ ] Revision check (Paralelizable)
-   - [ ] Max
-   - [ ] Rana
-   - [ ] Will
- - [ ] Leaderboards
+ - [ ] Code revision check (Will)
+   - [ ] move notebooks to scripts
+   - [ ] Revise scripts
+   - [ ] Test scripts
+ - [ ] Leaderboards (Paralelizable)
    - [ ] Real case scenarios stream
       - [ ] Per dataset graphs
       - [ ] Global graph
@@ -60,4 +58,5 @@
       - XGBoost
          - [ ] Per dataset graphs
          - [ ] Global graph
- - [ ] Html Webpage
+ - [ ] Html Webpage (Paralelizable)
+ - [ ] create a step by step cleaning process sheet or instruction sheet for the project (Paralelizable)
