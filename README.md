@@ -39,7 +39,9 @@
 
  - [x] Access to PC in San Diego (Ricardo)
    - [x] Using Ricardo's account
+
  - [ ] One consolidated dataset (Max)
+   - [ ] SQL database
 
 ## Stage 2: Benchmark run
  - [x] Scripts for splits (Manuel)
