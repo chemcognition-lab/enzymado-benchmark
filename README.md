@@ -5,12 +5,14 @@
 </a>
 
 # TODO
+## Stage 1: Data
  - [x] Clean datasets (Manuel)
     - [x] pHopt
     - [pending] Azoreductase data (Ricardo)
     - [x] active sites
     - [x] add solubility
     - [x] add fluo
+
  - [x] Dataset cards (json): dataset name / task type / path
     - [x] Metadata (key per dataset): dataset origin / date / size / information
     - [x] Task type (key per property): regression / class / ranking / metrics
@@ -23,6 +25,7 @@
          - [ ] Ratio enzyme/proteins
          - [ ] Nans/Dups
          - [ ] Label distributions per dataset
+
  - [x] Embedding scripts (Ricardo)
     - [x] ESM2
     - [x] ESM3
@@ -31,11 +34,15 @@
     - [x] ProFluent
     - [x] ESMC
     - [x] Ankh
+
  - [x] Access to PC in San Diego (Ricardo)
    - [x] Using Ricardo's account
- - [x] Scripts for splits (Manuel)
- - [ ] Dataloader and training scripts (Manuel)
 
+## Stage 2: Benchmark run
+ - [x] Scripts for splits (Manuel)
+
+   ### Hackathon:
+ - [ ] Dataloader and training scripts (Manuel)
  - [ ] Scripts for models (Ricardo)
    - [ ] Linear Regression/Logistic Regression
    - [ ] XGBoost
@@ -51,11 +58,13 @@
    - [ ] Revise scripts
    - [ ] Test scripts
 
+
+## Stage 3: Presentation
  - [ ] Leaderboards (Paralelizable)
  
    - [ ] Real case scenarios stream
       - [ ] Per dataset graphs
-      - [ ] Global graph\
+      - [ ] Global graph
 
    - [ ] Datasets stream (principal)
       - Linear/Logistic Regression (Only regression and classification metrics)
