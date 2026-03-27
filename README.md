@@ -19,11 +19,13 @@
     - [x] Features (key per dataset): sequence / smiles / identifier (for proteins and smiles)
     - [x] Labels (key per property): ec number / etc...
     - [x] Path: final dataset path
-    - [ ] Expand dataset cards with: (Paralelizable)
+    - [ ] Expand dataset cards with: (Rana/(someone else?))
       - [ ] Amount of removed data
       - [ ] Statistics?
          - [ ] Ratio enzyme/proteins
          - [ ] Nans/Dups
+         - [ ] Entire protein pool cluster with MMseqs2
+            - [ ] Ratio unique/variants
          - [ ] Label distributions per dataset
 
  - [x] Embedding scripts (Ricardo)
@@ -37,6 +39,7 @@
 
  - [x] Access to PC in San Diego (Ricardo)
    - [x] Using Ricardo's account
+ - [ ] One consolidated dataset (Max)
 
 ## Stage 2: Benchmark run
  - [x] Scripts for splits (Manuel)
@@ -57,6 +60,8 @@
    - [ ] move notebooks to scripts
    - [ ] Revise scripts
    - [ ] Test scripts
+   - [ ] Real case scenarios
+      - [ ] Embeddings
 
 
 ## Stage 3: Presentation
@@ -81,3 +86,4 @@
 
  - [ ] Html Webpage (Paralelizable)
  - [ ] create a step by step cleaning process sheet or instruction sheet for the project (Paralelizable)
+ - [ ] Add a tuneable weight option for the properties.
