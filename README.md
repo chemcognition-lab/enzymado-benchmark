@@ -19,7 +19,7 @@
     - [x] Features (key per dataset): sequence / smiles / identifier (for proteins and smiles)
     - [x] Labels (key per property): ec number / etc...
     - [x] Path: final dataset path
-    - [ ] Expand dataset cards with: (Rana/(someone else?))
+    - [ ] Expand dataset cards with: (Rana/Max)
       - [ ] Amount of removed data
       - [ ] Statistics?
          - [ ] Ratio enzyme/proteins
@@ -41,7 +41,7 @@
    - [x] Using Ricardo's account
 
  - [ ] One consolidated dataset (Max)
-   - [ ] SQL database
+   - [ ] SQL database (Max proposal)
 
 ## Stage 2: Benchmark run
  - [x] Scripts for splits (Manuel)
@@ -67,7 +67,7 @@
 
 
 ## Stage 3: Presentation
- - [ ] Leaderboards (Paralelizable)
+ - [ ] Leaderboards (Ricardo/Manuel/Claude)
  
    - [ ] Real case scenarios stream
       - [ ] Per dataset graphs
@@ -86,6 +86,6 @@
          - [ ] Per dataset graphs
          - [ ] Global graph
 
- - [ ] Html Webpage (Paralelizable)
- - [ ] create a step by step cleaning process sheet or instruction sheet for the project (Paralelizable)
+ - [ ] Html Webpage (Ricardo/Manuel/Claude)
+ - [ ] create a step by step cleaning process sheet or instruction sheet for the project (Will)
  - [ ] Add a tuneable weight option for the properties.
