@@ -27,6 +27,9 @@
          - [ ] Entire protein pool cluster with MMseqs2
             - [ ] Ratio unique/variants
          - [ ] Label distributions per dataset
+      - [ ] Dataset card with data information
+      - [ ] Separate file for stasts and computed data
+      - [ ] revise this paper: https://arxiv.org/abs/2204.01075
 
  - [x] Embedding scripts (Ricardo)
     - [x] ESM2
@@ -48,10 +51,14 @@
 
    ### Hackathon:
  - [ ] Dataloader and training scripts (Manuel)
+   - [ ] Check proteinGYM for mutations
+   - [ ] For EC do BCE for multiple EC number enzymes
+   - [ ] Binary vector
+
  - [ ] Scripts for models (Ricardo)
    - [ ] Linear Regression/Logistic Regression
    - [ ] XGBoost
-
+   - [ ] How do we reduce dimensionality better (question to answer)
  - [ ] Scripts for metrics (Manuel)
 
  - [ ] Rating script (Manuel)
@@ -67,7 +74,7 @@
 
 
 ## Stage 3: Presentation
- - [ ] Leaderboards (Ricardo/Manuel/Claude)
+ - [ ] Leaderboards (Ricardo/Manuel)
  
    - [ ] Real case scenarios stream
       - [ ] Per dataset graphs
@@ -86,6 +93,6 @@
          - [ ] Per dataset graphs
          - [ ] Global graph
 
- - [ ] Html Webpage (Ricardo/Manuel/Claude)
+ - [ ] Html Webpage (Ricardo/Manuel)
  - [ ] create a step by step cleaning process sheet or instruction sheet for the project (Will)
  - [ ] Add a tuneable weight option for the properties.
