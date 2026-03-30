@@ -51,9 +51,22 @@
 
    ### Hackathon:
  - [ ] Dataloader and training scripts (Manuel)
-   - [ ] Check proteinGYM for mutations
-   - [ ] For EC do BCE for multiple EC number enzymes
-   - [ ] Binary vector
+   - [ ] Dataloader #1: Active sites and Binding Sites.
+      - [ ] Protein embeddings and sites binary vector.
+   - [ ] Dataloader #2: Kcat and KM.
+      - [ ] Protein embeddings + substrate embeddings (RDKit) and continuos labels
+   - [ ] Dataloader #3:  Solub
+      - [ ] Protein embeddings and binary labels (0/1)
+   - [ ] Dataloader #4: ph_opt
+      - [ ] Protein embeddings and continuos labels
+   - [ ] Dataloader #5: ec_number
+      - [ ] Protein embeddings and binary multi labels
+      - [ ] For EC do BCE for multiple EC number enzymes
+      - [ ] Binary vector
+   - [ ] Dataloader #6: binding
+      - [ ] Protein embeddings + substrate embeddings (RDKit) and binary labels (0/1)
+   - [ ] Dataloader #7: dtm and ddg
+      - [ ] Protein embeddings + mut embeddings and continuos labels
 
  - [ ] Scripts for models (Ricardo)
    - [ ] Linear Regression/Logistic Regression

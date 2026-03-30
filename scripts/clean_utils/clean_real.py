@@ -60,8 +60,7 @@ CLEVELAND_PROCESSED_COLUMNS = [
 ALIGN_PROCESSED_COLUMNS = [
     Constants.dataset_id,
     Constants.protein_sequence,
-    "measurement_name",
-    "value",
+    "source_split",
 ]
 ALIGN_FAMILIES = (
     "alkaline phosphatase",
@@ -347,7 +346,11 @@ def load_align_rows(
 def build_align_rows(
     family: str,
     align_root: Path,
-) -> tuple[list[str], list[dict[str, str]], list[dict[str, str]]]:
+) -> tuple[
+    list[str],
+    list[dict[str, str]],
+    list[tuple[str, str, list[str], list[dict[str, str]]]],
+]:
     all_fieldnames, deduped_rows, measurement_columns = load_align_rows(family, align_root)
 
     interim_fieldnames = [
@@ -361,7 +364,10 @@ def build_align_rows(
     interim_fieldnames.extend(normalize_align_column_name(column) for column in measurement_columns)
 
     interim_rows: list[dict[str, str]] = []
-    processed_rows: list[dict[str, str]] = []
+    processed_rows_by_task: dict[str, list[dict[str, str]]] = {
+        measurement_column: []
+        for measurement_column in measurement_columns
+    }
 
     for row_index, row in enumerate(deduped_rows, start=1):
         protein_sequence = normalize_sequence(row.get("mutated_sequence"))
@@ -387,16 +393,61 @@ def build_align_rows(
             raw_value = clean_text(row.get(measurement_column))
             if not raw_value:
                 continue
-            processed_rows.append(
-                {
-                    Constants.dataset_id: dataset_id,
-                    Constants.protein_sequence: protein_sequence,
-                    "measurement_name": normalize_align_column_name(measurement_column),
-                    "value": str(float(raw_value)),
-                }
-            )
+            task_name = normalize_align_column_name(measurement_column)
+            task_row = {
+                Constants.dataset_id: dataset_id,
+                Constants.protein_sequence: protein_sequence,
+                "source_split": clean_text(row.get("source_split")),
+            }
+            if "dataset" in all_fieldnames:
+                task_row["source_dataset"] = clean_text(row.get("dataset"))
+            task_row[task_name] = str(float(raw_value))
+            processed_rows_by_task[measurement_column].append(task_row)
 
-    return interim_fieldnames, interim_rows, processed_rows
+    processed_outputs: list[tuple[str, str, list[str], list[dict[str, str]]]] = []
+    for measurement_column in measurement_columns:
+        task_name = normalize_align_column_name(measurement_column)
+        processed_fieldnames = list(ALIGN_PROCESSED_COLUMNS)
+        if "dataset" in all_fieldnames:
+            processed_fieldnames.append("source_dataset")
+        processed_fieldnames.append(task_name)
+        processed_outputs.append(
+            (
+                measurement_column,
+                task_name,
+                processed_fieldnames,
+                processed_rows_by_task[measurement_column],
+            )
+        )
+
+    return interim_fieldnames, interim_rows, processed_outputs
+
+
+def resolve_align_interim_path(
+    out_interim_arg: Path,
+    default_erickson_interim: Path,
+    paths: Paths,
+    family_slug: str,
+) -> Path:
+    if out_interim_arg == default_erickson_interim:
+        return paths.data_interim_dir / "align" / f"{family_slug}_wide.csv"
+    if out_interim_arg.suffix.lower() == ".csv":
+        return out_interim_arg
+    return out_interim_arg / f"{family_slug}_wide.csv"
+
+
+def resolve_align_processed_dir(
+    out_processed_arg: Path,
+    default_erickson_processed: Path,
+    paths: Paths,
+) -> Path:
+    if out_processed_arg == default_erickson_processed:
+        return paths.data_processed_real_case / "align"
+    if out_processed_arg.suffix.lower() == ".csv":
+        raise ValueError(
+            "--out-processed must point to a directory for ALIGN because one CSV is written per task."
+        )
+    return out_processed_arg
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -440,9 +491,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--align-family",
-        choices=ALIGN_FAMILIES,
-        default="alkaline phosphatase",
-        help="ALIGN family to clean when --dataset align is used.",
+        choices=(*ALIGN_FAMILIES, "all"),
+        default="all",
+        help="ALIGN family to clean when --dataset align is used. Default: all",
     )
     parser.add_argument(
         "--align-root",
@@ -519,26 +570,41 @@ def main() -> None:
         default_erickson_processed = (
             paths.data_processed_properties / "aromatic_products" / "erickson.csv"
         )
-        family_slug = slugify(args.align_family)
-        default_align_interim = paths.data_interim_dir / "align" / f"{family_slug}_wide.csv"
-        default_align_processed = paths.data_processed_properties / "align" / f"{family_slug}.csv"
+        align_families = ALIGN_FAMILIES if args.align_family == "all" else (args.align_family,)
+        processed_dir = resolve_align_processed_dir(
+            args.out_processed,
+            default_erickson_processed,
+            paths,
+        )
 
-        out_interim = (
-            default_align_interim
-            if args.out_interim == default_erickson_interim
-            else args.out_interim
-        )
-        out_processed = (
-            default_align_processed
-            if args.out_processed == default_erickson_processed
-            else args.out_processed
-        )
-        interim_fieldnames, interim_rows, processed_rows = build_align_rows(
-            args.align_family,
-            args.align_root,
-        )
-        write_csv(out_interim, interim_fieldnames, interim_rows)
-        write_csv(out_processed, ALIGN_PROCESSED_COLUMNS, processed_rows)
+        total_interim_rows = 0
+        total_processed_rows = 0
+        for family in align_families:
+            family_slug = slugify(family)
+            out_interim = resolve_align_interim_path(
+                args.out_interim,
+                default_erickson_interim,
+                paths,
+                family_slug,
+            )
+            interim_fieldnames, interim_rows, processed_outputs = build_align_rows(
+                family,
+                args.align_root,
+            )
+            write_csv(out_interim, interim_fieldnames, interim_rows)
+            print(f"Saved {len(interim_rows)} interim rows to {out_interim}")
+            total_interim_rows += len(interim_rows)
+
+            for _, task_name, processed_fieldnames, processed_rows in processed_outputs:
+                out_processed = processed_dir / f"{family_slug}__{task_name}.csv"
+                write_csv(out_processed, processed_fieldnames, processed_rows)
+                print(f"Saved {len(processed_rows)} processed rows to {out_processed}")
+                total_processed_rows += len(processed_rows)
+
+        interim_rows = [{}] * total_interim_rows
+        processed_rows = [{}] * total_processed_rows
+        out_interim = paths.data_interim_dir / "align"
+        out_processed = processed_dir
 
     print(f"Saved {len(interim_rows)} interim rows to {out_interim}")
     print(f"Saved {len(processed_rows)} processed rows to {out_processed}")

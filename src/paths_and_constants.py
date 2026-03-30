@@ -8,6 +8,7 @@ class Paths:
     data_raw_dir = data_dir / "raw"
     data_interim_dir = data_dir / "interim"
     data_processed_dir = data_dir / "processed"
+    data_processed_real_case = data_processed_dir / "real_case"
     data_external_dir = data_dir / "external"
 
     data_raw_biolip_dir = data_raw_dir / "biolip"
