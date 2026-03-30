@@ -77,9 +77,14 @@ def get_embeddings(seq_path, emb_path, model_dir, per_protein,
 
     start = time.time()
     batch = list()
-    n_embeddings = 0
 
-    with h5py.File(str(emb_path), "w") as hf:
+    with h5py.File(str(emb_path), "a") as hf:
+        n_embeddings = sum(1 for pid, _ in seq_dict if pid in hf)
+        seq_dict = [(pid, seq) for pid, seq in seq_dict if pid not in hf]
+        if not seq_dict:
+            print("All sequences already embedded.")
+            return True
+        print(f"Resuming: {n_embeddings} already done, {len(seq_dict)} remaining.")
         for seq_idx, (pdb_id, seq) in enumerate(seq_dict, 1):
             seq = seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X')
             seq_len = len(seq)
