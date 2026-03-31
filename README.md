@@ -51,22 +51,35 @@
 
    ### Hackathon:
  - [ ] Dataloader and training scripts (Manuel)
-   - [ ] Dataloader #1: Active sites and Binding Sites.
-      - [ ] Protein embeddings and sites binary vector.
-   - [ ] Dataloader #2: Kcat and KM.
-      - [ ] Protein embeddings + substrate embeddings (RDKit) and continuos labels
-   - [ ] Dataloader #3:  Solub
-      - [ ] Protein embeddings and binary labels (0/1)
-   - [ ] Dataloader #4: ph_opt
-      - [ ] Protein embeddings and continuos labels
-   - [ ] Dataloader #5: ec_number
+   
+   - [ ] Dataloader process #1: Active sites and Binding Sites.
+      - [ ] Featurizer: Protein embeddings.
+      - [ ] Label: Sites binary vector.
+
+   - [ ] Dataloader process #2: Kcat and KM.
+      - [ ] Featurizer:Protein embeddings + substrate embeddings (RDKit)
+      - [ ] Label: continuous labels
+
+   - [ ] Dataloader process #3:  Solub
+      - [ ] Featurizer:Protein embeddings
+      - [ ] Label: binary labels (0/1)
+
+   - [ ] Dataloader process #4: ph_opt
+      - [ ] Featurizer: Protein embeddings
+      - [ ] Label: continuos labels
+
+   - [ ] Dataloader process #5: ec_number
       - [ ] Protein embeddings and binary multi labels
       - [ ] For EC do BCE for multiple EC number enzymes
       - [ ] Binary vector
-   - [ ] Dataloader #6: binding
-      - [ ] Protein embeddings + substrate embeddings (RDKit) and binary labels (0/1)
-   - [ ] Dataloader #7: dtm and ddg
-      - [ ] Protein embeddings + mut embeddings and continuos labels
+
+   - [ ] Dataloader process #6: binding
+      - [ ] Featurizer: Protein embeddings + substrate embeddings (RDKit)
+      - [ ] Label: Binary labels (0/1)
+
+   - [ ] Dataloader process #7: dtm and ddg
+      - [ ] Featurizer: Protein embeddings + mut embeddings
+      - [ ] Label: continuos labels
 
  - [ ] Scripts for models (Ricardo)
    - [ ] Linear Regression/Logistic Regression
