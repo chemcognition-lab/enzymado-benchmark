@@ -2,7 +2,7 @@
 #SBATCH --job-name=enzymado_embed
 #SBATCH --array=0-13%2
 #SBATCH --gres=gpu:1
-#SBATCH --mem=400G
+#SBATCH --mem=100G
 #SBATCH --output=logs/embed_%A_%a.out
 
 # Run from the git root:
@@ -16,8 +16,8 @@ cd "$REPO" || { echo "ERROR: cannot cd to $REPO"; exit 1; }
 SCRIPTS="scripts/enzyme_utils/embedding_scripts"
 
 # ── Generate FASTA from protein_sequences_unique.csv if needed ───────
-FASTA="$REPO/data/fastas/protein_sequences_unique.fasta"
-CSV="$REPO/data/processed/protein_sequences_unique.csv"
+FASTA="$REPO/data/fastas/protein_sequences_unique_no_fluorescence.fasta"
+CSV="$REPO/data/processed/protein_sequences_unique_no_fluorescence.csv"
 OUTDIR="$REPO/data/embeddings/protein_sequences_unique"
 if [[ ! -f "$FASTA" ]]; then
   echo "Generating FASTA from $CSV ..."
@@ -86,10 +86,10 @@ echo "OUT: $OUTFILE"
 # ── Skip if output already exists ────────────────────────────────────
 # esm3/esmc/profluent write incrementally and handle resume internally,
 # so only skip for batch-write scripts (prot5, prost5, esm2, ankh).
-if [[ -f "$OUTFILE" ]] && [[ "$CMD" != *"esm3"* ]] && [[ "$CMD" != *"esmc"* ]] && [[ "$CMD" != *"profluent"* ]]; then
-  echo "SKIP: output already exists at $OUTFILE"
-  exit 0
-fi
+#if [[ -f "$OUTFILE" ]] && [[ "$CMD" != *"esm3"* ]] && [[ "$CMD" != *"esmc"* ]] && [[ "$CMD" != *"profluent"* ]]; then
+#  echo "SKIP: output already exists at $OUTFILE"
+#  exit 0
+#fi
 
 # ── Run ──────────────────────────────────────────────────────────────
 eval "$CMD"
