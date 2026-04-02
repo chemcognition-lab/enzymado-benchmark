@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -33,6 +34,51 @@ class ResidueEmbeddingStore:
             clean_text(key): _ensure_2d_array(value, key)
             for key, value in self.by_id.items()
         }
+
+    @classmethod
+    def _load_h5_mapping(cls, file_path: Path | str) -> dict[str, np.ndarray]:
+        try:
+            import h5py
+        except ModuleNotFoundError as exc:
+            raise ImportError(
+                "h5py is required to load residue embeddings from .h5 files."
+            ) from exc
+
+        mapping: dict[str, np.ndarray] = {}
+        with h5py.File(str(file_path), "r") as handle:
+            for key in handle.keys():
+                mapping[str(key)] = np.asarray(handle[key], dtype=np.float32)
+        return mapping
+
+    @classmethod
+    def from_h5(
+        cls,
+        file_path: Path | str,
+        key_kind: str = "id",
+    ) -> "ResidueEmbeddingStore":
+        mapping = cls._load_h5_mapping(file_path)
+        if key_kind == "id":
+            return cls(by_id=mapping)
+        if key_kind == "sequence":
+            return cls(by_sequence=mapping)
+        raise ValueError("key_kind must be either 'id' or 'sequence'.")
+
+    @classmethod
+    def from_h5_files(
+        cls,
+        id_h5_path: Path | str | None = None,
+        sequence_h5_path: Path | str | None = None,
+    ) -> "ResidueEmbeddingStore":
+        if id_h5_path is None and sequence_h5_path is None:
+            raise ValueError("Provide at least one of id_h5_path or sequence_h5_path.")
+
+        by_id: dict[str, np.ndarray] = {}
+        by_sequence: dict[str, np.ndarray] = {}
+        if id_h5_path is not None:
+            by_id = cls._load_h5_mapping(id_h5_path)
+        if sequence_h5_path is not None:
+            by_sequence = cls._load_h5_mapping(sequence_h5_path)
+        return cls(by_id=by_id, by_sequence=by_sequence)
 
     def has_sequence(self, sequence: str) -> bool:
         return normalize_sequence(sequence) in self.by_sequence
