@@ -37,21 +37,25 @@ class DatasetProfiler:
         """Loops through directories and appends findings to a text file."""
         print(f"Starting profiling. Output will be saved to {output_file}...")
         
-        with open(output_file, 'a', encoding='utf-8') as f:
+        with open(output_file, 'w', encoding='utf-8') as f:
             
-            # Loop through subdirectories (active_sites, binding, etc.)
+            # Loop through subdirectories
             for prop_dir in sorted(self.base_dir.iterdir()):
+
+                # Skip non-directories
                 if not prop_dir.is_dir():
                     continue
                     
+                # Get non-split csv
                 csv_path = self.get_base_csv(prop_dir)
                 if not csv_path:
                     continue
                     
+                # Extract dataset card schema from csv
                 print(f"Profiling {prop_dir.name}...")
                 schema = self.extract_schema(csv_path)
                 
-                # Write to the text file in a clean, readable format
+                # Write schema to output file
                 f.write(f"=== Property: {prop_dir.name} ===\n")
                 f.write(f"Dataset File: {csv_path.name}\n")
                 f.write("Columns:\n")
@@ -62,12 +66,3 @@ class DatasetProfiler:
                 f.write("\n" + "-"*40 + "\n\n")
                 
         print("Done!")
-
-if __name__ == "__main__":
-    # Define paths
-    BASE_DIR = "data/processed/properties"
-    OUTPUT_TXT = "dataset_schema_overview.txt"
-    
-    # Initialize and run
-    profiler = DatasetProfiler(BASE_DIR)
-    profiler.generate_report(OUTPUT_TXT)
