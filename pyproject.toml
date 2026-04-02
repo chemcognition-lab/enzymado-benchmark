@@ -30,7 +30,7 @@ dependencies = [
     "ruff",
     "scikit-learn",
     "tqdm",
-    "more-itertools"
+    "more-itertools",
 ]
 requires-python = "~=3.13.0"
 
