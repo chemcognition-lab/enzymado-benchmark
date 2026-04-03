@@ -1,8 +1,8 @@
 import sys
 import json
 import fcntl
-import h5py
 import argparse
+import inspect
 from pathlib import Path
 
 import joblib
@@ -13,7 +13,10 @@ from torch.utils.data import DataLoader
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from models import MODEL_MAP
+try:
+    from models import MODEL_MAP, STRUCTURED_MODEL_MAP
+except ImportError:
+    from models.models import MODEL_MAP, STRUCTURED_MODEL_MAP
 from data_loading import (
     ResidueEmbeddingStore,
     build_task_dataset,
@@ -27,12 +30,13 @@ from data_loading.adapters import (
     ProteinResidueAdapter,
 )
 
-SKIP_LABEL_KINDS = {"multilabel_ec", "residue_binary_vector"}
+SKIP_LABEL_KINDS: set[str] = set()
 
 CARD_TO_REGISTRY: dict[str, str] = {
     "phopt": "ph_opt",
     "binding_site": "binding_sites",
 }
+SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
 
 
 def resolve_registry_name(card_task_name: str) -> str | None:
@@ -51,7 +55,7 @@ def resolve_split_variant(default_split: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# H5 loading — per task, only needed IDs
+# H5 loading — per task, only needed lookup keys
 # ---------------------------------------------------------------------------
 
 def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
@@ -77,28 +81,44 @@ def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
     ).load_rows()
 
 
-def get_needed_ids(rows: list[dict], config) -> set[str]:
-    """Extract all column values that could be used as H5 lookup keys."""
-    lookup_cols = list(config.sample_id_candidates) + [config.sequence_column]
-    if config.wildtype_sequence_column:
-        lookup_cols.append(config.wildtype_sequence_column)
+def collect_needed_lookup_keys(rows: list[dict], config) -> tuple[set[str], set[str]]:
+    """Return (id keys, sequence keys) needed to build a partial embedding store."""
     ids = set()
+    sequences = set()
     for row in rows:
-        for col in lookup_cols:
+        for col in config.sample_id_candidates:
             val = row.get(col, "").strip()
             if val:
                 ids.add(val)
-    return ids
+        sequence = row.get(config.sequence_column, "").strip()
+        if sequence:
+            sequences.add(sequence)
+        if config.wildtype_sequence_column:
+            wildtype = row.get(config.wildtype_sequence_column, "").strip()
+            if wildtype:
+                sequences.add(wildtype)
+    return ids, sequences
 
 
-def load_embedding_store_subset(h5_path: str | Path, needed_ids: set[str]) -> ResidueEmbeddingStore:
-    """Load only the embeddings matching needed_ids from an H5 file."""
-    by_id = {}
-    with h5py.File(PROJECT_ROOT / h5_path, "r") as f:
-        for key in f.keys():
-            if key in needed_ids:
-                by_id[key] = f[key][:]
-    return ResidueEmbeddingStore(by_id=by_id)
+def load_embedding_store_subset(
+    h5_path: str | Path,
+    needed_ids: set[str],
+    needed_sequences: set[str],
+) -> ResidueEmbeddingStore:
+    """Load only the embeddings needed for a task from an H5 file."""
+    sequence_index_path = SEQUENCE_INDEX_PATH if SEQUENCE_INDEX_PATH.exists() else None
+    return ResidueEmbeddingStore.from_h5_subset(
+        PROJECT_ROOT / h5_path,
+        needed_ids=needed_ids,
+        needed_sequences=needed_sequences,
+        sequence_index_path=sequence_index_path,
+    )
+
+
+def get_model_map(task_type: str, label_kind: str) -> dict[str, dict]:
+    if label_kind in STRUCTURED_MODEL_MAP:
+        return STRUCTURED_MODEL_MAP[label_kind]
+    return MODEL_MAP[task_type]
 
 
 # ---------------------------------------------------------------------------
@@ -136,27 +156,94 @@ def get_dataloader(bundle, batch_size: int = 32) -> DataLoader:
     )
 
 
-def get_y_from_bundle(bundle) -> np.ndarray:
-    """Collect y values from a dataset bundle without loading embeddings again."""
-    return np.array(
-        [bundle.dataset[i]["target"] for i in range(len(bundle.dataset))],
-        dtype=np.float32,
-    )
+def _pad_1d_array_list(arrays: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
+    if not arrays:
+        return np.zeros((0, 0), dtype=dtype)
+    max_length = max(array.shape[0] for array in arrays)
+    batch = np.zeros((len(arrays), max_length), dtype=dtype)
+    for index, array in enumerate(arrays):
+        batch[index, : array.shape[0]] = array.astype(dtype, copy=False)
+    return batch
+
+
+def get_target_payload(bundle):
+    """Collect task targets and optional masks without reloading embeddings."""
+    label_kind = bundle.config.label_kind
+
+    if label_kind in {"scalar_regression", "binary"}:
+        return (
+            np.array(
+                [bundle.dataset[i]["target"] for i in range(len(bundle.dataset))],
+                dtype=np.float32,
+            ),
+            None,
+        )
+
+    if label_kind == "multilabel_ec":
+        level_names = bundle.label_builder.level_names()
+        targets = {
+            level_name: np.stack(
+                [
+                    np.asarray(bundle.dataset[i]["target"][level_name], dtype=np.float32)
+                    for i in range(len(bundle.dataset))
+                ]
+            ).astype(np.float32, copy=False)
+            for level_name in level_names
+        }
+        target_masks = {
+            level_name: np.asarray(
+                [
+                    bool(bundle.dataset[i]["target_mask"][level_name])
+                    for i in range(len(bundle.dataset))
+                ],
+                dtype=bool,
+            )
+            for level_name in level_names
+        }
+        return targets, target_masks
+
+    if label_kind == "residue_binary_vector":
+        targets = _pad_1d_array_list(
+            [
+                np.asarray(bundle.dataset[i]["target_per_residue"], dtype=np.float32)
+                for i in range(len(bundle.dataset))
+            ],
+            dtype=np.float32,
+        )
+        target_masks = _pad_1d_array_list(
+            [
+                np.asarray(bundle.dataset[i]["target_mask"], dtype=np.int8)
+                for i in range(len(bundle.dataset))
+            ],
+            dtype=np.int8,
+        ).astype(bool, copy=False)
+        return targets, target_masks
+
+    raise ValueError(f"Unsupported label_kind '{label_kind}'.")
 
 
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 
-def train_model(model_info: dict, X_train, y_train):
+def train_model(model_info: dict, X_train, y_train, X_val=None, y_val=None):
     model = model_info["wrap"](**model_info["params"])
-    model.fit(X_train, y_train)
+    fit_signature = inspect.signature(model.fit)
+    fit_kwargs = {}
+    if X_val is not None and y_val is not None and "X_val" in fit_signature.parameters:
+        fit_kwargs["X_val"] = X_val
+        fit_kwargs["y_val"] = y_val
+    model.fit(X_train, y_train, **fit_kwargs)
     return model
 
 
-def train_model_loader(model_info: dict, train_loader: DataLoader, batch_kind: str):
+def train_model_loader(model_info: dict, train_loader: DataLoader, batch_kind: str, val_loader: DataLoader | None = None):
     model = model_info["wrap"](**model_info["params"])
-    model.fit_loader(train_loader, batch_kind=batch_kind)
+    fit_loader_signature = inspect.signature(model.fit_loader)
+    fit_kwargs = {}
+    if val_loader is not None and "val_dataloader" in fit_loader_signature.parameters:
+        fit_kwargs["val_dataloader"] = val_loader
+    model.fit_loader(train_loader, batch_kind=batch_kind, **fit_kwargs)
     return model
 
 
@@ -164,8 +251,23 @@ def train_model_loader(model_info: dict, train_loader: DataLoader, batch_kind: s
 # Output helpers
 # ---------------------------------------------------------------------------
 
-def make_predictions_file(y_true, pred, run_dir: Path, split: str):
-    np.savez(str(run_dir / f"{split}_predictions.npz"), y_true=y_true, predictions=pred)
+def _flatten_npz_payload(prefix: str, payload) -> dict[str, np.ndarray]:
+    if payload is None:
+        return {}
+    if isinstance(payload, dict):
+        flattened = {}
+        for key, value in payload.items():
+            flattened.update(_flatten_npz_payload(f"{prefix}_{key}", value))
+        return flattened
+    return {prefix: np.asarray(payload)}
+
+
+def make_predictions_file(y_true, pred, run_dir: Path, split: str, target_mask=None):
+    payload = {}
+    payload.update(_flatten_npz_payload("y_true", y_true))
+    payload.update(_flatten_npz_payload("predictions", pred))
+    payload.update(_flatten_npz_payload("target_mask", target_mask))
+    np.savez(str(run_dir / f"{split}_predictions.npz"), **payload)
 
 
 def save_model(trained, run_dir: Path) -> Path:
@@ -260,18 +362,31 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
             # Load only the embeddings needed for this task (not the entire H5)
             train_rows = get_task_rows(config, "train", split_variant)
+            val_rows = get_task_rows(config, "val", split_variant)
             test_rows = get_task_rows(config, "test", split_variant)
-            needed_ids = get_needed_ids(train_rows + test_rows, config)
-            store = load_embedding_store_subset(emb_info["path"], needed_ids)
-            print(f"    Loaded {len(store.by_id)} embeddings for this task")
+            needed_ids, needed_sequences = collect_needed_lookup_keys(train_rows + val_rows + test_rows, config)
+            store = load_embedding_store_subset(emb_info["path"], needed_ids, needed_sequences)
+            print(
+                "    Loaded "
+                f"{len(store.by_id)} id embeddings and {len(store.by_sequence)} sequence embeddings for this task"
+            )
 
             train_bundle = build_task_dataset(
                 registry_name, store,
                 split_name="train", split_variant=split_variant, missing_policy="skip",
             )
+            ec_vocabulary = None
+            if config.label_kind == "multilabel_ec":
+                ec_vocabulary = train_bundle.label_builder.vocabulary_by_level
+            val_bundle = build_task_dataset(
+                registry_name, store,
+                split_name="val", split_variant=split_variant, missing_policy="skip",
+                ec_vocabulary=ec_vocabulary,
+            )
             test_bundle = build_task_dataset(
                 registry_name, store,
                 split_name="test", split_variant=split_variant, missing_policy="skip",
+                ec_vocabulary=ec_vocabulary,
             )
 
             if len(train_bundle.dataset) == 0 or len(test_bundle.dataset) == 0:
@@ -279,10 +394,18 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 del store
                 continue
 
+            use_validation = len(val_bundle.dataset) > 0
+            if use_validation:
+                print(f"    Validation enabled: n_val={len(val_bundle.dataset)}")
+            else:
+                print("    Validation disabled: empty val split after filtering")
+
             # Ligand tasks must always pool — can't concat 3D protein + 1D ligand
             use_residue_aware = config.batch_kind != "protein_ligand_global"
 
-            for model_name, model_info in MODEL_MAP[task_type].items():
+            model_map = get_model_map(task_type, config.label_kind)
+
+            for model_name, model_info in model_map.items():
                 residue_aware = model_info.get("residue_aware", False) and use_residue_aware
                 print(f"    [{model_name}] n_train={len(train_bundle.dataset)}, n_test={len(test_bundle.dataset)}")
 
@@ -291,22 +414,39 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
                 if residue_aware:
                     train_loader = get_dataloader(train_bundle, batch_size=64)
+                    val_loader = get_dataloader(val_bundle, batch_size=64) if use_validation else None
                     test_loader = get_dataloader(test_bundle, batch_size=64)
-                    trained = train_model_loader(model_info, train_loader, config.batch_kind)
+                    trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
+                    pred_val = trained.predict_loader(val_loader, batch_kind=config.batch_kind) if use_validation else None
                     pred_test = trained.predict_loader(test_loader, batch_kind=config.batch_kind)
                     pred_train = trained.predict_loader(train_loader, batch_kind=config.batch_kind)
-                    y_test = get_y_from_bundle(test_bundle)
-                    y_train = get_y_from_bundle(train_bundle)
+                    y_val, target_mask_val = get_target_payload(val_bundle) if use_validation else (None, None)
+                    y_test, target_mask_test = get_target_payload(test_bundle)
+                    y_train, target_mask_train = get_target_payload(train_bundle)
                 else:
                     X_train, y_train = build_Xy_pooled(train_bundle, config.batch_kind)
+                    X_val, y_val = build_Xy_pooled(val_bundle, config.batch_kind) if use_validation else (None, None)
                     X_test, y_test = build_Xy_pooled(test_bundle, config.batch_kind)
-                    trained = train_model(model_info, X_train, y_train)
+                    trained = train_model(model_info, X_train, y_train, X_val=X_val, y_val=y_val)
+                    pred_val = trained.predict(X_val) if use_validation else None
                     pred_test = trained.predict(X_test)
                     pred_train = trained.predict(X_train)
+                    target_mask_val = None
+                    target_mask_test = None
+                    target_mask_train = None
 
-                make_predictions_file(y_train, pred_train, run_dir, "train")
-                make_predictions_file(y_test, pred_test, run_dir, "test")
+                make_predictions_file(y_train, pred_train, run_dir, "train", target_mask_train)
+                if use_validation:
+                    make_predictions_file(y_val, pred_val, run_dir, "val", target_mask_val)
+                make_predictions_file(y_test, pred_test, run_dir, "test", target_mask_test)
                 model_file = save_model(trained, run_dir)
+
+                if getattr(trained, "best_epoch_", None) is not None:
+                    print(
+                        "      Early stopping: "
+                        f"best_epoch={trained.best_epoch_}, "
+                        f"best_val_loss={trained.best_val_loss_:.6f}"
+                    )
 
                 result_key = f"{emb_name}__{model_name}"
                 result_entry = make_result_entry(emb_name, model_name, model_info, run_dir, model_file)

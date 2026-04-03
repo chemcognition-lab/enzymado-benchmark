@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -18,6 +20,21 @@ def _ensure_2d_array(value: np.ndarray, key: str) -> np.ndarray:
     if array.ndim != 2:
         raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {array.shape}.")
     return array
+
+
+@lru_cache(maxsize=None)
+def _load_sequence_index(sequence_index_path: str) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    csv_path = Path(sequence_index_path)
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            sequence_id = clean_text(row.get("sequence_id"))
+            sequence = normalize_sequence(row.get("protein_sequence"))
+            if not sequence_id or not sequence:
+                continue
+            mapping[sequence] = sequence_id
+    return mapping
 
 
 @dataclass
@@ -78,6 +95,62 @@ class ResidueEmbeddingStore:
             by_id = cls._load_h5_mapping(id_h5_path)
         if sequence_h5_path is not None:
             by_sequence = cls._load_h5_mapping(sequence_h5_path)
+        return cls(by_id=by_id, by_sequence=by_sequence)
+
+    @classmethod
+    def from_h5_subset(
+        cls,
+        file_path: Path | str,
+        needed_ids: set[str] | None = None,
+        needed_sequences: set[str] | None = None,
+        sequence_index_path: Path | str | None = None,
+    ) -> "ResidueEmbeddingStore":
+        try:
+            import h5py
+        except ModuleNotFoundError as exc:
+            raise ImportError(
+                "h5py is required to load residue embeddings from .h5 files."
+            ) from exc
+
+        normalized_ids = {
+            clean_text(value)
+            for value in (needed_ids or set())
+            if clean_text(value)
+        }
+        normalized_sequences = {
+            normalize_sequence(value)
+            for value in (needed_sequences or set())
+            if normalize_sequence(value)
+        }
+
+        sequence_key_to_sequence = {
+            sequence: sequence
+            for sequence in normalized_sequences
+        }
+        if sequence_index_path is not None and normalized_sequences:
+            sequence_to_id = _load_sequence_index(str(sequence_index_path))
+            for sequence in normalized_sequences:
+                sequence_id = sequence_to_id.get(sequence)
+                if sequence_id:
+                    sequence_key_to_sequence[sequence_id] = sequence
+
+        by_id: dict[str, np.ndarray] = {}
+        by_sequence: dict[str, np.ndarray] = {}
+        with h5py.File(str(file_path), "r") as handle:
+            for raw_key in handle.keys():
+                key = clean_text(str(raw_key))
+                array: np.ndarray | None = None
+
+                if key in normalized_ids:
+                    array = np.asarray(handle[raw_key], dtype=np.float32)
+                    by_id[key] = array
+
+                sequence = sequence_key_to_sequence.get(key)
+                if sequence is not None:
+                    if array is None:
+                        array = np.asarray(handle[raw_key], dtype=np.float32)
+                    by_sequence[sequence] = array
+
         return cls(by_id=by_id, by_sequence=by_sequence)
 
     def has_sequence(self, sequence: str) -> bool:

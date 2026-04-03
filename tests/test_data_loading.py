@@ -196,6 +196,82 @@ class DataLoadingTests(unittest.TestCase):
         np.testing.assert_allclose(scaler.transform([10.0]), np.array([2.0], dtype=np.float32))
         self.assertEqual(len(val_bundle.dataset), 1)
 
+    def test_mutation_delta_subset_loader_resolves_sequence_ids_for_wildtype(self) -> None:
+        dataset_path = self.root / "ddg.csv"
+        sequence_index_path = self.root / "protein_sequences_unique.csv"
+        embeddings_path = self.root / "embeddings.h5"
+
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "wildtype_sequence", "mutation", "ddg"],
+            [
+                {
+                    "uniprot_id": "row_specific_id",
+                    "protein_sequence": "AAAA",
+                    "wildtype_sequence": "BBBB",
+                    "mutation": "A1B",
+                    "ddg": "1.5",
+                }
+            ],
+        )
+        write_csv(
+            sequence_index_path,
+            ["sequence_id", "protein_sequence"],
+            [
+                {"sequence_id": "representative_mutant", "protein_sequence": "AAAA"},
+                {
+                    "sequence_id": "representative_wildtype__wildtype_sequence",
+                    "protein_sequence": "BBBB",
+                },
+            ],
+        )
+
+        class FakeH5Module:
+            def __init__(self, file_mapping: dict[str, dict[str, np.ndarray]]) -> None:
+                self.file_mapping = file_mapping
+
+            def File(self, path: str, mode: str) -> FakeH5File:
+                return FakeH5File(self.file_mapping[path])
+
+        fake_h5py = types.SimpleNamespace(
+            File=FakeH5Module(
+                {
+                    str(embeddings_path): {
+                        "representative_mutant": np.ones((4, 2), dtype=np.float32),
+                        "representative_wildtype__wildtype_sequence": np.full((4, 2), 3.0, dtype=np.float32),
+                    }
+                }
+            ).File,
+        )
+
+        with mock.patch.dict(sys.modules, {"h5py": fake_h5py}):
+            store = ResidueEmbeddingStore.from_h5_subset(
+                embeddings_path,
+                needed_ids={"row_specific_id"},
+                needed_sequences={"AAAA", "BBBB"},
+                sequence_index_path=sequence_index_path,
+            )
+
+        config = TaskConfig(
+            name="ddg_test",
+            batch_kind="mutation_delta_global",
+            label_kind="scalar_regression",
+            dataset_path=dataset_path,
+            target_column="ddg",
+            sample_id_candidates=("uniprot_id",),
+            wildtype_sequence_column="wildtype_sequence",
+        )
+
+        bundle = build_dataset_from_config(config, store)
+        self.assertEqual(len(bundle.dataset), 1)
+        sample = bundle.dataset[0]
+
+        np.testing.assert_array_equal(
+            sample["protein_delta_emb"],
+            np.full((4, 2), -2.0, dtype=np.float32),
+        )
+        self.assertEqual(sample["sample_id"], "row_specific_id")
+
     def test_hierarchical_ec_uses_train_vocabulary_and_masks_incomplete_levels(self) -> None:
         dataset_path = self.root / "ec.csv"
         split_path = self.root / "ec_split.csv"
