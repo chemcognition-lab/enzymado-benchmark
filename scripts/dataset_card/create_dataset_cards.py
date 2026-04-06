@@ -1,10 +1,11 @@
-from src.dataset_card.dataset_profiler import DatasetProfiler
+from src.dataset_card.dataset_card_populator import DatasetCardPopulator
 
+# Run script from project root (enzymado-benchmark/)
 if __name__ == "__main__":
     # Define paths
     BASE_DIR = "data/processed/properties"
     OUTPUT_TXT = "dataset_schema_overview.txt"
     
     # Initialize and run
-    profiler = DatasetProfiler(BASE_DIR)
-    profiler.generate_report(OUTPUT_TXT)
+    profiler = DatasetCardPopulator(BASE_DIR)
+    profiler.run(OUTPUT_TXT)
