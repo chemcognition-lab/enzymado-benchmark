@@ -710,7 +710,7 @@ class MLPClassifierTorch:
 
 
 class ECMultiHeadClassifierTorch:
-    """Multi-label hierarchical EC classifier with one head per EC level."""
+    """Multi-label hierarchical EC classifier over pooled protein embeddings."""
 
     def __init__(
         self,
@@ -735,20 +735,6 @@ class ECMultiHeadClassifierTorch:
         self.output_dims = None
         self.best_epoch_ = None
         self.best_val_loss_ = None
-
-    @staticmethod
-    def _batch_to_input(batch, device: torch.device):
-        X_t = torch.from_numpy(np.asarray(batch.protein_emb, dtype=np.float32)).to(device)
-        mask_t = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
-        y_t = {
-            level_name: torch.from_numpy(np.asarray(target, dtype=np.float32)).to(device)
-            for level_name, target in batch.target.items()
-        }
-        target_mask_t = {
-            level_name: torch.from_numpy(np.asarray(mask, dtype=bool)).to(device)
-            for level_name, mask in batch.target_mask.items()
-        }
-        return X_t, mask_t, y_t, target_mask_t
 
     @staticmethod
     def _targets_to_tensors(y, target_mask, device: torch.device):
@@ -776,27 +762,19 @@ class ECMultiHeadClassifierTorch:
             return None
         return torch.stack(loss_terms).mean()
 
-    def _forward(self, X_t: torch.Tensor, mask_t: torch.Tensor | None):
-        if X_t.ndim == 3:
-            features = _masked_mean_pool(X_t, mask_t)
-        elif X_t.ndim == 2:
-            features = X_t
-        else:
-            raise ValueError(f"ECMultiHeadClassifierTorch expects 2D or 3D inputs, got shape {tuple(X_t.shape)}")
-        return self.model(features)
+    def _forward(self, X_t: torch.Tensor):
+        if X_t.ndim != 2:
+            raise ValueError(f"ECMultiHeadClassifierTorch expects pooled 2D inputs, got shape {tuple(X_t.shape)}")
+        return self.model(X_t)
 
-    def fit(self, X, y, target_mask, X_val=None, y_val=None, target_mask_val=None, mask=None, mask_val=None):
+    def fit(self, X, y, target_mask, X_val=None, y_val=None, target_mask_val=None):
         if target_mask is None:
             raise ValueError("ECMultiHeadClassifierTorch.fit requires target_mask.")
 
         X_np = np.asarray(X, dtype=np.float32)
-        mask_np = None if mask is None else np.asarray(mask, dtype=bool)
-        if X_np.ndim == 3:
-            input_dim = X_np.shape[2]
-        elif X_np.ndim == 2:
-            input_dim = X_np.shape[1]
-        else:
-            raise ValueError(f"X must be 2D or 3D, got shape {X_np.shape}")
+        if X_np.ndim != 2:
+            raise ValueError(f"X must be pooled 2D, got shape {X_np.shape}")
+        input_dim = X_np.shape[1]
 
         self.output_dims = {
             level_name: int(np.asarray(target, dtype=np.float32).shape[1])
@@ -810,29 +788,25 @@ class ECMultiHeadClassifierTorch:
         if X_val is not None and y_val is not None and target_mask_val is not None:
             val_payload = (
                 np.asarray(X_val, dtype=np.float32),
-                None if mask_val is None else np.asarray(mask_val, dtype=bool),
                 {level_name: np.asarray(target, dtype=np.float32) for level_name, target in y_val.items()},
                 {level_name: np.asarray(mask_arr, dtype=bool) for level_name, mask_arr in target_mask_val.items()},
             )
 
-        def iter_minibatches(X_arr, y_arr, target_mask_arr, mask_arr):
+        def iter_minibatches(X_arr, y_arr, target_mask_arr):
             for start in range(0, X_arr.shape[0], self.batch_size):
                 stop = min(start + self.batch_size, X_arr.shape[0])
                 X_t = torch.from_numpy(X_arr[start:stop]).to(self.device)
-                mask_t = None
-                if mask_arr is not None:
-                    mask_t = torch.from_numpy(mask_arr[start:stop]).to(self.device)
                 y_t, target_mask_t = self._targets_to_tensors(
                     {level_name: target[start:stop] for level_name, target in y_arr.items()},
                     {level_name: mask_values[start:stop] for level_name, mask_values in target_mask_arr.items()},
                     self.device,
                 )
-                yield X_t, mask_t, y_t, target_mask_t
+                yield X_t, y_t, target_mask_t
 
         def train_epoch():
             self.model.train()
-            for X_t, mask_t, y_t, target_mask_t in iter_minibatches(X_np, y, target_mask, mask_np):
-                logits_by_level = self._forward(X_t, mask_t)
+            for X_t, y_t, target_mask_t in iter_minibatches(X_np, y, target_mask):
+                logits_by_level = self._forward(X_t)
                 loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
                 if loss is None:
                     continue
@@ -845,14 +819,13 @@ class ECMultiHeadClassifierTorch:
             self.model.eval()
             losses = []
             with torch.no_grad():
-                X_val_np, mask_val_np, y_val_np, target_mask_val_np = val_payload
-                for X_t, mask_t, y_t, target_mask_t in iter_minibatches(
+                X_val_np, y_val_np, target_mask_val_np = val_payload
+                for X_t, y_t, target_mask_t in iter_minibatches(
                     X_val_np,
                     y_val_np,
                     target_mask_val_np,
-                    mask_val_np,
                 ):
-                    logits_by_level = self._forward(X_t, mask_t)
+                    logits_by_level = self._forward(X_t)
                     loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
                     if loss is not None:
                         losses.append(float(loss.item()))
@@ -868,12 +841,13 @@ class ECMultiHeadClassifierTorch:
         )
         return self
 
-    def predict(self, X, mask=None) -> dict[str, np.ndarray]:
+    def predict(self, X) -> dict[str, np.ndarray]:
         if self.output_dims is None:
             raise ValueError("ECMultiHeadClassifierTorch must be fit before calling predict().")
 
         X_np = np.asarray(X, dtype=np.float32)
-        mask_np = None if mask is None else np.asarray(mask, dtype=bool)
+        if X_np.ndim != 2:
+            raise ValueError(f"X must be pooled 2D, got shape {X_np.shape}")
         preds_by_level = {level_name: [] for level_name in self.output_dims}
 
         self.model.eval()
@@ -881,88 +855,7 @@ class ECMultiHeadClassifierTorch:
             for start in range(0, X_np.shape[0], self.batch_size):
                 stop = min(start + self.batch_size, X_np.shape[0])
                 X_t = torch.from_numpy(X_np[start:stop]).to(self.device)
-                mask_t = None
-                if mask_np is not None:
-                    mask_t = torch.from_numpy(mask_np[start:stop]).to(self.device)
-                logits_by_level = self._forward(X_t, mask_t)
-                for level_name, logits in logits_by_level.items():
-                    preds_by_level[level_name].append(
-                        (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
-                    )
-
-        return {
-            level_name: np.concatenate(chunks, axis=0)
-            if chunks
-            else np.zeros((0, self.output_dims[level_name]), dtype=np.float32)
-            for level_name, chunks in preds_by_level.items()
-        }
-
-    def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None):
-        if batch_kind != "protein_global":
-            raise ValueError(f"ECMultiHeadClassifierTorch does not support batch_kind='{batch_kind}'")
-
-        first_batch = next(iter(dataloader))
-        X_t, _, y_t, _ = self._batch_to_input(first_batch, self.device)
-        input_dim = X_t.shape[2]
-        self.output_dims = {
-            level_name: int(target.shape[1])
-            for level_name, target in y_t.items()
-        }
-        self.model = MultiHeadMLPModel(input_dim, self.hidden_dims, self.output_dims).to(self.device)
-        optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
-        criterion = nn.BCEWithLogitsLoss(reduction="none")
-
-        def train_epoch():
-            self.model.train()
-            for batch in dataloader:
-                X_t, mask_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
-                logits_by_level = self._forward(X_t, mask_t)
-                loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
-                if loss is None:
-                    continue
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-        def val_loss():
-            self.model.eval()
-            losses = []
-            with torch.no_grad():
-                for batch in val_dataloader:
-                    X_t, mask_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
-                    logits_by_level = self._forward(X_t, mask_t)
-                    loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
-                    if loss is not None:
-                        losses.append(float(loss.item()))
-            return sum(losses) / max(len(losses), 1)
-
-        self.best_epoch_, self.best_val_loss_ = _run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-        )
-        return self
-
-    def predict_loader(self, dataloader, batch_kind: str) -> dict[str, np.ndarray]:
-        if batch_kind != "protein_global":
-            raise ValueError(f"ECMultiHeadClassifierTorch does not support batch_kind='{batch_kind}'")
-
-        if self.output_dims is None:
-            raise ValueError("ECMultiHeadClassifierTorch must be fit before calling predict_loader().")
-
-        preds_by_level = {
-            level_name: []
-            for level_name in self.output_dims
-        }
-        self.model.eval()
-        with torch.no_grad():
-            for batch in dataloader:
-                X_t, mask_t, _, _ = self._batch_to_input(batch, self.device)
-                logits_by_level = self._forward(X_t, mask_t)
+                logits_by_level = self._forward(X_t)
                 for level_name, logits in logits_by_level.items():
                     preds_by_level[level_name].append(
                         (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
@@ -1071,6 +964,149 @@ class ResidueBinaryClassifierTorch:
         return _pad_1d_array_list(pred_rows, dtype=np.float32)
 
 
+class XGBResidueBinaryClassifier:
+    """XGBoost binary classifier over residue embeddings.
+
+    Each valid residue becomes one training example by flattening a padded
+    batch of shape (batch, seq_len, emb_dim) into (n_valid_residues, emb_dim)
+    using the target mask.
+    """
+
+    def __init__(
+        self,
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        n_jobs=-1,
+        device=None,
+        random_state=0,
+        eval_metric="logloss",
+        early_stopping_rounds=None,
+    ):
+        if XGBClassifier is None:
+            raise ImportError("xgboost is required to use XGBResidueBinaryClassifier.")
+
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.learning_rate = learning_rate
+        self.n_jobs = n_jobs
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.random_state = random_state
+        self.eval_metric = eval_metric
+        self.early_stopping_rounds = early_stopping_rounds
+        self.model = None
+        self.constant_prediction_ = None
+
+    @staticmethod
+    def _flatten_batch(batch) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        X = np.asarray(batch.protein_emb, dtype=np.float32)
+        y = np.asarray(batch.target_per_residue, dtype=np.float32)
+        mask = np.asarray(batch.target_mask, dtype=bool)
+        return (
+            X[mask].astype(np.float32, copy=False),
+            y[mask].astype(np.int32, copy=False),
+            mask.sum(axis=1).astype(np.int32, copy=False),
+        )
+
+    @classmethod
+    def _flatten_loader(cls, dataloader) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        X_chunks: list[np.ndarray] = []
+        y_chunks: list[np.ndarray] = []
+        lengths: list[int] = []
+
+        for batch in dataloader:
+            X_flat, y_flat, batch_lengths = cls._flatten_batch(batch)
+            if X_flat.size == 0:
+                continue
+            X_chunks.append(X_flat)
+            y_chunks.append(y_flat)
+            lengths.extend(batch_lengths.tolist())
+
+        if not X_chunks:
+            return (
+                np.empty((0, 0), dtype=np.float32),
+                np.empty((0,), dtype=np.int32),
+                np.empty((0,), dtype=np.int32),
+            )
+
+        return (
+            np.concatenate(X_chunks, axis=0),
+            np.concatenate(y_chunks, axis=0),
+            np.asarray(lengths, dtype=np.int32),
+        )
+
+    @staticmethod
+    def _split_flat_predictions(flat_pred: np.ndarray, lengths: np.ndarray) -> list[np.ndarray]:
+        rows: list[np.ndarray] = []
+        start = 0
+        for length in lengths.tolist():
+            stop = start + int(length)
+            rows.append(np.asarray(flat_pred[start:stop], dtype=np.float32))
+            start = stop
+        return rows
+
+    def _make_model(self, use_early_stopping: bool) -> XGBClassifier:
+        params = {
+            "objective": "binary:logistic",
+            "n_estimators": self.n_estimators,
+            "max_depth": self.max_depth,
+            "learning_rate": self.learning_rate,
+            "n_jobs": self.n_jobs,
+            "device": self.device,
+            "random_state": self.random_state,
+            "eval_metric": self.eval_metric,
+        }
+        if use_early_stopping and self.early_stopping_rounds is not None:
+            params["early_stopping_rounds"] = self.early_stopping_rounds
+        return XGBClassifier(**params)
+
+    def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None):
+        if batch_kind != "protein_residue":
+            raise ValueError(f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'")
+
+        X_train, y_train, _ = self._flatten_loader(dataloader)
+        if X_train.size == 0:
+            raise ValueError("No residue-level training samples found for XGBoost.")
+
+        unique_classes = np.unique(y_train)
+        if unique_classes.size == 1:
+            self.constant_prediction_ = float(unique_classes[0])
+            self.model = None
+            return self
+
+        X_val = y_val = None
+        if val_dataloader is not None:
+            X_val, y_val, _ = self._flatten_loader(val_dataloader)
+
+        use_early_stopping = X_val is not None and X_val.size > 0
+        self.constant_prediction_ = None
+        self.model = self._make_model(use_early_stopping=use_early_stopping)
+        fit_kwargs = {"verbose": False}
+        if use_early_stopping:
+            fit_kwargs["eval_set"] = [(X_val, y_val)]
+
+        self.model.fit(X_train, y_train, **fit_kwargs)
+        return self
+
+    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+        if batch_kind != "protein_residue":
+            raise ValueError(f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'")
+
+        if self.model is None and self.constant_prediction_ is None:
+            raise ValueError("XGBResidueBinaryClassifier must be fit before calling predict_loader().")
+
+        pred_rows: list[np.ndarray] = []
+        for batch in dataloader:
+            X_flat, _, lengths = self._flatten_batch(batch)
+            if self.constant_prediction_ is not None:
+                flat_pred = np.full((X_flat.shape[0],), self.constant_prediction_, dtype=np.float32)
+            else:
+                flat_pred = self.model.predict(X_flat).astype(np.float32, copy=False)
+            pred_rows.extend(self._split_flat_predictions(flat_pred, lengths))
+
+        return _pad_1d_array_list(pred_rows, dtype=np.float32)
+
+
 MODEL_MAP = {
     "classification": {
         "mlp_classification": {
@@ -1145,7 +1181,7 @@ STRUCTURED_MODEL_MAP = {
                 "early_stopping_patience": 20,
                 "early_stopping_min_delta": 1e-4,
             },
-            "residue_aware": True,
+            "residue_aware": False,
         },
         "sgd_classification": {
             "wrap": ECMultiHeadClassifierTorch,
@@ -1157,7 +1193,7 @@ STRUCTURED_MODEL_MAP = {
                 "early_stopping_patience": 20,
                 "early_stopping_min_delta": 1e-4,
             },
-            "residue_aware": True,
+            "residue_aware": False,
         },
     },
     "residue_binary_vector": {
@@ -1187,3 +1223,19 @@ STRUCTURED_MODEL_MAP = {
         },
     },
 }
+
+if XGBClassifier is not None:
+    STRUCTURED_MODEL_MAP["residue_binary_vector"]["xgb_classification"] = {
+        "wrap": XGBResidueBinaryClassifier,
+        "params": {
+            "n_estimators": 100,
+            "max_depth": 6,
+            "learning_rate": 0.1,
+            "n_jobs": -1,
+            "device": "cuda" if torch.cuda.is_available() else "cpu",
+            "random_state": 0,
+            "eval_metric": "logloss",
+            "early_stopping_rounds": 20,
+        },
+        "residue_aware": True,
+    }

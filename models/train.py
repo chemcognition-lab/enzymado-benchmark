@@ -491,6 +491,63 @@ def build_protein_global_Xy_direct(
     )
 
 
+def build_mutation_delta_Xy_direct(
+    rows: list[dict],
+    by_id: dict[str, np.ndarray],
+    by_seq: dict[str, np.ndarray],
+    config,
+) -> tuple[np.ndarray, np.ndarray]:
+    if config.label_kind == "scalar_regression":
+        label_builder = ScalarRegressionLabelBuilder(target_column=str(config.target_column))
+    elif config.label_kind == "binary":
+        label_builder = BinaryLabelBuilder(target_column=str(config.target_column))
+    else:
+        raise ValueError(
+            f"build_mutation_delta_Xy_direct does not support label_kind '{config.label_kind}'."
+        )
+
+    if not config.wildtype_sequence_column:
+        raise ValueError("Mutation-delta tasks require 'wildtype_sequence_column'.")
+
+    from data_loading.splits import normalize_sequence as _norm_seq
+
+    X_list: list[np.ndarray] = []
+    y_list: list[np.float32] = []
+    skipped = 0
+
+    for row in rows:
+        mutant_emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
+        wildtype_seq = _norm_seq(row.get(config.wildtype_sequence_column, ""))
+        wildtype_emb = by_seq.get(wildtype_seq) if wildtype_seq else None
+        if mutant_emb is None or wildtype_emb is None:
+            skipped += 1
+            continue
+        if mutant_emb.shape != wildtype_emb.shape:
+            skipped += 1
+            continue
+
+        try:
+            target = label_builder.build(row)
+        except ValueError:
+            skipped += 1
+            continue
+
+        # With mean pooling, mean(mut - wt) == mean(mut) - mean(wt).
+        X_list.append((mutant_emb - wildtype_emb).astype(np.float32, copy=False))
+        y_list.append(np.float32(target))
+
+    if skipped:
+        log(f"      Skipped {skipped} rows (missing embeddings or invalid targets)")
+
+    if not X_list:
+        return np.empty((0, 0), dtype=np.float32), np.empty((0,), dtype=np.float32)
+
+    return (
+        np.stack(X_list).astype(np.float32, copy=False),
+        np.asarray(y_list, dtype=np.float32),
+    )
+
+
 def get_model_map(task_type: str, label_kind: str) -> dict[str, dict]:
     if label_kind in STRUCTURED_MODEL_MAP:
         return STRUCTURED_MODEL_MAP[label_kind]
@@ -755,6 +812,10 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 config.batch_kind == "protein_global"
                 and config.label_kind in {"scalar_regression", "binary"}
             )
+            is_pooled_mutation_task = (
+                config.batch_kind == "mutation_delta_global"
+                and config.label_kind in {"scalar_regression", "binary"}
+            )
 
             if is_ligand_task:
                 # Pool on H5 load — avoids storing (seq_len, emb_dim) arrays for large datasets
@@ -802,6 +863,17 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 X_val, y_val = build_protein_global_Xy_direct(val_rows, by_id, by_seq, config)
                 X_test, y_test = build_protein_global_Xy_direct(test_rows, by_id, by_seq, config)
                 store = None
+            elif is_pooled_mutation_task:
+                log(f"    Loading pooled embeddings from H5 (mutation-delta task)...")
+                t0 = time.time()
+                by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
+                log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
+
+                log(f"    Building pooled mutation-delta X/y arrays...")
+                X_train, y_train = build_mutation_delta_Xy_direct(train_rows, by_id, by_seq, config)
+                X_val, y_val = build_mutation_delta_Xy_direct(val_rows, by_id, by_seq, config)
+                X_test, y_test = build_mutation_delta_Xy_direct(test_rows, by_id, by_seq, config)
+                store = None
             else:
                 # Lazy store — scans H5 keys but reads embeddings on-demand per mini-batch
                 log(f"    Scanning H5 keys for lazy store...")
@@ -830,7 +902,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 )
                 log(f"    Datasets built ({time.time()-t0:.1f}s)")
 
-            if is_ligand_task or is_pooled_ec_task or is_pooled_protein_global_task:
+            if is_ligand_task or is_pooled_ec_task or is_pooled_protein_global_task or is_pooled_mutation_task:
                 n_train = len(X_train)
                 n_val   = len(X_val)
                 n_test  = len(X_test)
@@ -869,7 +941,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
             for model_name, model_info in model_map.items():
                 residue_aware = model_info.get("residue_aware", False) and not (
-                    is_ligand_task or is_pooled_ec_task or is_pooled_protein_global_task
+                    is_ligand_task or is_pooled_ec_task or is_pooled_protein_global_task or is_pooled_mutation_task
                 )
                 log(f"    [{model_name}] n_train={n_train}, n_test={n_test} | residue_aware={residue_aware}")
 
@@ -889,6 +961,20 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     target_mask_train = target_mask_val = target_mask_test = None
                 elif is_pooled_protein_global_task:
                     log(f"      Training on pooled protein-global embeddings...")
+                    trained = train_model(
+                        model_info,
+                        X_train,
+                        y_train,
+                        X_val=X_val if use_validation else None,
+                        y_val=y_val if use_validation else None,
+                    )
+                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                    pred_train = trained.predict(X_train)
+                    pred_val = trained.predict(X_val) if use_validation else None
+                    pred_test = trained.predict(X_test)
+                    target_mask_train = target_mask_val = target_mask_test = None
+                elif is_pooled_mutation_task:
+                    log(f"      Training on pooled mutation-delta embeddings...")
                     trained = train_model(
                         model_info,
                         X_train,

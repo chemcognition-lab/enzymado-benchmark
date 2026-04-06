@@ -33,8 +33,6 @@ class StructuredTrainingTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_ec_multihead_training_and_prediction_serialization(self) -> None:
-        from torch.utils.data import DataLoader
-
         from models.models import ECMultiHeadClassifierTorch
         from models.train import get_target_payload, make_predictions_file
 
@@ -75,22 +73,21 @@ class StructuredTrainingTests(unittest.TestCase):
         )
 
         bundle = build_dataset_from_config(config, store, split_name="train")
-        loader = DataLoader(
-            bundle.dataset,
-            batch_size=2,
-            collate_fn=bundle.collator,
-            shuffle=False,
-            num_workers=0,
+        X = np.stack(
+            [
+                np.asarray(bundle.dataset[i]["protein_emb"], dtype=np.float32).mean(axis=0)
+                for i in range(len(bundle.dataset))
+            ]
         )
+        y_true, target_mask = get_target_payload(bundle)
         model = ECMultiHeadClassifierTorch(
             hidden_dims=(8,),
             lr=1e-2,
             epochs=3,
             early_stopping_patience=1,
         )
-        model.fit_loader(loader, batch_kind="protein_global", val_dataloader=loader)
-        preds = model.predict_loader(loader, batch_kind="protein_global")
-        y_true, target_mask = get_target_payload(bundle)
+        model.fit(X, y_true, target_mask, X_val=X, y_val=y_true, target_mask_val=target_mask)
+        preds = model.predict(X)
 
         self.assertEqual(set(preds), {"level_1", "level_2", "level_3", "level_4"})
         self.assertEqual(preds["level_1"].shape, y_true["level_1"].shape)
@@ -182,6 +179,49 @@ class StructuredTrainingTests(unittest.TestCase):
         )
         np.testing.assert_array_equal(y, np.asarray([1.0, 0.0], dtype=np.float32))
 
+    def test_build_mutation_delta_Xy_direct(self) -> None:
+        from models.train import build_mutation_delta_Xy_direct
+
+        config = TaskConfig(
+            name="dtm_test",
+            batch_kind="mutation_delta_global",
+            label_kind="scalar_regression",
+            dataset_path=self.root / "unused.csv",
+            target_column="dtm",
+            wildtype_sequence_column="wildtype_sequence",
+            sample_id_candidates=("uniprot_id",),
+        )
+        rows = [
+            {
+                "uniprot_id": "P1",
+                "protein_sequence": "AAAA",
+                "wildtype_sequence": "BBBB",
+                "dtm": "1.5",
+            },
+            {
+                "uniprot_id": "P2",
+                "protein_sequence": "CCCC",
+                "wildtype_sequence": "DDDD",
+                "dtm": "-0.5",
+            },
+        ]
+        by_id = {
+            "P1": np.asarray([3.0, 5.0, 7.0], dtype=np.float32),
+            "P2": np.asarray([0.0, 1.0, 2.0], dtype=np.float32),
+        }
+        by_seq = {
+            "BBBB": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
+            "DDDD": np.asarray([0.5, 0.5, 0.5], dtype=np.float32),
+        }
+
+        X, y = build_mutation_delta_Xy_direct(rows, by_id, by_seq, config)
+
+        np.testing.assert_array_equal(
+            X,
+            np.asarray([[2.0, 3.0, 4.0], [-0.5, 0.5, 1.5]], dtype=np.float32),
+        )
+        np.testing.assert_array_equal(y, np.asarray([1.5, -0.5], dtype=np.float32))
+
     def test_residue_binary_training_and_prediction_serialization(self) -> None:
         from torch.utils.data import DataLoader
 
@@ -255,6 +295,78 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIn("y_true", payload.files)
         self.assertIn("predictions", payload.files)
         self.assertIn("target_mask", payload.files)
+
+    def test_xgb_residue_binary_training_and_prediction(self) -> None:
+        from torch.utils.data import DataLoader
+
+        from models.models import XGBResidueBinaryClassifier
+        from models.train import get_target_payload
+
+        dataset_path = self.root / "binding_sites.csv"
+        split_path = self.root / "binding_sites_split.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "binding_positions"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "binding_positions": "[1, 3]"},
+                {"uniprot_id": "P2", "protein_sequence": "AAA", "binding_positions": "[2]"},
+            ],
+        )
+        write_csv(
+            split_path,
+            ["uniprot_id", "split"],
+            [
+                {"uniprot_id": "P1", "split": "train"},
+                {"uniprot_id": "P2", "split": "train"},
+            ],
+        )
+
+        config = TaskConfig(
+            name="binding_sites_test",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_path=dataset_path,
+            target_column=None,
+            residue_positions_column="binding_positions",
+            sample_id_candidates=("uniprot_id",),
+            split_files={"random": split_path},
+            split_id_candidates=("uniprot_id",),
+        )
+        store = ResidueEmbeddingStore(
+            by_id={
+                "P1": np.asarray(
+                    [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
+                    dtype=np.float32,
+                ),
+                "P2": np.asarray(
+                    [[0.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
+                    dtype=np.float32,
+                ),
+            }
+        )
+
+        bundle = build_dataset_from_config(config, store, split_name="train")
+        loader = DataLoader(
+            bundle.dataset,
+            batch_size=2,
+            collate_fn=bundle.collator,
+            shuffle=False,
+            num_workers=0,
+        )
+        model = XGBResidueBinaryClassifier(
+            n_estimators=5,
+            max_depth=2,
+            learning_rate=0.3,
+            n_jobs=1,
+            device="cpu",
+        )
+        model.fit_loader(loader, batch_kind="protein_residue", val_dataloader=loader)
+        preds = model.predict_loader(loader, batch_kind="protein_residue")
+        y_true, target_mask = get_target_payload(bundle)
+
+        self.assertEqual(preds.shape, y_true.shape)
+        self.assertEqual(preds.shape, target_mask.shape)
+        self.assertEqual(preds.shape, (2, 4))
 
 
 if __name__ == "__main__":
