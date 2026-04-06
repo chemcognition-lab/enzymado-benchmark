@@ -3,6 +3,7 @@ import json
 import fcntl
 import argparse
 import inspect
+import time
 from pathlib import Path
 
 import joblib
@@ -29,6 +30,10 @@ from data_loading.adapters import (
     MutationDeltaAdapter,
     ProteinResidueAdapter,
 )
+
+def log(msg: str) -> None:
+    print(msg, flush=True)
+
 
 SKIP_LABEL_KINDS: set[str] = set()
 
@@ -100,6 +105,133 @@ def collect_needed_lookup_keys(rows: list[dict], config) -> tuple[set[str], set[
     return ids, sequences
 
 
+class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
+    """Reads embeddings from H5 on-demand instead of loading all into RAM.
+
+    Overrides lookup_id / lookup_sequence to read directly from H5.
+    Use with DataLoader num_workers=0 (H5 file handle is not fork-safe).
+    """
+
+    def __init__(
+        self,
+        h5_path: str | Path,
+        available_ids: set[str],
+        seq_to_h5key: dict[str, str],
+    ):
+        # Initialize parent with empty dicts — no data loaded into RAM
+        super().__init__(by_id={}, by_sequence={})
+        self._h5_path = str(h5_path)
+        self._h5 = None
+        self._available_ids: set[str] = available_ids          # normalized ids in H5
+        self._seq_to_h5key: dict[str, str] = seq_to_h5key     # norm_seq → H5 key
+
+    def _open(self):
+        import h5py
+        if self._h5 is None or not self._h5.id.valid:
+            self._h5 = h5py.File(self._h5_path, "r")
+
+    def has_id(self, identifier: str) -> bool:
+        from data_loading.splits import clean_text
+        return clean_text(identifier) in self._available_ids
+
+    def has_sequence(self, sequence: str) -> bool:
+        from data_loading.splits import normalize_sequence as _ns
+        return _ns(sequence) in self._seq_to_h5key
+
+    def lookup_id(self, identifier: str) -> np.ndarray:
+        from data_loading.splits import clean_text
+        from data_loading.features import EmbeddingLookupError
+        key = clean_text(identifier)
+        if key not in self._available_ids:
+            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
+        self._open()
+        try:
+            return np.asarray(self._h5[key], dtype=np.float32)
+        except KeyError:
+            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
+
+    def lookup_sequence(self, sequence: str) -> np.ndarray:
+        from data_loading.splits import normalize_sequence as _ns
+        from data_loading.features import EmbeddingLookupError
+        norm_seq = _ns(sequence)
+        h5_key = self._seq_to_h5key.get(norm_seq)
+        if h5_key is None:
+            raise EmbeddingLookupError("Missing residue embedding for sequence.")
+        self._open()
+        try:
+            return np.asarray(self._h5[h5_key], dtype=np.float32)
+        except KeyError:
+            raise EmbeddingLookupError("Missing residue embedding for sequence.")
+
+    def __del__(self):
+        if getattr(self, "_h5", None) is not None:
+            try:
+                self._h5.close()
+            except Exception:
+                pass
+
+
+def _build_seq_to_h5key(
+    h5_path: str | Path,
+    needed_sequences: set[str],
+) -> dict[str, str]:
+    """Build normalized_sequence → H5_key mapping via sequence index or direct key match."""
+    import h5py
+    from data_loading.splits import clean_text, normalize_sequence as _ns
+
+    normalized_sequences = {_ns(s) for s in needed_sequences if _ns(s)}
+    seq_to_h5key: dict[str, str] = {}
+
+    # Try sequence index first (maps sequence_id → sequence)
+    seq_index_path = SEQUENCE_INDEX_PATH if SEQUENCE_INDEX_PATH.exists() else None
+    if seq_index_path is not None and normalized_sequences:
+        import csv
+        with open(seq_index_path, newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                seq = _ns(row.get("protein_sequence", ""))
+                sid = clean_text(row.get("sequence_id", ""))
+                if seq in normalized_sequences and sid:
+                    seq_to_h5key[seq] = sid
+
+    # Fall back: if the sequence itself is an H5 key
+    with h5py.File(str(h5_path), "r") as handle:
+        for seq in normalized_sequences:
+            if seq not in seq_to_h5key and seq in handle:
+                seq_to_h5key[seq] = seq
+
+    return seq_to_h5key
+
+
+def load_lazy_embedding_store(
+    h5_path: str | Path,
+    needed_ids: set[str],
+    needed_sequences: set[str],
+) -> LazyResidueEmbeddingStore:
+    """Return a LazyResidueEmbeddingStore — scans H5 keys but loads no data."""
+    import h5py
+    from data_loading.splits import clean_text
+
+    full_path = PROJECT_ROOT / h5_path
+
+    # Collect which needed_ids actually exist in H5
+    with h5py.File(str(full_path), "r") as handle:
+        h5_keys = {clean_text(k) for k in handle.keys()}
+
+    normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)} & h5_keys
+    # Filter seq_to_h5key so only mappings whose H5 key actually exists are kept
+    seq_to_h5key = {
+        seq: key
+        for seq, key in _build_seq_to_h5key(full_path, needed_sequences).items()
+        if key in h5_keys
+    }
+
+    return LazyResidueEmbeddingStore(
+        h5_path=full_path,
+        available_ids=normalized_ids,
+        seq_to_h5key=seq_to_h5key,
+    )
+
+
 def load_embedding_store_subset(
     h5_path: str | Path,
     needed_ids: set[str],
@@ -113,6 +245,111 @@ def load_embedding_store_subset(
         needed_sequences=needed_sequences,
         sequence_index_path=sequence_index_path,
     )
+
+
+def load_pooled_h5_subset(
+    h5_path: str | Path,
+    needed_ids: set[str],
+    needed_sequences: set[str],
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Load only the needed H5 embeddings by key and mean-pool each one immediately.
+
+    Reads only the specific keys required rather than scanning the whole file.
+    Returns (by_id, by_seq) dicts of (emb_dim,) arrays instead of (seq_len, emb_dim).
+    """
+    import h5py
+    from data_loading.splits import clean_text, normalize_sequence as _norm_seq
+
+    normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)}
+    normalized_sequences = {_norm_seq(v) for v in needed_sequences if _norm_seq(v)}
+
+    # Build seq → H5 key mapping via sequence index, then fall back to direct key match
+    seq_to_h5key = _build_seq_to_h5key(PROJECT_ROOT / h5_path, normalized_sequences)
+
+    # Collect the exact set of H5 keys to load and what they map to
+    # key → (id_key | None, seq | None)
+    keys_to_load: dict[str, tuple[str | None, str | None]] = {}
+    for id_key in normalized_ids:
+        entry = keys_to_load.get(id_key, (None, None))
+        keys_to_load[id_key] = (id_key, entry[1])
+    for seq, h5_key in seq_to_h5key.items():
+        entry = keys_to_load.get(h5_key, (None, None))
+        keys_to_load[h5_key] = (entry[0], seq)
+
+    log(f"      seq_index mapped {len(seq_to_h5key)}/{len(normalized_sequences)} seqs → H5 keys")
+    log(f"      will load {len(keys_to_load)} unique H5 keys ({len(normalized_ids)} by id, {len(seq_to_h5key)} by seq)")
+
+    by_id: dict[str, np.ndarray] = {}
+    by_seq: dict[str, np.ndarray] = {}
+    missing = 0
+    with h5py.File(str(PROJECT_ROOT / h5_path), "r") as handle:
+        log(f"      H5 file opened. Reading embeddings...")
+        for i, (h5_key, (id_key, seq)) in enumerate(keys_to_load.items(), 1):
+            if h5_key not in handle:
+                missing += 1
+                continue
+            arr = np.asarray(handle[h5_key], dtype=np.float32).mean(axis=0)
+            if id_key is not None:
+                by_id[id_key] = arr
+            if seq is not None:
+                by_seq[seq] = arr
+            if i % 500 == 0:
+                log(f"      ... {i}/{len(keys_to_load)} loaded")
+
+    if missing:
+        log(f"      {missing} keys not found in H5 (will be skipped)")
+    return by_id, by_seq
+
+
+def build_Xy_ligand_direct(
+    rows: list[dict],
+    by_id: dict[str, np.ndarray],
+    by_seq: dict[str, np.ndarray],
+    config,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build X/y for protein_ligand_global from pre-pooled embeddings + rdkit ligand features."""
+    from data_loading.splits import clean_text, normalize_sequence as _norm_seq
+    from data_loading.features import _default_rdkit_featurize
+
+    X_list: list[np.ndarray] = []
+    y_list: list[float] = []
+    skipped = 0
+
+    for row in rows:
+        emb: np.ndarray | None = None
+        for col in config.sample_id_candidates:
+            key = clean_text(row.get(col, ""))
+            if key and key in by_id:
+                emb = by_id[key]
+                break
+        if emb is None:
+            seq = _norm_seq(row.get(config.sequence_column, ""))
+            if seq:
+                emb = by_seq.get(seq)
+        if emb is None:
+            skipped += 1
+            continue
+
+        smiles = (row.get(config.ligand_column) or "").strip()
+        try:
+            ligand_feat = _default_rdkit_featurize(smiles)
+        except (ValueError, ImportError):
+            skipped += 1
+            continue
+
+        target_str = (row.get(config.target_column) or "").strip()
+        if not target_str:
+            skipped += 1
+            continue
+
+        X_list.append(np.concatenate([emb, ligand_feat]))
+        y_list.append(float(target_str))
+
+    if skipped:
+        print(f"      Skipped {skipped} rows (missing embedding, ligand, or target)")
+    if not X_list:
+        return np.empty((0,), dtype=np.float32), np.empty((0,), dtype=np.float32)
+    return np.stack(X_list), np.array(y_list, dtype=np.float32)
 
 
 def get_model_map(task_type: str, label_kind: str) -> dict[str, dict]:
@@ -320,8 +557,10 @@ def update_card_locked(card_path: Path, task_name: str, result_key: str, result_
 # ---------------------------------------------------------------------------
 
 def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter: str | None = None):
+    log(f"[startup] Python started. emb_name={emb_name_filter}")
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
+    log(f"[startup] JSON loaded. {len(embeddings)} embedding models, {len(card['properties'])} tasks.")
     card_path = Path(card_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -333,7 +572,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
         if emb_name_filter is not None and emb_name != emb_name_filter:
             continue
 
-        print(f"\n=== Embedding: {emb_name} (dim={emb_info['dim']}) ===")
+        log(f"\n=== Embedding: {emb_name} (dim={emb_info['dim']}) ===")
 
         for task_name, prop in card["properties"].items():
             task_type = prop.get("task_type")
@@ -342,81 +581,136 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
             registry_name = resolve_registry_name(task_name)
             if registry_name is None:
-                print(f"  Skipping '{task_name}' (not in TASK_REGISTRY)")
+                log(f"  Skipping '{task_name}' (not in TASK_REGISTRY)")
                 continue
 
             config = get_task_config(registry_name)
 
             if config.label_kind in SKIP_LABEL_KINDS:
-                print(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' not yet supported)")
+                log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' not yet supported)")
                 continue
 
             dataset_info = prop["datasets"][0]
             default_split = dataset_info.get("splits", {}).get("default_split")
             split_variant = resolve_split_variant(default_split)
             if split_variant is None:
-                print(f"  Skipping '{task_name}' (no usable split defined in card)")
+                log(f"  Skipping '{task_name}' (no usable split defined in card)")
                 continue
 
-            print(f"\n  Task: {task_name} | type: {task_type} | split: {default_split}")
+            log(f"\n  Task: {task_name} | type: {task_type} | split: {default_split}")
 
             # Load only the embeddings needed for this task (not the entire H5)
+            log(f"    Loading CSV rows...")
             train_rows = get_task_rows(config, "train", split_variant)
             val_rows = get_task_rows(config, "val", split_variant)
             test_rows = get_task_rows(config, "test", split_variant)
             needed_ids, needed_sequences = collect_needed_lookup_keys(train_rows + val_rows + test_rows, config)
-            store = load_embedding_store_subset(emb_info["path"], needed_ids, needed_sequences)
-            print(
-                "    Loaded "
-                f"{len(store.by_id)} id embeddings and {len(store.by_sequence)} sequence embeddings for this task"
+            log(f"    Rows loaded: train={len(train_rows)}, val={len(val_rows)}, test={len(test_rows)} | need {len(needed_ids)} ids, {len(needed_sequences)} seqs")
+
+            is_ligand_task = config.batch_kind == "protein_ligand_global"
+
+            if is_ligand_task:
+                # Pool on H5 load — avoids storing (seq_len, emb_dim) arrays for large datasets
+                log(f"    Loading pooled embeddings from H5 (ligand task)...")
+                t0 = time.time()
+                by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
+                log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
+
+                log(f"    Building X/y arrays...")
+                X_train, y_train = build_Xy_ligand_direct(train_rows, by_id, by_seq, config)
+                X_val, y_val = build_Xy_ligand_direct(val_rows, by_id, by_seq, config)
+                X_test, y_test = build_Xy_ligand_direct(test_rows, by_id, by_seq, config)
+                store = None
+            else:
+                # Lazy store — scans H5 keys but reads embeddings on-demand per mini-batch
+                log(f"    Scanning H5 keys for lazy store...")
+                t0 = time.time()
+                store = load_lazy_embedding_store(emb_info["path"], needed_ids, needed_sequences)
+                log(f"    Lazy store ready ({time.time()-t0:.1f}s) — {len(store._available_ids)} ids, {len(store._seq_to_h5key)} seqs indexed")
+
+                log(f"    Building task datasets...")
+                t0 = time.time()
+                train_bundle = build_task_dataset(
+                    registry_name, store,
+                    split_name="train", split_variant=split_variant, missing_policy="skip",
+                )
+                ec_vocabulary = None
+                if config.label_kind == "multilabel_ec":
+                    ec_vocabulary = train_bundle.label_builder.vocabulary_by_level
+                val_bundle = build_task_dataset(
+                    registry_name, store,
+                    split_name="val", split_variant=split_variant, missing_policy="skip",
+                    ec_vocabulary=ec_vocabulary,
+                )
+                test_bundle = build_task_dataset(
+                    registry_name, store,
+                    split_name="test", split_variant=split_variant, missing_policy="skip",
+                    ec_vocabulary=ec_vocabulary,
+                )
+                log(f"    Datasets built ({time.time()-t0:.1f}s)")
+
+            if is_ligand_task:
+                n_train = len(X_train)
+                n_val   = len(X_val)
+                n_test  = len(X_test)
+            else:
+                n_train = len(train_bundle.dataset)
+                n_val   = len(val_bundle.dataset)
+                n_test  = len(test_bundle.dataset)
+
+            orig_train = len(train_rows)
+            orig_val   = len(val_rows)
+            orig_test  = len(test_rows)
+            orig_total = orig_train + orig_val + orig_test
+            kept_total = n_train + n_val + n_test
+            dropped    = orig_total - kept_total
+
+            log(
+                f"    Data summary:"
+                f"\n      original : train={orig_train:,}  val={orig_val:,}  test={orig_test:,}  total={orig_total:,}"
+                f"\n      kept     : train={n_train:,}  val={n_val:,}  test={n_test:,}  total={kept_total:,}"
+                f"\n      dropped  : {dropped:,} ({100*dropped/orig_total:.1f}% of original)"
+                + (f"  ← missing embeddings/ligand features" if dropped > 0 else "")
             )
 
-            train_bundle = build_task_dataset(
-                registry_name, store,
-                split_name="train", split_variant=split_variant, missing_policy="skip",
-            )
-            ec_vocabulary = None
-            if config.label_kind == "multilabel_ec":
-                ec_vocabulary = train_bundle.label_builder.vocabulary_by_level
-            val_bundle = build_task_dataset(
-                registry_name, store,
-                split_name="val", split_variant=split_variant, missing_policy="skip",
-                ec_vocabulary=ec_vocabulary,
-            )
-            test_bundle = build_task_dataset(
-                registry_name, store,
-                split_name="test", split_variant=split_variant, missing_policy="skip",
-                ec_vocabulary=ec_vocabulary,
-            )
-
-            if len(train_bundle.dataset) == 0 or len(test_bundle.dataset) == 0:
-                print(f"    Skipping '{task_name}': empty dataset (train={len(train_bundle.dataset)}, test={len(test_bundle.dataset)}). Check embeddings and rdkit.")
+            if n_train == 0 or n_test == 0:
+                log(f"    Skipping '{task_name}': empty dataset after filtering.")
                 del store
                 continue
 
-            use_validation = len(val_bundle.dataset) > 0
+            use_validation = n_val > 0
             if use_validation:
-                print(f"    Validation enabled: n_val={len(val_bundle.dataset)}")
+                log(f"    Validation enabled: n_val={n_val:,}")
             else:
-                print("    Validation disabled: empty val split after filtering")
-
-            # Ligand tasks must always pool — can't concat 3D protein + 1D ligand
-            use_residue_aware = config.batch_kind != "protein_ligand_global"
+                log("    Validation disabled: empty val split after filtering")
 
             model_map = get_model_map(task_type, config.label_kind)
 
             for model_name, model_info in model_map.items():
-                residue_aware = model_info.get("residue_aware", False) and use_residue_aware
-                print(f"    [{model_name}] n_train={len(train_bundle.dataset)}, n_test={len(test_bundle.dataset)}")
+                residue_aware = model_info.get("residue_aware", False) and not is_ligand_task
+                log(f"    [{model_name}] n_train={n_train}, n_test={n_test} | residue_aware={residue_aware}")
 
                 run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
                 run_dir.mkdir(parents=True, exist_ok=True)
 
-                if residue_aware:
+                t0 = time.time()
+                if is_ligand_task:
+                    log(f"      Training...")
+                    trained = train_model(model_info, X_train, y_train,
+                                         X_val=X_val if use_validation else None,
+                                         y_val=y_val if use_validation else None)
+                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                    pred_train = trained.predict(X_train)
+                    pred_val = trained.predict(X_val) if use_validation else None
+                    pred_test = trained.predict(X_test)
+                    target_mask_train = target_mask_val = target_mask_test = None
+                elif residue_aware:
                     train_loader = get_dataloader(train_bundle, batch_size=64)
                     val_loader = get_dataloader(val_bundle, batch_size=64) if use_validation else None
                     test_loader = get_dataloader(test_bundle, batch_size=64)
+                    log(f"      Training (residue-aware)...")
                     trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
+                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
                     pred_val = trained.predict_loader(val_loader, batch_kind=config.batch_kind) if use_validation else None
                     pred_test = trained.predict_loader(test_loader, batch_kind=config.batch_kind)
                     pred_train = trained.predict_loader(train_loader, batch_kind=config.batch_kind)
@@ -424,16 +718,18 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     y_test, target_mask_test = get_target_payload(test_bundle)
                     y_train, target_mask_train = get_target_payload(train_bundle)
                 else:
-                    X_train, y_train = build_Xy_pooled(train_bundle, config.batch_kind)
-                    X_val, y_val = build_Xy_pooled(val_bundle, config.batch_kind) if use_validation else (None, None)
-                    X_test, y_test = build_Xy_pooled(test_bundle, config.batch_kind)
-                    trained = train_model(model_info, X_train, y_train, X_val=X_val, y_val=y_val)
-                    pred_val = trained.predict(X_val) if use_validation else None
-                    pred_test = trained.predict(X_test)
-                    pred_train = trained.predict(X_train)
-                    target_mask_val = None
-                    target_mask_test = None
-                    target_mask_train = None
+                    log(f"      Pooling embeddings...")
+                    X_train_p, y_train_p = build_Xy_pooled(train_bundle, config.batch_kind)
+                    X_val_p, y_val_p = build_Xy_pooled(val_bundle, config.batch_kind) if use_validation else (None, None)
+                    X_test_p, y_test_p = build_Xy_pooled(test_bundle, config.batch_kind)
+                    log(f"      Pooled shapes: train={X_train_p.shape}, test={X_test_p.shape}. Training...")
+                    trained = train_model(model_info, X_train_p, y_train_p, X_val=X_val_p, y_val=y_val_p)
+                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                    pred_val = trained.predict(X_val_p) if use_validation else None
+                    pred_test = trained.predict(X_test_p)
+                    pred_train = trained.predict(X_train_p)
+                    y_train, y_val, y_test = y_train_p, y_val_p, y_test_p
+                    target_mask_val = target_mask_test = target_mask_train = None
 
                 make_predictions_file(y_train, pred_train, run_dir, "train", target_mask_train)
                 if use_validation:
@@ -442,7 +738,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 model_file = save_model(trained, run_dir)
 
                 if getattr(trained, "best_epoch_", None) is not None:
-                    print(
+                    log(
                         "      Early stopping: "
                         f"best_epoch={trained.best_epoch_}, "
                         f"best_val_loss={trained.best_val_loss_:.6f}"
@@ -451,10 +747,11 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 result_key = f"{emb_name}__{model_name}"
                 result_entry = make_result_entry(emb_name, model_name, model_info, run_dir, model_file)
                 update_card_locked(card_path, task_name, result_key, result_entry)
+                log(f"      Saved → {run_dir.name}")
 
             del store  # free task embeddings before loading next task
 
-    print(f"\nDone. Results written to {card_path}")
+    log(f"\nDone. Results written to {card_path}")
 
 
 if __name__ == "__main__":
