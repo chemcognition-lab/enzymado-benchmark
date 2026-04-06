@@ -718,6 +718,7 @@ class ECMultiHeadClassifierTorch:
         lr=1e-3,
         epochs=200,
         optimizer_name="adam",
+        batch_size=1024,
         early_stopping_patience=None,
         early_stopping_min_delta=0.0,
         device=None,
@@ -726,6 +727,7 @@ class ECMultiHeadClassifierTorch:
         self.lr = lr
         self.epochs = epochs
         self.optimizer_name = optimizer_name
+        self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
@@ -748,9 +750,152 @@ class ECMultiHeadClassifierTorch:
         }
         return X_t, mask_t, y_t, target_mask_t
 
+    @staticmethod
+    def _targets_to_tensors(y, target_mask, device: torch.device):
+        y_t = {
+            level_name: torch.from_numpy(np.asarray(target, dtype=np.float32)).to(device)
+            for level_name, target in y.items()
+        }
+        target_mask_t = {
+            level_name: torch.from_numpy(np.asarray(mask, dtype=bool)).to(device)
+            for level_name, mask in target_mask.items()
+        }
+        return y_t, target_mask_t
+
+    @staticmethod
+    def _compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
+        loss_terms = []
+        for level_name, logits in logits_by_level.items():
+            level_loss = criterion(logits, y_t[level_name]).mean(dim=1)
+            sample_mask = target_mask_t[level_name].float()
+            denom = sample_mask.sum()
+            if denom.item() == 0:
+                continue
+            loss_terms.append((level_loss * sample_mask).sum() / denom)
+        if not loss_terms:
+            return None
+        return torch.stack(loss_terms).mean()
+
     def _forward(self, X_t: torch.Tensor, mask_t: torch.Tensor | None):
-        pooled = _masked_mean_pool(X_t, mask_t)
-        return self.model(pooled)
+        if X_t.ndim == 3:
+            features = _masked_mean_pool(X_t, mask_t)
+        elif X_t.ndim == 2:
+            features = X_t
+        else:
+            raise ValueError(f"ECMultiHeadClassifierTorch expects 2D or 3D inputs, got shape {tuple(X_t.shape)}")
+        return self.model(features)
+
+    def fit(self, X, y, target_mask, X_val=None, y_val=None, target_mask_val=None, mask=None, mask_val=None):
+        if target_mask is None:
+            raise ValueError("ECMultiHeadClassifierTorch.fit requires target_mask.")
+
+        X_np = np.asarray(X, dtype=np.float32)
+        mask_np = None if mask is None else np.asarray(mask, dtype=bool)
+        if X_np.ndim == 3:
+            input_dim = X_np.shape[2]
+        elif X_np.ndim == 2:
+            input_dim = X_np.shape[1]
+        else:
+            raise ValueError(f"X must be 2D or 3D, got shape {X_np.shape}")
+
+        self.output_dims = {
+            level_name: int(np.asarray(target, dtype=np.float32).shape[1])
+            for level_name, target in y.items()
+        }
+        self.model = MultiHeadMLPModel(input_dim, self.hidden_dims, self.output_dims).to(self.device)
+        optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
+        criterion = nn.BCEWithLogitsLoss(reduction="none")
+
+        val_payload = None
+        if X_val is not None and y_val is not None and target_mask_val is not None:
+            val_payload = (
+                np.asarray(X_val, dtype=np.float32),
+                None if mask_val is None else np.asarray(mask_val, dtype=bool),
+                {level_name: np.asarray(target, dtype=np.float32) for level_name, target in y_val.items()},
+                {level_name: np.asarray(mask_arr, dtype=bool) for level_name, mask_arr in target_mask_val.items()},
+            )
+
+        def iter_minibatches(X_arr, y_arr, target_mask_arr, mask_arr):
+            for start in range(0, X_arr.shape[0], self.batch_size):
+                stop = min(start + self.batch_size, X_arr.shape[0])
+                X_t = torch.from_numpy(X_arr[start:stop]).to(self.device)
+                mask_t = None
+                if mask_arr is not None:
+                    mask_t = torch.from_numpy(mask_arr[start:stop]).to(self.device)
+                y_t, target_mask_t = self._targets_to_tensors(
+                    {level_name: target[start:stop] for level_name, target in y_arr.items()},
+                    {level_name: mask_values[start:stop] for level_name, mask_values in target_mask_arr.items()},
+                    self.device,
+                )
+                yield X_t, mask_t, y_t, target_mask_t
+
+        def train_epoch():
+            self.model.train()
+            for X_t, mask_t, y_t, target_mask_t in iter_minibatches(X_np, y, target_mask, mask_np):
+                logits_by_level = self._forward(X_t, mask_t)
+                loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
+                if loss is None:
+                    continue
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        def val_loss():
+            self.model.eval()
+            losses = []
+            with torch.no_grad():
+                X_val_np, mask_val_np, y_val_np, target_mask_val_np = val_payload
+                for X_t, mask_t, y_t, target_mask_t in iter_minibatches(
+                    X_val_np,
+                    y_val_np,
+                    target_mask_val_np,
+                    mask_val_np,
+                ):
+                    logits_by_level = self._forward(X_t, mask_t)
+                    loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
+                    if loss is not None:
+                        losses.append(float(loss.item()))
+            return sum(losses) / max(len(losses), 1)
+
+        self.best_epoch_, self.best_val_loss_ = _run_training_with_early_stopping(
+            self.model,
+            self.epochs,
+            train_epoch,
+            val_loss_fn=val_loss if val_payload is not None else None,
+            patience=self.early_stopping_patience,
+            min_delta=self.early_stopping_min_delta,
+        )
+        return self
+
+    def predict(self, X, mask=None) -> dict[str, np.ndarray]:
+        if self.output_dims is None:
+            raise ValueError("ECMultiHeadClassifierTorch must be fit before calling predict().")
+
+        X_np = np.asarray(X, dtype=np.float32)
+        mask_np = None if mask is None else np.asarray(mask, dtype=bool)
+        preds_by_level = {level_name: [] for level_name in self.output_dims}
+
+        self.model.eval()
+        with torch.no_grad():
+            for start in range(0, X_np.shape[0], self.batch_size):
+                stop = min(start + self.batch_size, X_np.shape[0])
+                X_t = torch.from_numpy(X_np[start:stop]).to(self.device)
+                mask_t = None
+                if mask_np is not None:
+                    mask_t = torch.from_numpy(mask_np[start:stop]).to(self.device)
+                logits_by_level = self._forward(X_t, mask_t)
+                for level_name, logits in logits_by_level.items():
+                    preds_by_level[level_name].append(
+                        (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
+                    )
+
+        return {
+            level_name: np.concatenate(chunks, axis=0)
+            if chunks
+            else np.zeros((0, self.output_dims[level_name]), dtype=np.float32)
+            for level_name, chunks in preds_by_level.items()
+        }
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None):
         if batch_kind != "protein_global":
@@ -767,26 +912,12 @@ class ECMultiHeadClassifierTorch:
         optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
-
-        def compute_batch_loss(logits_by_level, y_t, target_mask_t):
-            loss_terms = []
-            for level_name, logits in logits_by_level.items():
-                level_loss = criterion(logits, y_t[level_name]).mean(dim=1)
-                sample_mask = target_mask_t[level_name].float()
-                denom = sample_mask.sum()
-                if denom.item() == 0:
-                    continue
-                loss_terms.append((level_loss * sample_mask).sum() / denom)
-            if not loss_terms:
-                return None
-            return torch.stack(loss_terms).mean()
-
         def train_epoch():
             self.model.train()
             for batch in dataloader:
                 X_t, mask_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
                 logits_by_level = self._forward(X_t, mask_t)
-                loss = compute_batch_loss(logits_by_level, y_t, target_mask_t)
+                loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
                 if loss is None:
                     continue
 
@@ -801,7 +932,7 @@ class ECMultiHeadClassifierTorch:
                 for batch in val_dataloader:
                     X_t, mask_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
                     logits_by_level = self._forward(X_t, mask_t)
-                    loss = compute_batch_loss(logits_by_level, y_t, target_mask_t)
+                    loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
                     if loss is not None:
                         losses.append(float(loss.item()))
             return sum(losses) / max(len(losses), 1)

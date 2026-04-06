@@ -106,6 +106,82 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIn("predictions_level_4", payload.files)
         self.assertIn("target_mask_level_3", payload.files)
 
+    def test_ec_multihead_pooled_training_and_prediction(self) -> None:
+        from models.models import ECMultiHeadClassifierTorch
+
+        X = np.asarray(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        y = {
+            "level_1": np.asarray([[1, 0], [0, 1], [1, 0], [0, 1]], dtype=np.float32),
+            "level_2": np.asarray([[1, 0], [0, 1], [1, 0], [0, 1]], dtype=np.float32),
+            "level_3": np.asarray([[1], [0], [1], [0]], dtype=np.float32),
+            "level_4": np.asarray([[1], [0], [1], [0]], dtype=np.float32),
+        }
+        target_mask = {
+            "level_1": np.asarray([True, True, True, True], dtype=bool),
+            "level_2": np.asarray([True, True, True, True], dtype=bool),
+            "level_3": np.asarray([True, True, True, True], dtype=bool),
+            "level_4": np.asarray([True, True, True, True], dtype=bool),
+        }
+
+        model = ECMultiHeadClassifierTorch(
+            hidden_dims=(8,),
+            lr=1e-2,
+            epochs=3,
+            batch_size=2,
+            early_stopping_patience=1,
+        )
+        model.fit(
+            X,
+            y,
+            target_mask,
+            X_val=X,
+            y_val=y,
+            target_mask_val=target_mask,
+        )
+        preds = model.predict(X)
+
+        self.assertEqual(set(preds), {"level_1", "level_2", "level_3", "level_4"})
+        self.assertEqual(preds["level_1"].shape, y["level_1"].shape)
+        self.assertEqual(preds["level_4"].shape, y["level_4"].shape)
+        self.assertIsNotNone(model.best_epoch_)
+
+    def test_build_protein_global_Xy_direct(self) -> None:
+        from models.train import build_protein_global_Xy_direct
+
+        config = TaskConfig(
+            name="solubility_test",
+            batch_kind="protein_global",
+            label_kind="binary",
+            dataset_path=self.root / "unused.csv",
+            target_column="solubility",
+            sample_id_candidates=("uniprot_id",),
+        )
+        rows = [
+            {"uniprot_id": "P1", "protein_sequence": "AAAA", "solubility": "1"},
+            {"uniprot_id": "P2", "protein_sequence": "BBBB", "solubility": "0"},
+        ]
+        by_id = {
+            "P1": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
+            "P2": np.asarray([4.0, 5.0, 6.0], dtype=np.float32),
+        }
+        by_seq: dict[str, np.ndarray] = {}
+
+        X, y = build_protein_global_Xy_direct(rows, by_id, by_seq, config)
+
+        np.testing.assert_array_equal(
+            X,
+            np.asarray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32),
+        )
+        np.testing.assert_array_equal(y, np.asarray([1.0, 0.0], dtype=np.float32))
+
     def test_residue_binary_training_and_prediction_serialization(self) -> None:
         from torch.utils.data import DataLoader
 

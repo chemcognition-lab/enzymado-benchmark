@@ -50,36 +50,36 @@
  - [x] Scripts for splits (Manuel)
 
    ### Hackathon:
- - [ ] Dataloader and training scripts (Manuel)
+ - [x] Dataloader and training scripts (Manuel)
    
-   - [ ] Dataloader process #1: Active sites and Binding Sites.
-      - [ ] Featurizer: Protein embeddings.
-      - [ ] Label: Sites binary vector.
+   - [x] Dataloader process #1: Active sites and Binding Sites.
+      - [x] Featurizer: Protein embeddings.
+      - [x] Label: Sites binary vector.
 
-   - [ ] Dataloader process #2: Kcat and KM.
-      - [ ] Featurizer:Protein embeddings + substrate embeddings (RDKit)
-      - [ ] Label: continuous labels
+   - [x] Dataloader process #2: Kcat and KM.
+      - [x] Featurizer:Protein embeddings + substrate embeddings (RDKit)
+      - [x] Label: continuous labels
 
-   - [ ] Dataloader process #3:  Solub
-      - [ ] Featurizer:Protein embeddings
-      - [ ] Label: binary labels (0/1)
+   - [x] Dataloader process #3:  Solub
+      - [x] Featurizer:Protein embeddings
+      - [x] Label: binary labels (0/1)
 
-   - [ ] Dataloader process #4: ph_opt
-      - [ ] Featurizer: Protein embeddings
-      - [ ] Label: continuos labels
+   - [x] Dataloader process #4: ph_opt
+      - [x] Featurizer: Protein embeddings
+      - [x] Label: continuos labels
 
-   - [ ] Dataloader process #5: ec_number
-      - [ ] Protein embeddings and binary multi labels
-      - [ ] For EC do BCE for multiple EC number enzymes
-      - [ ] Binary vector
+   - [x] Dataloader process #5: ec_number
+      - [x] Protein embeddings and binary multi labels
+      - [x] For EC do BCE for multiple EC number enzymes
+      - [x] Binary vector
 
-   - [ ] Dataloader process #6: binding
-      - [ ] Featurizer: Protein embeddings + substrate embeddings (RDKit)
-      - [ ] Label: Binary labels (0/1)
+   - [x] Dataloader process #6: binding
+      - [x] Featurizer: Protein embeddings + substrate embeddings (RDKit)
+      - [x] Label: Binary labels (0/1)
 
-   - [ ] Dataloader process #7: dtm and ddg
-      - [ ] Featurizer: Protein embeddings + mut embeddings
-      - [ ] Label: continuos labels
+   - [x] Dataloader process #7: dtm and ddg
+      - [x] Featurizer: Protein embeddings + mut embeddings
+      - [x] Label: continuos labels
 
  - [ ] Scripts for models (Ricardo)
    - [ ] Linear Regression/Logistic Regression
