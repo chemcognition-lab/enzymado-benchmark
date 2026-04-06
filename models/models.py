@@ -145,10 +145,15 @@ def _run_training_with_early_stopping(
     val_loss_fn=None,
     patience: int | None = None,
     min_delta: float = 0.0,
+    log_every: int = 10,
 ) -> tuple[int | None, float | None]:
+    import sys, time as _time
     if val_loss_fn is None or patience is None or patience <= 0:
-        for _ in range(epochs):
+        for ep in range(epochs):
+            t0 = _time.time()
             train_epoch_fn()
+            if (ep + 1) % log_every == 0 or ep == 0:
+                print(f"        epoch {ep+1}/{epochs}  ({_time.time()-t0:.1f}s/epoch)", flush=True)
         return None, None
 
     best_state = copy.deepcopy(model.state_dict())
@@ -157,8 +162,19 @@ def _run_training_with_early_stopping(
     epochs_without_improvement = 0
 
     for epoch in range(epochs):
+        t0 = _time.time()
         train_epoch_fn()
         val_loss = float(val_loss_fn())
+        epoch_time = _time.time() - t0
+
+        if (epoch + 1) % log_every == 0 or epoch == 0:
+            print(
+                f"        epoch {epoch+1}/{epochs}  "
+                f"val_loss={val_loss:.4f}  best={best_val_loss:.4f}  "
+                f"no_improve={epochs_without_improvement}  ({epoch_time:.1f}s/epoch)",
+                flush=True,
+            )
+
         if val_loss < (best_val_loss - min_delta):
             best_val_loss = val_loss
             best_epoch = epoch + 1
@@ -168,6 +184,7 @@ def _run_training_with_early_stopping(
 
         epochs_without_improvement += 1
         if epochs_without_improvement >= patience:
+            print(f"        early stopping at epoch {epoch+1}, best_epoch={best_epoch}, best_val_loss={best_val_loss:.4f}", flush=True)
             break
 
     model.load_state_dict(best_state)

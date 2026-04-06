@@ -204,25 +204,27 @@ class ProteinResidueEmbeddingBuilder:
     id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
     def build(self, row: dict[str, str]) -> np.ndarray:
-        embedding = self.embedding_store.lookup_row(
+        return self.embedding_store.lookup_row(
             row,
             id_columns=self.id_columns,
             sequence_column=self.sequence_column,
         )
-        expected_length = len(normalize_sequence(row.get(self.sequence_column)))
-        if expected_length and embedding.shape[0] != expected_length:
-            raise ValueError(
-                f"Embedding length mismatch for sample '{row.get('sample_id', '')}': "
-                f"expected {expected_length}, got {embedding.shape[0]}."
-            )
-        return embedding
 
     def validate_row(self, row: dict[str, str]) -> str | None:
-        try:
-            self.build(row)
-        except (EmbeddingLookupError, ValueError) as exc:
-            return str(exc)
-        return None
+        # Check existence only — avoids loading the full embedding during dataset construction.
+        # Critical for lazy stores where build() triggers an H5 read per row.
+        for col in self.id_columns:
+            identifier = row.get(col, "").strip()
+            if identifier and self.embedding_store.has_id(identifier):
+                return None
+        sequence = row.get(self.sequence_column, "").strip()
+        if sequence and self.embedding_store.has_sequence(sequence):
+            return None
+        return (
+            f"Missing residue embedding for row. "
+            f"Tried columns: {list(self.id_columns) + [self.sequence_column]}. "
+            f"sample_id={row.get('sample_id', '')}"
+        )
 
 
 def _default_rdkit_featurize(smiles: str) -> np.ndarray:
@@ -327,8 +329,18 @@ class MutationDeltaEmbeddingBuilder:
         return (mutant_embedding - wildtype_embedding).astype(np.float32, copy=False)
 
     def validate_row(self, row: dict[str, str]) -> str | None:
-        try:
-            self.build(row)
-        except (EmbeddingLookupError, ValueError) as exc:
-            return str(exc)
-        return None
+        # Check existence only — avoids loading the full embedding during dataset construction.
+        # Critical for lazy stores where build() triggers an H5 read per row.
+        store = self.embedding_store
+        for col in self.id_columns:
+            identifier = row.get(col, "").strip()
+            if identifier and store.has_id(identifier):
+                return None
+        mut_seq = row.get(self.mutation_sequence_column, "").strip()
+        wt_seq = row.get(self.wildtype_sequence_column, "").strip()
+        if mut_seq and store.has_sequence(mut_seq) and wt_seq and store.has_sequence(wt_seq):
+            return None
+        return (
+            f"Missing residue embedding for mutation or wildtype. "
+            f"sample_id={row.get('sample_id', '')}"
+        )

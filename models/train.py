@@ -36,7 +36,15 @@ from data_loading.adapters import (
 )
 
 def log(msg: str) -> None:
-    print(msg, flush=True)
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
+
+
+def is_run_complete(run_dir: Path) -> bool:
+    """A run is complete when test predictions and a saved model both exist."""
+    has_preds = (run_dir / "test_predictions.npz").exists()
+    has_model = (run_dir / "model.pt").exists() or (run_dir / "model.joblib").exists()
+    return has_preds and has_model
 
 
 SKIP_LABEL_KINDS: set[str] = set()
@@ -831,6 +839,18 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
             log(f"\n  Task: {task_name} | type: {task_type} | split: {default_split}")
 
+            # Check whether all models for this task are already trained — skip H5 loading if so
+            prospective_model_map = get_model_map(task_type, config.label_kind)
+            already_done = [
+                m for m in prospective_model_map
+                if is_run_complete(output_dir / f"{emb_name}__{task_name}__{m}")
+            ]
+            if len(already_done) == len(prospective_model_map):
+                log(f"    All {len(already_done)} models already trained — skipping task.")
+                continue
+            if already_done:
+                log(f"    {len(already_done)}/{len(prospective_model_map)} models already done: {already_done}")
+
             # Load only the embeddings needed for this task (not the entire H5)
             log(f"    Loading CSV rows...")
             train_rows = get_task_rows(config, "train", split_variant)
@@ -992,12 +1012,17 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
             model_map = get_model_map(task_type, config.label_kind)
 
             for model_name, model_info in model_map.items():
+                run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
+
+                if is_run_complete(run_dir):
+                    log(f"    [{model_name}] Already trained — skipping.")
+                    continue
+
                 residue_aware = model_info.get("residue_aware", False) and not (
                     is_ligand_task or is_pooled_ec_task or is_pooled_protein_global_task or is_pooled_mutation_task
                 )
                 log(f"    [{model_name}] n_train={n_train}, n_test={n_test} | residue_aware={residue_aware}")
 
-                run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
                 run_dir.mkdir(parents=True, exist_ok=True)
 
                 t0 = time.time()
