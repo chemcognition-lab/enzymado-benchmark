@@ -53,32 +53,32 @@ There are five active training routes:
 - EC XGBoost uses one concatenated label vector across all EC hierarchy levels.
 - Unknown descendants from incomplete EC annotations are masked out per column for EC XGBoost.
 - `residue_binary_vector` uses dedicated residue-aware classifiers.
-- XGBoost is optional and only appears when `xgboost` is installed.
+- XGBoost is part of the standard model coverage across the registered properties.
 
 ## Property Matrix
 
 | Card property | Registry task | Task type | Batch kind | Label kind | Training route | Models that run |
 | --- | --- | --- | --- | --- | --- | --- |
-| `solubility` | `solubility` | classification | `protein_global` | `binary` | pooled protein-global | `mlp_classification`, `sgd_classification`, optional `xgb_classification` |
-| `phopt` | `ph_opt` | regression | `protein_global` | `scalar_regression` | pooled protein-global | `mlp_regressor`, `sgd_regressor`, optional `xgb_regression` |
-| `binding` | `binding` | classification | `protein_ligand_global` | `binary` | pooled protein + ligand | `mlp_classification`, `sgd_classification`, optional `xgb_classification` |
-| `kcat` | `kcat` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `sgd_regressor`, optional `xgb_regression` |
-| `km` | `km` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `sgd_regressor`, optional `xgb_regression` |
-| `dtm` | `dtm` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `sgd_regressor`, optional `xgb_regression` |
-| `ddg` | `ddg` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `sgd_regressor`, optional `xgb_regression` |
-| `ec_number` | `ec_number` | classification | `protein_global` | `multilabel_ec` | pooled hierarchical EC or pooled flat EC for XGBoost | `mlp_classification`, `sgd_classification`, optional `xgb_classification` |
-| `active_sites` | `active_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, optional residue `xgb_classification` |
-| `binding_site` | `binding_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, optional residue `xgb_classification` |
+| `solubility` | `solubility` | classification | `protein_global` | `binary` | pooled protein-global | `mlp_classification`, `sgd_classification`, `xgb_classification` |
+| `phopt` | `ph_opt` | regression | `protein_global` | `scalar_regression` | pooled protein-global | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
+| `binding` | `binding` | classification | `protein_ligand_global` | `binary` | pooled protein + ligand | `mlp_classification`, `sgd_classification`, `xgb_classification` |
+| `kcat` | `kcat` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
+| `km` | `km` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
+| `dtm` | `dtm` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
+| `ddg` | `ddg` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
+| `ec_number` | `ec_number` | classification | `protein_global` | `multilabel_ec` | pooled hierarchical EC or pooled flat EC for XGBoost | `mlp_classification`, `sgd_classification`, `xgb_classification` |
+| `active_sites` | `active_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, residue `xgb_classification` |
+| `binding_site` | `binding_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, residue `xgb_classification` |
 | `fluorescence` | none | regression | none | none | skipped | none |
 
 ## Important Clarifications
 
 - Every registered property now has a training path for the repository's model families:
-  `MLP`, `SGD`, and `XGBoost` when `xgboost` is installed.
+  `MLP`, `SGD`, and `XGBoost`.
 - The only benchmark-card property that is still skipped entirely is `fluorescence`,
   because it is not registered in `TASK_REGISTRY`.
 - `ec_number` now supports XGBoost through a flat concatenated EC target vector.
-- `active_sites` and `binding_site` do use a dedicated structured model map, including residue-level XGBoost when available.
+- `active_sites` and `binding_site` do use a dedicated structured model map, including residue-level XGBoost.
 - `fluorescence` is present in the benchmark card but is skipped because it is not registered in `TASK_REGISTRY`.
 
 ## Reading Guide
