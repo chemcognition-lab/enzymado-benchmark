@@ -39,7 +39,8 @@ def _stack_targets(targets: list[Any]) -> np.ndarray:
     if all(array.ndim == 0 for array in arrays):
         dtype = bool if arrays[0].dtype == np.bool_ else np.float32
         return np.asarray(arrays, dtype=dtype)
-    return np.stack(arrays).astype(np.float32, copy=False)
+    dtype = bool if all(array.dtype == np.bool_ for array in arrays) else np.float32
+    return np.stack(arrays).astype(dtype, copy=False)
 
 
 @dataclass

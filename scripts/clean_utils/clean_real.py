@@ -67,6 +67,11 @@ ALIGN_FAMILIES = (
     "alpha-amylase",
     "b-glucosidase",
 )
+ALIGN_ZERO_SHOT_SUBDIRS = {
+    "alkaline phosphatase": "align_phosphatase",
+    "alpha-amylase": "align_amylase",
+    "b-glucosidase": "align_glucosidase",
+}
 
 
 def clean_text(value: str | None) -> str:
@@ -450,6 +455,17 @@ def resolve_align_processed_dir(
     return out_processed_arg
 
 
+def resolve_align_family_processed_dir(
+    processed_dir: Path,
+    family: str,
+) -> Path:
+    if processed_dir.name != "zero_shot":
+        return processed_dir
+
+    family_subdir = ALIGN_ZERO_SHOT_SUBDIRS.get(family, f"align_{slugify(family)}")
+    return processed_dir / family_subdir
+
+
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -581,6 +597,7 @@ def main() -> None:
         total_processed_rows = 0
         for family in align_families:
             family_slug = slugify(family)
+            family_processed_dir = resolve_align_family_processed_dir(processed_dir, family)
             out_interim = resolve_align_interim_path(
                 args.out_interim,
                 default_erickson_interim,
@@ -596,7 +613,7 @@ def main() -> None:
             total_interim_rows += len(interim_rows)
 
             for _, task_name, processed_fieldnames, processed_rows in processed_outputs:
-                out_processed = processed_dir / f"{family_slug}__{task_name}.csv"
+                out_processed = family_processed_dir / f"{family_slug}__{task_name}.csv"
                 write_csv(out_processed, processed_fieldnames, processed_rows)
                 print(f"Saved {len(processed_rows)} processed rows to {out_processed}")
                 total_processed_rows += len(processed_rows)

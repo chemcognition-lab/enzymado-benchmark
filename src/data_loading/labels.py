@@ -182,8 +182,110 @@ class HierarchicalECLabelBuilder:
         return None
 
 
-class MultiLabelECBuilder(HierarchicalECLabelBuilder):
-    pass
+@dataclass
+class FlatECLabelBuilder(HierarchicalECLabelBuilder):
+    flat_vocabulary: tuple[str, ...] | None = None
+    _offset_by_level: dict[str, int] = field(default_factory=dict, init=False)
+
+    def fit(self, rows: list[dict[str, str]]) -> "FlatECLabelBuilder":
+        super().fit(rows)
+        self._ensure_flat_index()
+        return self
+
+    def _ensure_flat_index(self) -> None:
+        if self.vocabulary_by_level is None:
+            raise ValueError("FlatECLabelBuilder must be fit before calling build().")
+        if not self._index_by_level:
+            self._index_by_level = {
+                level_name: {label: idx for idx, label in enumerate(vocabulary)}
+                for level_name, vocabulary in self.vocabulary_by_level.items()
+            }
+        if self.flat_vocabulary is not None and self._offset_by_level:
+            return
+
+        flat_labels: list[str] = []
+        offset = 0
+        for level_name in self.level_names():
+            self._offset_by_level[level_name] = offset
+            vocabulary = tuple(self.vocabulary_by_level[level_name])
+            flat_labels.extend(vocabulary)
+            offset += len(vocabulary)
+        self.flat_vocabulary = tuple(flat_labels)
+
+    def level_offsets(self) -> dict[str, int]:
+        self._ensure_flat_index()
+        return dict(self._offset_by_level)
+
+    def _analyze_label(
+        self,
+        ec_label: str,
+    ) -> tuple[list[tuple[str, str]], tuple[str, ...], int | None]:
+        level_names = self.level_names()
+        resolved_labels: list[tuple[str, str]] = []
+        resolved_prefix_parts: list[str] = []
+
+        for level_index, part in enumerate(self._parse_single_ec(ec_label), start=1):
+            if part == "-":
+                return resolved_labels, tuple(resolved_prefix_parts), level_index
+
+            level_name = level_names[level_index - 1]
+            candidate = ".".join((*resolved_prefix_parts, part))
+            if candidate not in self._index_by_level[level_name]:
+                return resolved_labels, tuple(resolved_prefix_parts), level_index
+
+            resolved_labels.append((level_name, candidate))
+            resolved_prefix_parts.append(part)
+
+        return resolved_labels, tuple(resolved_prefix_parts), None
+
+    def _mark_unknown_descendants(
+        self,
+        target_mask: np.ndarray,
+        resolved_prefix_parts: tuple[str, ...],
+        first_unknown_level: int,
+    ) -> None:
+        prefix = ".".join(resolved_prefix_parts)
+        for level_name in self.level_names()[first_unknown_level - 1:]:
+            offset = self._offset_by_level[level_name]
+            for label, index in self._index_by_level[level_name].items():
+                if not prefix or label.startswith(f"{prefix}."):
+                    target_mask[offset + index] = False
+
+    def build(self, row: dict[str, str]) -> dict[str, np.ndarray]:
+        self._ensure_flat_index()
+        total_dim = len(self.flat_vocabulary or ())
+        target = np.zeros(total_dim, dtype=np.float32)
+        target_mask = np.ones(total_dim, dtype=bool)
+
+        parsed_labels = self.parse_labels(row)
+        if not parsed_labels:
+            target[:] = np.nan
+            target_mask[:] = False
+            return {
+                "target": target,
+                "target_mask": target_mask,
+            }
+
+        analyzed_labels = [self._analyze_label(ec_label) for ec_label in parsed_labels]
+        for _, resolved_prefix_parts, first_unknown_level in analyzed_labels:
+            if first_unknown_level is not None:
+                self._mark_unknown_descendants(
+                    target_mask,
+                    resolved_prefix_parts,
+                    first_unknown_level,
+                )
+
+        for resolved_labels, _, _ in analyzed_labels:
+            for level_name, label in resolved_labels:
+                flat_index = self._offset_by_level[level_name] + self._index_by_level[level_name][label]
+                target[flat_index] = 1.0
+                target_mask[flat_index] = True
+
+        target[~target_mask] = np.nan
+        return {
+            "target": target,
+            "target_mask": target_mask,
+        }
 
 
 def _parse_position_list(raw_value: str) -> list[int]:

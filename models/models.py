@@ -869,6 +869,164 @@ class ECMultiHeadClassifierTorch:
         }
 
 
+class XGBFlatECClassifier:
+    """One binary XGBoost model per concatenated EC column.
+
+    Unknown EC descendants are represented as NaN in `y` and excluded by the
+    per-column `target_mask`.
+    """
+
+    def __init__(
+        self,
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        n_jobs=-1,
+        device=None,
+        random_state=0,
+        eval_metric="logloss",
+        early_stopping_rounds=None,
+    ):
+        if XGBClassifier is None:
+            raise ImportError("xgboost is required to use XGBFlatECClassifier.")
+
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.learning_rate = learning_rate
+        self.n_jobs = n_jobs
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.random_state = random_state
+        self.eval_metric = eval_metric
+        self.early_stopping_rounds = early_stopping_rounds
+        self.models_: list[XGBClassifier | None] = []
+        self.constant_predictions_: list[float | None] = []
+        self.n_outputs_: int | None = None
+
+    @staticmethod
+    def _normalize_targets(
+        y,
+        target_mask=None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        y_np = np.asarray(y, dtype=np.float32)
+        if y_np.ndim != 2:
+            raise ValueError(f"XGBFlatECClassifier expects 2D targets, got shape {y_np.shape}")
+
+        inferred_mask = ~np.isnan(y_np)
+        if target_mask is None:
+            mask_np = inferred_mask
+        else:
+            mask_np = np.asarray(target_mask, dtype=bool)
+            if mask_np.shape != y_np.shape:
+                raise ValueError(
+                    "target_mask shape must match y shape for XGBFlatECClassifier. "
+                    f"Received mask={mask_np.shape}, y={y_np.shape}."
+                )
+            mask_np = mask_np & inferred_mask
+        return y_np, mask_np
+
+    def _make_model(self, use_early_stopping: bool) -> XGBClassifier:
+        params = {
+            "objective": "binary:logistic",
+            "n_estimators": self.n_estimators,
+            "max_depth": self.max_depth,
+            "learning_rate": self.learning_rate,
+            "n_jobs": self.n_jobs,
+            "device": self.device,
+            "random_state": self.random_state,
+            "eval_metric": self.eval_metric,
+        }
+        if use_early_stopping and self.early_stopping_rounds is not None:
+            params["early_stopping_rounds"] = self.early_stopping_rounds
+        return XGBClassifier(**params)
+
+    def fit(self, X, y, target_mask=None, X_val=None, y_val=None, target_mask_val=None):
+        X_np = np.asarray(X, dtype=np.float32)
+        if X_np.ndim != 2:
+            raise ValueError(f"XGBFlatECClassifier expects pooled 2D inputs, got shape {X_np.shape}")
+
+        y_np, target_mask_np = self._normalize_targets(y, target_mask)
+        if X_np.shape[0] != y_np.shape[0]:
+            raise ValueError(
+                "X and y must contain the same number of rows for XGBFlatECClassifier. "
+                f"Received X={X_np.shape[0]}, y={y_np.shape[0]}."
+            )
+
+        val_payload = None
+        if X_val is not None and y_val is not None:
+            X_val_np = np.asarray(X_val, dtype=np.float32)
+            if X_val_np.ndim != 2:
+                raise ValueError(f"X_val must be 2D, got shape {X_val_np.shape}")
+            y_val_np, target_mask_val_np = self._normalize_targets(y_val, target_mask_val)
+            if X_val_np.shape[0] != y_val_np.shape[0]:
+                raise ValueError(
+                    "X_val and y_val must contain the same number of rows for XGBFlatECClassifier. "
+                    f"Received X_val={X_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
+                )
+            val_payload = (X_val_np, y_val_np, target_mask_val_np)
+
+        self.n_outputs_ = y_np.shape[1]
+        self.models_ = []
+        self.constant_predictions_ = []
+
+        for column_index in range(self.n_outputs_):
+            known_mask = target_mask_np[:, column_index]
+            if not np.any(known_mask):
+                self.models_.append(None)
+                self.constant_predictions_.append(np.nan)
+                continue
+
+            y_column = y_np[known_mask, column_index].astype(np.int32, copy=False)
+            unique_classes = np.unique(y_column)
+            if unique_classes.size == 1:
+                self.models_.append(None)
+                self.constant_predictions_.append(float(unique_classes[0]))
+                continue
+
+            X_column = X_np[known_mask]
+            use_early_stopping = False
+            fit_kwargs = {"verbose": False}
+            if val_payload is not None:
+                X_val_np, y_val_np, target_mask_val_np = val_payload
+                val_known_mask = target_mask_val_np[:, column_index]
+                if np.any(val_known_mask):
+                    fit_kwargs["eval_set"] = [
+                        (
+                            X_val_np[val_known_mask],
+                            y_val_np[val_known_mask, column_index].astype(np.int32, copy=False),
+                        )
+                    ]
+                    use_early_stopping = True
+
+            model = self._make_model(use_early_stopping=use_early_stopping)
+            model.fit(X_column, y_column, **fit_kwargs)
+            self.models_.append(model)
+            self.constant_predictions_.append(None)
+
+        return self
+
+    def predict(self, X) -> np.ndarray:
+        if self.n_outputs_ is None:
+            raise ValueError("XGBFlatECClassifier must be fit before calling predict().")
+
+        X_np = np.asarray(X, dtype=np.float32)
+        if X_np.ndim != 2:
+            raise ValueError(f"X must be pooled 2D, got shape {X_np.shape}")
+
+        pred = np.zeros((X_np.shape[0], self.n_outputs_), dtype=np.float32)
+        for column_index, (model, constant_prediction) in enumerate(
+            zip(self.models_, self.constant_predictions_)
+        ):
+            if constant_prediction is not None:
+                if np.isnan(constant_prediction):
+                    pred[:, column_index] = np.nan
+                else:
+                    pred[:, column_index] = np.float32(constant_prediction)
+                continue
+
+            pred[:, column_index] = model.predict(X_np).astype(np.float32, copy=False)
+        return pred
+
+
 class ResidueBinaryClassifierTorch:
     """Binary classifier over per-residue embeddings with padding-aware BCE loss."""
 
@@ -1238,4 +1396,19 @@ if XGBClassifier is not None:
             "early_stopping_rounds": 20,
         },
         "residue_aware": True,
+    }
+    STRUCTURED_MODEL_MAP["multilabel_ec"]["xgb_classification"] = {
+        "wrap": XGBFlatECClassifier,
+        "params": {
+            "n_estimators": 100,
+            "max_depth": 6,
+            "learning_rate": 0.1,
+            "n_jobs": -1,
+            "device": "cuda" if torch.cuda.is_available() else "cpu",
+            "random_state": 0,
+            "eval_metric": "logloss",
+            "early_stopping_rounds": 20,
+        },
+        "residue_aware": False,
+        "flat_ec_labels": True,
     }

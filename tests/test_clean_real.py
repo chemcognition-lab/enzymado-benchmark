@@ -4,6 +4,7 @@ from pathlib import Path
 from scripts.clean_utils.clean_real import (
     build_align_rows,
     build_argument_parser,
+    resolve_align_family_processed_dir,
     resolve_align_processed_dir,
 )
 from src.paths_and_constants import Paths
@@ -107,3 +108,23 @@ def test_align_defaults_cover_all_families_and_real_case_output_dir():
         paths,
     )
     assert resolved_dir == paths.data_processed_real_case / "align"
+
+
+def test_align_zero_shot_outputs_are_split_by_family_subdirectory(tmp_path):
+    zero_shot_dir = tmp_path / "zero_shot"
+
+    assert resolve_align_family_processed_dir(zero_shot_dir, "alpha-amylase") == (
+        zero_shot_dir / "align_amylase"
+    )
+    assert resolve_align_family_processed_dir(zero_shot_dir, "b-glucosidase") == (
+        zero_shot_dir / "align_glucosidase"
+    )
+    assert resolve_align_family_processed_dir(zero_shot_dir, "alkaline phosphatase") == (
+        zero_shot_dir / "align_phosphatase"
+    )
+
+
+def test_align_non_zero_shot_outputs_keep_single_directory(tmp_path):
+    processed_dir = tmp_path / "align"
+
+    assert resolve_align_family_processed_dir(processed_dir, "alpha-amylase") == processed_dir

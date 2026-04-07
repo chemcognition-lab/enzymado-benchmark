@@ -11,7 +11,7 @@ from unittest import mock
 import numpy as np
 
 from src.data_loading.datasets import build_dataset_from_config
-from src.data_loading.labels import StandardScaler1D
+from src.data_loading.labels import FlatECLabelBuilder, StandardScaler1D
 from src.data_loading.registry import TaskConfig
 from src.data_loading.features import ResidueEmbeddingStore
 
@@ -431,6 +431,48 @@ class DataLoadingTests(unittest.TestCase):
         np.testing.assert_array_equal(
             batch.protein_mask,
             np.array([[True, True, True, True], [True, True, False, False]]),
+        )
+
+    def test_flat_ec_label_builder_marks_unknown_descendants_with_nan(self) -> None:
+        builder = FlatECLabelBuilder().fit(
+            [
+                {"ec_number": "1.2.3.4"},
+                {"ec_number": "1.2.5.6"},
+                {"ec_number": "2.1.-.-"},
+            ]
+        )
+
+        self.assertEqual(
+            builder.flat_vocabulary,
+            ("1", "2", "1.2", "2.1", "1.2.3", "1.2.5", "1.2.3.4", "1.2.5.6"),
+        )
+
+        payload = builder.build({"ec_number": "1.2.-.-"})
+        np.testing.assert_array_equal(
+            payload["target_mask"],
+            np.array([True, True, True, True, False, False, False, False]),
+        )
+        np.testing.assert_array_equal(
+            np.nan_to_num(payload["target"], nan=-1.0),
+            np.array([1.0, 0.0, 1.0, 0.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
+        )
+
+    def test_flat_ec_label_builder_allows_complete_label_to_override_unknown_branch(self) -> None:
+        builder = FlatECLabelBuilder().fit(
+            [
+                {"ec_number": "1.2.3.4"},
+                {"ec_number": "1.2.5.6"},
+            ]
+        )
+
+        payload = builder.build({"ec_number": "1.2.-.-;1.2.3.4"})
+        np.testing.assert_array_equal(
+            payload["target_mask"],
+            np.array([True, True, True, False, True, False], dtype=bool),
+        )
+        np.testing.assert_array_equal(
+            np.nan_to_num(payload["target"], nan=-1.0),
+            np.array([1.0, 1.0, 1.0, -1.0, 1.0, -1.0], dtype=np.float32),
         )
 
     def test_mutation_delta_dataset_builds_mut_minus_wt(self) -> None:

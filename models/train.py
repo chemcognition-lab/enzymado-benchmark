@@ -20,6 +20,7 @@ except ImportError:
     from models.models import MODEL_MAP, STRUCTURED_MODEL_MAP
 from data_loading import (
     BinaryLabelBuilder,
+    FlatECLabelBuilder,
     HierarchicalECLabelBuilder,
     ResidueEmbeddingStore,
     ScalarRegressionLabelBuilder,
@@ -445,6 +446,48 @@ def build_multilabel_ec_direct(
     )
 
 
+def build_flat_multilabel_ec_direct(
+    rows: list[dict],
+    by_id: dict[str, np.ndarray],
+    by_seq: dict[str, np.ndarray],
+    config,
+    label_builder: FlatECLabelBuilder,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    label_builder._ensure_flat_index()
+    X_list: list[np.ndarray] = []
+    targets: list[np.ndarray] = []
+    target_masks: list[np.ndarray] = []
+    skipped = 0
+
+    for row in rows:
+        emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
+        if emb is None:
+            skipped += 1
+            continue
+
+        label_payload = label_builder.build(row)
+        X_list.append(emb)
+        targets.append(np.asarray(label_payload["target"], dtype=np.float32))
+        target_masks.append(np.asarray(label_payload["target_mask"], dtype=bool))
+
+    if skipped:
+        log(f"      Skipped {skipped} rows (missing embeddings)")
+
+    if not X_list:
+        empty_dim = len(label_builder.flat_vocabulary or ())
+        return (
+            np.empty((0, 0), dtype=np.float32),
+            np.empty((0, empty_dim), dtype=np.float32),
+            np.empty((0, empty_dim), dtype=bool),
+        )
+
+    return (
+        np.stack(X_list).astype(np.float32, copy=False),
+        np.stack(targets).astype(np.float32, copy=False),
+        np.stack(target_masks).astype(bool, copy=False),
+    )
+
+
 def build_protein_global_Xy_direct(
     rows: list[dict],
     by_id: dict[str, np.ndarray],
@@ -816,6 +859,10 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 config.batch_kind == "mutation_delta_global"
                 and config.label_kind in {"scalar_regression", "binary"}
             )
+            flat_ec_label_builder = None
+            X_train_flat_ec = y_train_flat_ec = target_mask_train_flat_ec = None
+            X_val_flat_ec = y_val_flat_ec = target_mask_val_flat_ec = None
+            X_test_flat_ec = y_test_flat_ec = target_mask_test_flat_ec = None
 
             if is_ligand_task:
                 # Pool on H5 load — avoids storing (seq_len, emb_dim) arrays for large datasets
@@ -840,6 +887,11 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     target_column=str(config.target_column),
                     separator=config.ec_separator,
                 ).fit(train_rows)
+                flat_ec_label_builder = FlatECLabelBuilder(
+                    target_column=str(config.target_column),
+                    separator=config.ec_separator,
+                    vocabulary_by_level=ec_label_builder.vocabulary_by_level,
+                )
 
                 log(f"    Building pooled EC arrays...")
                 X_train, y_train, target_mask_train = build_multilabel_ec_direct(
@@ -850,6 +902,16 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 )
                 X_test, y_test, target_mask_test = build_multilabel_ec_direct(
                     test_rows, by_id, by_seq, config, ec_label_builder
+                )
+                log(f"    Building pooled flat EC arrays for XGBoost...")
+                X_train_flat_ec, y_train_flat_ec, target_mask_train_flat_ec = build_flat_multilabel_ec_direct(
+                    train_rows, by_id, by_seq, config, flat_ec_label_builder
+                )
+                X_val_flat_ec, y_val_flat_ec, target_mask_val_flat_ec = build_flat_multilabel_ec_direct(
+                    val_rows, by_id, by_seq, config, flat_ec_label_builder
+                )
+                X_test_flat_ec, y_test_flat_ec, target_mask_test_flat_ec = build_flat_multilabel_ec_direct(
+                    test_rows, by_id, by_seq, config, flat_ec_label_builder
                 )
                 store = None
             elif is_pooled_protein_global_task:
@@ -949,6 +1011,12 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 run_dir.mkdir(parents=True, exist_ok=True)
 
                 t0 = time.time()
+                y_train_to_save = None
+                y_val_to_save = None
+                y_test_to_save = None
+                target_mask_train_to_save = None
+                target_mask_val_to_save = None
+                target_mask_test_to_save = None
                 if is_ligand_task:
                     log(f"      Training...")
                     trained = train_model(model_info, X_train, y_train,
@@ -958,7 +1026,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     pred_train = trained.predict(X_train)
                     pred_val = trained.predict(X_val) if use_validation else None
                     pred_test = trained.predict(X_test)
-                    target_mask_train = target_mask_val = target_mask_test = None
+                    y_train_to_save = y_train
+                    y_val_to_save = y_val if use_validation else None
+                    y_test_to_save = y_test
                 elif is_pooled_protein_global_task:
                     log(f"      Training on pooled protein-global embeddings...")
                     trained = train_model(
@@ -972,7 +1042,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     pred_train = trained.predict(X_train)
                     pred_val = trained.predict(X_val) if use_validation else None
                     pred_test = trained.predict(X_test)
-                    target_mask_train = target_mask_val = target_mask_test = None
+                    y_train_to_save = y_train
+                    y_val_to_save = y_val if use_validation else None
+                    y_test_to_save = y_test
                 elif is_pooled_mutation_task:
                     log(f"      Training on pooled mutation-delta embeddings...")
                     trained = train_model(
@@ -986,22 +1058,52 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     pred_train = trained.predict(X_train)
                     pred_val = trained.predict(X_val) if use_validation else None
                     pred_test = trained.predict(X_test)
-                    target_mask_train = target_mask_val = target_mask_test = None
+                    y_train_to_save = y_train
+                    y_val_to_save = y_val if use_validation else None
+                    y_test_to_save = y_test
                 elif is_pooled_ec_task:
-                    log(f"      Training on pooled EC embeddings...")
-                    trained = train_model(
-                        model_info,
-                        X_train,
-                        y_train,
-                        X_val=X_val if use_validation else None,
-                        y_val=y_val if use_validation else None,
-                        target_mask=target_mask_train,
-                        target_mask_val=target_mask_val if use_validation else None,
-                    )
-                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                    pred_train = trained.predict(X_train)
-                    pred_val = trained.predict(X_val) if use_validation else None
-                    pred_test = trained.predict(X_test)
+                    if model_info.get("flat_ec_labels", False):
+                        log(f"      Training on pooled flat EC embeddings for XGBoost...")
+                        trained = train_model(
+                            model_info,
+                            X_train_flat_ec,
+                            y_train_flat_ec,
+                            X_val=X_val_flat_ec if use_validation else None,
+                            y_val=y_val_flat_ec if use_validation else None,
+                            target_mask=target_mask_train_flat_ec,
+                            target_mask_val=target_mask_val_flat_ec if use_validation else None,
+                        )
+                        log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                        pred_train = trained.predict(X_train_flat_ec)
+                        pred_val = trained.predict(X_val_flat_ec) if use_validation else None
+                        pred_test = trained.predict(X_test_flat_ec)
+                        y_train_to_save = y_train_flat_ec
+                        y_val_to_save = y_val_flat_ec if use_validation else None
+                        y_test_to_save = y_test_flat_ec
+                        target_mask_train_to_save = target_mask_train_flat_ec
+                        target_mask_val_to_save = target_mask_val_flat_ec if use_validation else None
+                        target_mask_test_to_save = target_mask_test_flat_ec
+                    else:
+                        log(f"      Training on pooled EC embeddings...")
+                        trained = train_model(
+                            model_info,
+                            X_train,
+                            y_train,
+                            X_val=X_val if use_validation else None,
+                            y_val=y_val if use_validation else None,
+                            target_mask=target_mask_train,
+                            target_mask_val=target_mask_val if use_validation else None,
+                        )
+                        log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                        pred_train = trained.predict(X_train)
+                        pred_val = trained.predict(X_val) if use_validation else None
+                        pred_test = trained.predict(X_test)
+                        y_train_to_save = y_train
+                        y_val_to_save = y_val if use_validation else None
+                        y_test_to_save = y_test
+                        target_mask_train_to_save = target_mask_train
+                        target_mask_val_to_save = target_mask_val if use_validation else None
+                        target_mask_test_to_save = target_mask_test
                 elif residue_aware:
                     train_loader = get_dataloader(train_bundle, batch_size=64)
                     val_loader = get_dataloader(val_bundle, batch_size=64) if use_validation else None
@@ -1012,9 +1114,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     pred_val = trained.predict_loader(val_loader, batch_kind=config.batch_kind) if use_validation else None
                     pred_test = trained.predict_loader(test_loader, batch_kind=config.batch_kind)
                     pred_train = trained.predict_loader(train_loader, batch_kind=config.batch_kind)
-                    y_val, target_mask_val = get_target_payload(val_bundle) if use_validation else (None, None)
-                    y_test, target_mask_test = get_target_payload(test_bundle)
-                    y_train, target_mask_train = get_target_payload(train_bundle)
+                    y_val_to_save, target_mask_val_to_save = get_target_payload(val_bundle) if use_validation else (None, None)
+                    y_test_to_save, target_mask_test_to_save = get_target_payload(test_bundle)
+                    y_train_to_save, target_mask_train_to_save = get_target_payload(train_bundle)
                 else:
                     log(f"      Pooling embeddings...")
                     X_train_p, y_train_p = build_Xy_pooled(train_bundle, config.batch_kind)
@@ -1026,13 +1128,14 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     pred_val = trained.predict(X_val_p) if use_validation else None
                     pred_test = trained.predict(X_test_p)
                     pred_train = trained.predict(X_train_p)
-                    y_train, y_val, y_test = y_train_p, y_val_p, y_test_p
-                    target_mask_val = target_mask_test = target_mask_train = None
+                    y_train_to_save = y_train_p
+                    y_val_to_save = y_val_p if use_validation else None
+                    y_test_to_save = y_test_p
 
-                make_predictions_file(y_train, pred_train, run_dir, "train", target_mask_train)
+                make_predictions_file(y_train_to_save, pred_train, run_dir, "train", target_mask_train_to_save)
                 if use_validation:
-                    make_predictions_file(y_val, pred_val, run_dir, "val", target_mask_val)
-                make_predictions_file(y_test, pred_test, run_dir, "test", target_mask_test)
+                    make_predictions_file(y_val_to_save, pred_val, run_dir, "val", target_mask_val_to_save)
+                make_predictions_file(y_test_to_save, pred_test, run_dir, "test", target_mask_test_to_save)
                 model_file = save_model(trained, run_dir)
 
                 if getattr(trained, "best_epoch_", None) is not None:
