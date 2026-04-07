@@ -305,7 +305,7 @@ def load_pooled_h5_subset(
     by_seq: dict[str, np.ndarray] = {}
     missing = 0
     total = len(keys_to_load)
-    log_interval = max(1, total // 20)  # log ~20 times across the full load
+    log_interval = max(1, total // 20)
     t_load_start = time.time()
     with h5py.File(str(PROJECT_ROOT / h5_path), "r") as handle:
         log(f"      H5 file opened. Reading {total:,} embeddings...")
@@ -846,185 +846,6 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
             log(f"\n  Task: {task_name} | type: {task_type} | split: {default_split}")
             try:
 
-<<<<<<< Updated upstream
-            # Check whether all models for this task are already trained — skip H5 loading if so
-            prospective_model_map = get_model_map(task_type, config.label_kind)
-            already_done = [
-                m for m in prospective_model_map
-                if is_run_complete(output_dir / f"{emb_name}__{task_name}__{m}")
-            ]
-            if len(already_done) == len(prospective_model_map):
-                log(f"    All {len(already_done)} models already trained — skipping task.")
-                continue
-            if already_done:
-                log(f"    {len(already_done)}/{len(prospective_model_map)} models already done: {already_done}")
-
-            # Load only the embeddings needed for this task (not the entire H5)
-            log(f"    Loading CSV rows...")
-            train_rows = get_task_rows(config, "train", split_variant)
-            val_rows = get_task_rows(config, "val", split_variant)
-            test_rows = get_task_rows(config, "test", split_variant)
-            needed_ids, needed_sequences = collect_needed_lookup_keys(train_rows + val_rows + test_rows, config)
-            log(f"    Rows loaded: train={len(train_rows)}, val={len(val_rows)}, test={len(test_rows)} | need {len(needed_ids)} ids, {len(needed_sequences)} seqs")
-
-            is_ligand_task = config.batch_kind == "protein_ligand_global"
-            is_pooled_ec_task = config.label_kind == "multilabel_ec"
-            is_pooled_protein_global_task = (
-                config.batch_kind == "protein_global"
-                and config.label_kind in {"scalar_regression", "binary"}
-            )
-            is_pooled_mutation_task = (
-                config.batch_kind == "mutation_delta_global"
-                and config.label_kind in {"scalar_regression", "binary"}
-            )
-            flat_ec_label_builder = None
-            X_train_flat_ec = y_train_flat_ec = target_mask_train_flat_ec = None
-            X_val_flat_ec = y_val_flat_ec = target_mask_val_flat_ec = None
-            X_test_flat_ec = y_test_flat_ec = target_mask_test_flat_ec = None
-
-            if is_ligand_task:
-                # Pool on H5 load — avoids storing (seq_len, emb_dim) arrays for large datasets
-                log(f"    Loading pooled embeddings from H5 (ligand task)...")
-                t0 = time.time()
-                by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
-                log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
-
-                log(f"    Building X/y arrays...")
-                X_train, y_train = build_Xy_ligand_direct(train_rows, by_id, by_seq, config)
-                X_val, y_val = build_Xy_ligand_direct(val_rows, by_id, by_seq, config)
-                X_test, y_test = build_Xy_ligand_direct(test_rows, by_id, by_seq, config)
-                store = None
-            elif is_pooled_ec_task:
-                log(f"    Loading pooled embeddings from H5 (EC task)...")
-                t0 = time.time()
-                by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
-                log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
-
-                log(f"    Fitting EC vocabulary on train rows...")
-                ec_label_builder = HierarchicalECLabelBuilder(
-                    target_column=str(config.target_column),
-                    separator=config.ec_separator,
-                ).fit(train_rows)
-                flat_ec_label_builder = FlatECLabelBuilder(
-                    target_column=str(config.target_column),
-                    separator=config.ec_separator,
-                    vocabulary_by_level=ec_label_builder.vocabulary_by_level,
-                )
-
-                log(f"    Building pooled EC arrays...")
-                X_train, y_train, target_mask_train = build_multilabel_ec_direct(
-                    train_rows, by_id, by_seq, config, ec_label_builder
-                )
-                X_val, y_val, target_mask_val = build_multilabel_ec_direct(
-                    val_rows, by_id, by_seq, config, ec_label_builder
-                )
-                X_test, y_test, target_mask_test = build_multilabel_ec_direct(
-                    test_rows, by_id, by_seq, config, ec_label_builder
-                )
-                log(f"    Building pooled flat EC arrays for XGBoost...")
-                X_train_flat_ec, y_train_flat_ec, target_mask_train_flat_ec = build_flat_multilabel_ec_direct(
-                    train_rows, by_id, by_seq, config, flat_ec_label_builder
-                )
-                X_val_flat_ec, y_val_flat_ec, target_mask_val_flat_ec = build_flat_multilabel_ec_direct(
-                    val_rows, by_id, by_seq, config, flat_ec_label_builder
-                )
-                X_test_flat_ec, y_test_flat_ec, target_mask_test_flat_ec = build_flat_multilabel_ec_direct(
-                    test_rows, by_id, by_seq, config, flat_ec_label_builder
-                )
-                store = None
-            elif is_pooled_protein_global_task:
-                log(f"    Loading pooled embeddings from H5 (protein-global task)...")
-                t0 = time.time()
-                by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
-                log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
-
-                log(f"    Building pooled X/y arrays...")
-                X_train, y_train = build_protein_global_Xy_direct(train_rows, by_id, by_seq, config)
-                X_val, y_val = build_protein_global_Xy_direct(val_rows, by_id, by_seq, config)
-                X_test, y_test = build_protein_global_Xy_direct(test_rows, by_id, by_seq, config)
-                store = None
-            elif is_pooled_mutation_task:
-                log(f"    Loading pooled embeddings from H5 (mutation-delta task)...")
-                t0 = time.time()
-                by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
-                log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
-
-                log(f"    Building pooled mutation-delta X/y arrays...")
-                X_train, y_train = build_mutation_delta_Xy_direct(train_rows, by_id, by_seq, config)
-                X_val, y_val = build_mutation_delta_Xy_direct(val_rows, by_id, by_seq, config)
-                X_test, y_test = build_mutation_delta_Xy_direct(test_rows, by_id, by_seq, config)
-                store = None
-            else:
-                # Lazy store — scans H5 keys but reads embeddings on-demand per mini-batch
-                log(f"    Scanning H5 keys for lazy store...")
-                t0 = time.time()
-                store = load_lazy_embedding_store(emb_info["path"], needed_ids, needed_sequences)
-                log(f"    Lazy store ready ({time.time()-t0:.1f}s) — {len(store._available_ids)} ids, {len(store._seq_to_h5key)} seqs indexed")
-
-                log(f"    Building task datasets...")
-                t0 = time.time()
-                train_bundle = build_task_dataset(
-                    registry_name, store,
-                    split_name="train", split_variant=split_variant, missing_policy="skip",
-                )
-                ec_vocabulary = None
-                if config.label_kind == "multilabel_ec":
-                    ec_vocabulary = train_bundle.label_builder.vocabulary_by_level
-                val_bundle = build_task_dataset(
-                    registry_name, store,
-                    split_name="val", split_variant=split_variant, missing_policy="skip",
-                    ec_vocabulary=ec_vocabulary,
-                )
-                test_bundle = build_task_dataset(
-                    registry_name, store,
-                    split_name="test", split_variant=split_variant, missing_policy="skip",
-                    ec_vocabulary=ec_vocabulary,
-                )
-                log(f"    Datasets built ({time.time()-t0:.1f}s)")
-
-            if is_ligand_task or is_pooled_ec_task or is_pooled_protein_global_task or is_pooled_mutation_task:
-                n_train = len(X_train)
-                n_val   = len(X_val)
-                n_test  = len(X_test)
-            else:
-                n_train = len(train_bundle.dataset)
-                n_val   = len(val_bundle.dataset)
-                n_test  = len(test_bundle.dataset)
-
-            orig_train = len(train_rows)
-            orig_val   = len(val_rows)
-            orig_test  = len(test_rows)
-            orig_total = orig_train + orig_val + orig_test
-            kept_total = n_train + n_val + n_test
-            dropped    = orig_total - kept_total
-
-            log(
-                f"    Data summary:"
-                f"\n      original : train={orig_train:,}  val={orig_val:,}  test={orig_test:,}  total={orig_total:,}"
-                f"\n      kept     : train={n_train:,}  val={n_val:,}  test={n_test:,}  total={kept_total:,}"
-                f"\n      dropped  : {dropped:,} ({100*dropped/orig_total:.1f}% of original)"
-                + (f"  ← missing embeddings/ligand features" if dropped > 0 else "")
-            )
-
-            if n_train == 0 or n_test == 0:
-                log(f"    Skipping '{task_name}': empty dataset after filtering.")
-                del store
-                continue
-
-            use_validation = n_val > 0
-            if use_validation:
-                log(f"    Validation enabled: n_val={n_val:,}")
-            else:
-                log("    Validation disabled: empty val split after filtering")
-
-            model_map = get_model_map(task_type, config.label_kind)
-
-            for model_name, model_info in model_map.items():
-                run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
-
-                if is_run_complete(run_dir):
-                    log(f"    [{model_name}] Already trained — skipping.")
-=======
                 # Check whether all models for this task are already trained — skip H5 loading if so
                 prospective_model_map = get_model_map(task_type, config.label_kind)
                 already_done = [
@@ -1033,7 +854,6 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 ]
                 if len(already_done) == len(prospective_model_map):
                     log(f"    All {len(already_done)} models already trained — skipping task.")
->>>>>>> Stashed changes
                     continue
                 if already_done:
                     log(f"    {len(already_done)}/{len(prospective_model_map)} models already done: {already_done}")
@@ -1056,44 +876,11 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     config.batch_kind == "mutation_delta_global"
                     and config.label_kind in {"scalar_regression", "binary"}
                 )
+                flat_ec_label_builder = None
+                X_train_flat_ec = y_train_flat_ec = target_mask_train_flat_ec = None
+                X_val_flat_ec = y_val_flat_ec = target_mask_val_flat_ec = None
+                X_test_flat_ec = y_test_flat_ec = target_mask_test_flat_ec = None
 
-<<<<<<< Updated upstream
-                t0 = time.time()
-                y_train_to_save = None
-                y_val_to_save = None
-                y_test_to_save = None
-                target_mask_train_to_save = None
-                target_mask_val_to_save = None
-                target_mask_test_to_save = None
-                if is_ligand_task:
-                    log(f"      Training...")
-                    trained = train_model(model_info, X_train, y_train,
-                                         X_val=X_val if use_validation else None,
-                                         y_val=y_val if use_validation else None)
-                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                    pred_train = trained.predict(X_train)
-                    pred_val = trained.predict(X_val) if use_validation else None
-                    pred_test = trained.predict(X_test)
-                    y_train_to_save = y_train
-                    y_val_to_save = y_val if use_validation else None
-                    y_test_to_save = y_test
-                elif is_pooled_protein_global_task:
-                    log(f"      Training on pooled protein-global embeddings...")
-                    trained = train_model(
-                        model_info,
-                        X_train,
-                        y_train,
-                        X_val=X_val if use_validation else None,
-                        y_val=y_val if use_validation else None,
-                    )
-                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                    pred_train = trained.predict(X_train)
-                    pred_val = trained.predict(X_val) if use_validation else None
-                    pred_test = trained.predict(X_test)
-                    y_train_to_save = y_train
-                    y_val_to_save = y_val if use_validation else None
-                    y_test_to_save = y_test
-=======
                 if is_ligand_task:
                     # Pool on H5 load — avoids storing (seq_len, emb_dim) arrays for large datasets
                     log(f"    Loading pooled embeddings from H5 (ligand task)...")
@@ -1117,6 +904,11 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         target_column=str(config.target_column),
                         separator=config.ec_separator,
                     ).fit(train_rows)
+                    flat_ec_label_builder = FlatECLabelBuilder(
+                        target_column=str(config.target_column),
+                        separator=config.ec_separator,
+                        vocabulary_by_level=ec_label_builder.vocabulary_by_level,
+                    )
 
                     log(f"    Building pooled EC arrays...")
                     X_train, y_train, target_mask_train = build_multilabel_ec_direct(
@@ -1127,6 +919,16 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     )
                     X_test, y_test, target_mask_test = build_multilabel_ec_direct(
                         test_rows, by_id, by_seq, config, ec_label_builder
+                    )
+                    log(f"    Building pooled flat EC arrays for XGBoost...")
+                    X_train_flat_ec, y_train_flat_ec, target_mask_train_flat_ec = build_flat_multilabel_ec_direct(
+                        train_rows, by_id, by_seq, config, flat_ec_label_builder
+                    )
+                    X_val_flat_ec, y_val_flat_ec, target_mask_val_flat_ec = build_flat_multilabel_ec_direct(
+                        val_rows, by_id, by_seq, config, flat_ec_label_builder
+                    )
+                    X_test_flat_ec, y_test_flat_ec, target_mask_test_flat_ec = build_flat_multilabel_ec_direct(
+                        test_rows, by_id, by_seq, config, flat_ec_label_builder
                     )
                     store = None
                 elif is_pooled_protein_global_task:
@@ -1140,7 +942,6 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     X_val, y_val = build_protein_global_Xy_direct(val_rows, by_id, by_seq, config)
                     X_test, y_test = build_protein_global_Xy_direct(test_rows, by_id, by_seq, config)
                     store = None
->>>>>>> Stashed changes
                 elif is_pooled_mutation_task:
                     log(f"    Loading pooled embeddings from H5 (mutation-delta task)...")
                     t0 = time.time()
@@ -1165,98 +966,6 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         registry_name, store,
                         split_name="train", split_variant=split_variant, missing_policy="skip",
                     )
-<<<<<<< Updated upstream
-                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                    pred_train = trained.predict(X_train)
-                    pred_val = trained.predict(X_val) if use_validation else None
-                    pred_test = trained.predict(X_test)
-                    y_train_to_save = y_train
-                    y_val_to_save = y_val if use_validation else None
-                    y_test_to_save = y_test
-                elif is_pooled_ec_task:
-                    if model_info.get("flat_ec_labels", False):
-                        log(f"      Training on pooled flat EC embeddings for XGBoost...")
-                        trained = train_model(
-                            model_info,
-                            X_train_flat_ec,
-                            y_train_flat_ec,
-                            X_val=X_val_flat_ec if use_validation else None,
-                            y_val=y_val_flat_ec if use_validation else None,
-                            target_mask=target_mask_train_flat_ec,
-                            target_mask_val=target_mask_val_flat_ec if use_validation else None,
-                        )
-                        log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                        pred_train = trained.predict(X_train_flat_ec)
-                        pred_val = trained.predict(X_val_flat_ec) if use_validation else None
-                        pred_test = trained.predict(X_test_flat_ec)
-                        y_train_to_save = y_train_flat_ec
-                        y_val_to_save = y_val_flat_ec if use_validation else None
-                        y_test_to_save = y_test_flat_ec
-                        target_mask_train_to_save = target_mask_train_flat_ec
-                        target_mask_val_to_save = target_mask_val_flat_ec if use_validation else None
-                        target_mask_test_to_save = target_mask_test_flat_ec
-                    else:
-                        log(f"      Training on pooled EC embeddings...")
-                        trained = train_model(
-                            model_info,
-                            X_train,
-                            y_train,
-                            X_val=X_val if use_validation else None,
-                            y_val=y_val if use_validation else None,
-                            target_mask=target_mask_train,
-                            target_mask_val=target_mask_val if use_validation else None,
-                        )
-                        log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                        pred_train = trained.predict(X_train)
-                        pred_val = trained.predict(X_val) if use_validation else None
-                        pred_test = trained.predict(X_test)
-                        y_train_to_save = y_train
-                        y_val_to_save = y_val if use_validation else None
-                        y_test_to_save = y_test
-                        target_mask_train_to_save = target_mask_train
-                        target_mask_val_to_save = target_mask_val if use_validation else None
-                        target_mask_test_to_save = target_mask_test
-                elif residue_aware:
-                    train_loader = get_dataloader(train_bundle, batch_size=64)
-                    val_loader = get_dataloader(val_bundle, batch_size=64) if use_validation else None
-                    test_loader = get_dataloader(test_bundle, batch_size=64)
-                    log(f"      Training (residue-aware)...")
-                    trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
-                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                    pred_val = trained.predict_loader(val_loader, batch_kind=config.batch_kind) if use_validation else None
-                    pred_test = trained.predict_loader(test_loader, batch_kind=config.batch_kind)
-                    pred_train = trained.predict_loader(train_loader, batch_kind=config.batch_kind)
-                    y_val_to_save, target_mask_val_to_save = get_target_payload(val_bundle) if use_validation else (None, None)
-                    y_test_to_save, target_mask_test_to_save = get_target_payload(test_bundle)
-                    y_train_to_save, target_mask_train_to_save = get_target_payload(train_bundle)
-                else:
-                    log(f"      Pooling embeddings...")
-                    X_train_p, y_train_p = build_Xy_pooled(train_bundle, config.batch_kind)
-                    X_val_p, y_val_p = build_Xy_pooled(val_bundle, config.batch_kind) if use_validation else (None, None)
-                    X_test_p, y_test_p = build_Xy_pooled(test_bundle, config.batch_kind)
-                    log(f"      Pooled shapes: train={X_train_p.shape}, test={X_test_p.shape}. Training...")
-                    trained = train_model(model_info, X_train_p, y_train_p, X_val=X_val_p, y_val=y_val_p)
-                    log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                    pred_val = trained.predict(X_val_p) if use_validation else None
-                    pred_test = trained.predict(X_test_p)
-                    pred_train = trained.predict(X_train_p)
-                    y_train_to_save = y_train_p
-                    y_val_to_save = y_val_p if use_validation else None
-                    y_test_to_save = y_test_p
-
-                make_predictions_file(y_train_to_save, pred_train, run_dir, "train", target_mask_train_to_save)
-                if use_validation:
-                    make_predictions_file(y_val_to_save, pred_val, run_dir, "val", target_mask_val_to_save)
-                make_predictions_file(y_test_to_save, pred_test, run_dir, "test", target_mask_test_to_save)
-                model_file = save_model(trained, run_dir)
-
-                if getattr(trained, "best_epoch_", None) is not None:
-                    log(
-                        "      Early stopping: "
-                        f"best_epoch={trained.best_epoch_}, "
-                        f"best_val_loss={trained.best_val_loss_:.6f}"
-                    )
-=======
                     ec_vocabulary = None
                     if config.label_kind == "multilabel_ec":
                         ec_vocabulary = train_bundle.label_builder.vocabulary_by_level
@@ -1311,7 +1020,6 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
                 for model_name, model_info in model_map.items():
                     run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
->>>>>>> Stashed changes
 
                     if is_run_complete(run_dir):
                         log(f"    [{model_name}] Already trained — skipping.")
@@ -1325,6 +1033,12 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     run_dir.mkdir(parents=True, exist_ok=True)
 
                     t0 = time.time()
+                    y_train_to_save = None
+                    y_val_to_save = None
+                    y_test_to_save = None
+                    target_mask_train_to_save = None
+                    target_mask_val_to_save = None
+                    target_mask_test_to_save = None
                     if is_ligand_task:
                         log(f"      Training...")
                         trained = train_model(model_info, X_train, y_train,
@@ -1334,7 +1048,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         pred_train = trained.predict(X_train)
                         pred_val = trained.predict(X_val) if use_validation else None
                         pred_test = trained.predict(X_test)
-                        target_mask_train = target_mask_val = target_mask_test = None
+                        y_train_to_save = y_train
+                        y_val_to_save = y_val if use_validation else None
+                        y_test_to_save = y_test
                     elif is_pooled_protein_global_task:
                         log(f"      Training on pooled protein-global embeddings...")
                         trained = train_model(
@@ -1348,7 +1064,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         pred_train = trained.predict(X_train)
                         pred_val = trained.predict(X_val) if use_validation else None
                         pred_test = trained.predict(X_test)
-                        target_mask_train = target_mask_val = target_mask_test = None
+                        y_train_to_save = y_train
+                        y_val_to_save = y_val if use_validation else None
+                        y_test_to_save = y_test
                     elif is_pooled_mutation_task:
                         log(f"      Training on pooled mutation-delta embeddings...")
                         trained = train_model(
@@ -1362,22 +1080,52 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         pred_train = trained.predict(X_train)
                         pred_val = trained.predict(X_val) if use_validation else None
                         pred_test = trained.predict(X_test)
-                        target_mask_train = target_mask_val = target_mask_test = None
+                        y_train_to_save = y_train
+                        y_val_to_save = y_val if use_validation else None
+                        y_test_to_save = y_test
                     elif is_pooled_ec_task:
-                        log(f"      Training on pooled EC embeddings...")
-                        trained = train_model(
-                            model_info,
-                            X_train,
-                            y_train,
-                            X_val=X_val if use_validation else None,
-                            y_val=y_val if use_validation else None,
-                            target_mask=target_mask_train,
-                            target_mask_val=target_mask_val if use_validation else None,
-                        )
-                        log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
-                        pred_train = trained.predict(X_train)
-                        pred_val = trained.predict(X_val) if use_validation else None
-                        pred_test = trained.predict(X_test)
+                        if model_info.get("flat_ec_labels", False):
+                            log(f"      Training on pooled flat EC embeddings for XGBoost...")
+                            trained = train_model(
+                                model_info,
+                                X_train_flat_ec,
+                                y_train_flat_ec,
+                                X_val=X_val_flat_ec if use_validation else None,
+                                y_val=y_val_flat_ec if use_validation else None,
+                                target_mask=target_mask_train_flat_ec,
+                                target_mask_val=target_mask_val_flat_ec if use_validation else None,
+                            )
+                            log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                            pred_train = trained.predict(X_train_flat_ec)
+                            pred_val = trained.predict(X_val_flat_ec) if use_validation else None
+                            pred_test = trained.predict(X_test_flat_ec)
+                            y_train_to_save = y_train_flat_ec
+                            y_val_to_save = y_val_flat_ec if use_validation else None
+                            y_test_to_save = y_test_flat_ec
+                            target_mask_train_to_save = target_mask_train_flat_ec
+                            target_mask_val_to_save = target_mask_val_flat_ec if use_validation else None
+                            target_mask_test_to_save = target_mask_test_flat_ec
+                        else:
+                            log(f"      Training on pooled EC embeddings...")
+                            trained = train_model(
+                                model_info,
+                                X_train,
+                                y_train,
+                                X_val=X_val if use_validation else None,
+                                y_val=y_val if use_validation else None,
+                                target_mask=target_mask_train,
+                                target_mask_val=target_mask_val if use_validation else None,
+                            )
+                            log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
+                            pred_train = trained.predict(X_train)
+                            pred_val = trained.predict(X_val) if use_validation else None
+                            pred_test = trained.predict(X_test)
+                            y_train_to_save = y_train
+                            y_val_to_save = y_val if use_validation else None
+                            y_test_to_save = y_test
+                            target_mask_train_to_save = target_mask_train
+                            target_mask_val_to_save = target_mask_val if use_validation else None
+                            target_mask_test_to_save = target_mask_test
                     elif residue_aware:
                         train_loader = get_dataloader(train_bundle, batch_size=64)
                         val_loader = get_dataloader(val_bundle, batch_size=64) if use_validation else None
@@ -1388,9 +1136,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         pred_val = trained.predict_loader(val_loader, batch_kind=config.batch_kind) if use_validation else None
                         pred_test = trained.predict_loader(test_loader, batch_kind=config.batch_kind)
                         pred_train = trained.predict_loader(train_loader, batch_kind=config.batch_kind)
-                        y_val, target_mask_val = get_target_payload(val_bundle) if use_validation else (None, None)
-                        y_test, target_mask_test = get_target_payload(test_bundle)
-                        y_train, target_mask_train = get_target_payload(train_bundle)
+                        y_val_to_save, target_mask_val_to_save = get_target_payload(val_bundle) if use_validation else (None, None)
+                        y_test_to_save, target_mask_test_to_save = get_target_payload(test_bundle)
+                        y_train_to_save, target_mask_train_to_save = get_target_payload(train_bundle)
                     else:
                         log(f"      Pooling embeddings...")
                         X_train_p, y_train_p = build_Xy_pooled(train_bundle, config.batch_kind)
@@ -1402,13 +1150,14 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                         pred_val = trained.predict(X_val_p) if use_validation else None
                         pred_test = trained.predict(X_test_p)
                         pred_train = trained.predict(X_train_p)
-                        y_train, y_val, y_test = y_train_p, y_val_p, y_test_p
-                        target_mask_val = target_mask_test = target_mask_train = None
+                        y_train_to_save = y_train_p
+                        y_val_to_save = y_val_p if use_validation else None
+                        y_test_to_save = y_test_p
 
-                    make_predictions_file(y_train, pred_train, run_dir, "train", target_mask_train)
+                    make_predictions_file(y_train_to_save, pred_train, run_dir, "train", target_mask_train_to_save)
                     if use_validation:
-                        make_predictions_file(y_val, pred_val, run_dir, "val", target_mask_val)
-                    make_predictions_file(y_test, pred_test, run_dir, "test", target_mask_test)
+                        make_predictions_file(y_val_to_save, pred_val, run_dir, "val", target_mask_val_to_save)
+                    make_predictions_file(y_test_to_save, pred_test, run_dir, "test", target_mask_test_to_save)
                     model_file = save_model(trained, run_dir)
 
                     if getattr(trained, "best_epoch_", None) is not None:
@@ -1427,7 +1176,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
             except Exception as _task_exc:
                 import traceback
                 log(f"  [ERROR] Task '{task_name}' failed: {_task_exc}")
-                log(f"  {traceback.format_exc()}")
+                log(traceback.format_exc())
                 continue
 
     log(f"\nDone. Results written to {card_path}")
