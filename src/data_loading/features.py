@@ -179,16 +179,16 @@ class ResidueEmbeddingStore:
         id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id"),
         sequence_column: str = "protein_sequence",
     ) -> np.ndarray:
+        sequence = normalize_sequence(row.get(sequence_column))
+        if sequence and self.has_sequence(sequence):
+            return self.lookup_sequence(sequence)
+
         for id_column in id_columns:
             if id_column not in row:
                 continue
             identifier = clean_text(row.get(id_column))
             if identifier and self.has_id(identifier):
                 return self.lookup_id(identifier)
-
-        sequence = normalize_sequence(row.get(sequence_column))
-        if sequence and self.has_sequence(sequence):
-            return self.lookup_sequence(sequence)
 
         tried = [column for column in (*id_columns, sequence_column) if column in row]
         raise EmbeddingLookupError(

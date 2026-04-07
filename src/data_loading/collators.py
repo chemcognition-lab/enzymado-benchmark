@@ -43,6 +43,25 @@ def _stack_targets(targets: list[Any]) -> np.ndarray:
     return np.stack(arrays).astype(dtype, copy=False)
 
 
+def _validate_residue_sample_lengths(samples: list[dict[str, Any]]) -> None:
+    for sample in samples:
+        sample_id = sample.get("sample_id", "")
+        embedding_length = sample["protein_emb"].shape[0]
+        target_length = sample["target_per_residue"].shape[0]
+        mask_length = sample["target_mask"].shape[0]
+
+        if embedding_length != target_length:
+            raise ValueError(
+                "Protein embedding and residue target length mismatch for sample "
+                f"'{sample_id}': embedding={embedding_length}, target={target_length}."
+            )
+        if target_length != mask_length:
+            raise ValueError(
+                "Residue target and residue mask length mismatch for sample "
+                f"'{sample_id}': target={target_length}, mask={mask_length}."
+            )
+
+
 @dataclass
 class ProteinGlobalBatch:
     sample_id: list[str]
@@ -141,6 +160,7 @@ class MutationDeltaGlobalCollator:
 
 class ProteinResidueCollator:
     def __call__(self, samples: list[dict[str, Any]]) -> ProteinResidueBatch:
+        _validate_residue_sample_lengths(samples)
         protein_emb, protein_mask = _pad_residue_embeddings(
             [sample["protein_emb"] for sample in samples]
         )

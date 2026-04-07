@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -17,6 +19,18 @@ DEFAULT_INPUT_DIRS = (
     Path("data/processed/real_case"),
 )
 DEFAULT_OUTPUT = Path("data/processed/protein_sequences_unique_no_fluorescence.csv")
+KNOWN_DATASET_CODES = {
+    "properties/active_sites/swissprot_active_site.csv": "as",
+    "properties/binding_site/swissprot_binding_site.csv": "bs",
+    "properties/binding/biolip_binding.csv": "bi",
+    "properties/ec_number/swissprot_ec.csv": "ec",
+    "properties/kcat/catpred_kcat.csv": "kc",
+    "properties/km/catpred_km.csv": "km",
+    "properties/ph_opt/brenda_phopt.csv": "ph",
+    "properties/solubility/proteinea_solubility.csv": "so",
+    "properties/dtm/fireprotdb_dtm.csv": "dt",
+    "properties/ddg_mut/fireprotdb_ddg.csv": "dg",
+}
 
 
 def clean_value(value: str | None) -> str:
@@ -35,6 +49,30 @@ def build_sequence_id(base_id: str, sequence_column: str) -> str:
     return f"{base_id}__{sequence_column}"
 
 
+def resolve_dataset_code(csv_path: Path) -> str:
+    normalized_path = csv_path.as_posix()
+    for suffix, code in KNOWN_DATASET_CODES.items():
+        if normalized_path.endswith(suffix):
+            return code
+
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9]+", csv_path.parent.name.lower())
+        if token
+    ]
+    if not tokens:
+        tokens = [
+            token
+            for token in re.split(r"[^a-z0-9]+", csv_path.stem.lower())
+            if token
+        ]
+    if not tokens:
+        return "ds"
+    if len(tokens) == 1:
+        return tokens[0][:3]
+    return "".join(token[0] for token in tokens[:4])[:4]
+
+
 def should_include_csv(csv_path: Path) -> bool:
     name = csv_path.name
     if name.startswith("protein_sequences_unique"):
@@ -45,6 +83,7 @@ def should_include_csv(csv_path: Path) -> bool:
 
 
 def load_sequence_records(csv_path: Path) -> list[dict[str, str | bool]]:
+    dataset_code = resolve_dataset_code(csv_path)
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
@@ -78,13 +117,50 @@ def load_sequence_records(csv_path: Path) -> list[dict[str, str | bool]]:
 
                 records.append(
                     {
-                        "sequence_id": build_sequence_id(base_sequence_id, sequence_column),
+                        "base_sequence_id": build_sequence_id(base_sequence_id, sequence_column),
                         PRIMARY_SEQUENCE_COLUMN: sequence,
                         "has_uniprot_id": bool(uniprot_id),
+                        "dataset_code": dataset_code,
                     }
                 )
 
     return records
+
+
+def assign_disambiguated_sequence_ids(records: list[dict[str, str | bool]]) -> None:
+    sequences_by_base_id: dict[str, set[str]] = defaultdict(set)
+    sequences_by_base_id_and_dataset: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    for record in records:
+        base_sequence_id = str(record["base_sequence_id"])
+        dataset_code = str(record["dataset_code"])
+        sequence = str(record[PRIMARY_SEQUENCE_COLUMN])
+        sequences_by_base_id[base_sequence_id].add(sequence)
+        sequences_by_base_id_and_dataset[(base_sequence_id, dataset_code)].add(sequence)
+
+    index_by_base_id_dataset_and_sequence: dict[tuple[str, str, str], int] = {}
+    for (base_sequence_id, dataset_code), sequences in sequences_by_base_id_and_dataset.items():
+        for index, sequence in enumerate(sorted(sequences), start=1):
+            index_by_base_id_dataset_and_sequence[(base_sequence_id, dataset_code, sequence)] = index
+
+    for record in records:
+        base_sequence_id = str(record["base_sequence_id"])
+        dataset_code = str(record["dataset_code"])
+        sequence = str(record[PRIMARY_SEQUENCE_COLUMN])
+
+        if len(sequences_by_base_id[base_sequence_id]) == 1:
+            record["sequence_id"] = base_sequence_id
+            continue
+
+        dataset_sequences = sequences_by_base_id_and_dataset[(base_sequence_id, dataset_code)]
+        if len(dataset_sequences) == 1:
+            suffix = dataset_code
+        else:
+            suffix_index = index_by_base_id_dataset_and_sequence[
+                (base_sequence_id, dataset_code, sequence)
+            ]
+            suffix = f"{dataset_code}_{suffix_index}"
+        record["sequence_id"] = f"{base_sequence_id}__{suffix}"
 
 
 def build_unique_sequences(input_dirs: list[Path]) -> tuple[list[dict[str, str]], int]:
@@ -104,6 +180,8 @@ def build_unique_sequences(input_dirs: list[Path]) -> tuple[list[dict[str, str]]
     all_records: list[dict[str, str | bool]] = []
     for csv_path in csv_paths:
         all_records.extend(load_sequence_records(csv_path))
+
+    assign_disambiguated_sequence_ids(all_records)
 
     original_count = len(all_records)
     prioritized_records = sorted(

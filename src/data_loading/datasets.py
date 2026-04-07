@@ -190,11 +190,49 @@ class ProteinResidueDataset(BaseComposableDataset):
     def _feature_builders(self) -> tuple[Any, ...]:
         return (self.protein_builder,)
 
+    def _validate_row(self, row: dict[str, str]) -> list[str]:
+        errors = super()._validate_row(row)
+        if errors:
+            return errors
+
+        try:
+            protein_emb = self.protein_builder.build(row)
+            target_per_residue, target_mask = self.label_builder.build(row)
+        except ValueError as exc:
+            return [str(exc)]
+
+        if protein_emb.shape[0] != target_per_residue.shape[0]:
+            return [
+                "Protein embedding and residue target length mismatch for sample "
+                f"'{row.get('sample_id', '')}': embedding={protein_emb.shape[0]}, "
+                f"target={target_per_residue.shape[0]}."
+            ]
+        if target_per_residue.shape != target_mask.shape:
+            return [
+                "Residue target and residue mask length mismatch for sample "
+                f"'{row.get('sample_id', '')}': target={target_per_residue.shape}, "
+                f"mask={target_mask.shape}."
+            ]
+        return []
+
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
         target_per_residue, target_mask = self.label_builder.build(row)
+        protein_emb = self.protein_builder.build(row)
+        if protein_emb.shape[0] != target_per_residue.shape[0]:
+            raise ValueError(
+                "Protein embedding and residue target length mismatch for sample "
+                f"'{row.get('sample_id', '')}': embedding={protein_emb.shape[0]}, "
+                f"target={target_per_residue.shape[0]}."
+            )
+        if target_per_residue.shape != target_mask.shape:
+            raise ValueError(
+                "Residue target and residue mask length mismatch for sample "
+                f"'{row.get('sample_id', '')}': target={target_per_residue.shape}, "
+                f"mask={target_mask.shape}."
+            )
         return {
             "sample_id": row["sample_id"],
-            "protein_emb": self.protein_builder.build(row),
+            "protein_emb": protein_emb,
             "target_per_residue": target_per_residue,
             "target_mask": target_mask,
         }

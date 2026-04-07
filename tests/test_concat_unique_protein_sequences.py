@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import csv
+import tempfile
+import unittest
 from pathlib import Path
 
 from scripts.clean_utils.concat_unique_protein_sequences import build_unique_sequences
@@ -12,43 +16,63 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> 
         writer.writerows(rows)
 
 
-def test_build_unique_sequences_includes_wildtype_and_real_case(tmp_path):
-    properties_dir = tmp_path / "properties"
-    real_case_dir = tmp_path / "real_case"
+class ConcatUniqueProteinSequencesTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
 
-    write_csv(
-        properties_dir / "ddg_mut" / "mutations.csv",
-        ["dataset_id", "protein_sequence", "wildtype_sequence", "mutation"],
-        [
-            {
-                "dataset_id": "mut_1",
-                "protein_sequence": "M U T",
-                "wildtype_sequence": "WILD",
-                "mutation": "A1B",
-            }
-        ],
-    )
-    write_csv(
-        properties_dir / "ddg_mut" / "mutations_random_80_10_10_splits.csv",
-        ["dataset_id", "protein_sequence"],
-        [{"dataset_id": "split_only", "protein_sequence": "SHOULDNOTLOAD"}],
-    )
-    write_csv(
-        properties_dir / "protein_sequences_unique.csv",
-        ["sequence_id", "protein_sequence"],
-        [{"sequence_id": "old", "protein_sequence": "OLD"}],
-    )
-    write_csv(
-        real_case_dir / "align" / "alpha_amylase__expression.csv",
-        ["dataset_id", "protein_sequence", "expression"],
-        [{"dataset_id": "real_1", "protein_sequence": "REAL", "expression": "1.0"}],
-    )
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
 
-    unique_rows, original_count = build_unique_sequences([properties_dir, real_case_dir])
+    def test_conflicting_ids_across_datasets_get_dataset_suffixes(self) -> None:
+        write_csv(
+            self.root / "properties" / "active_sites" / "swissprot_active_site.csv",
+            ["uniprot_id", "protein_sequence"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "AAAA"},
+                {"uniprot_id": "P2", "protein_sequence": "CCCC"},
+            ],
+        )
+        write_csv(
+            self.root / "properties" / "binding_site" / "swissprot_binding_site.csv",
+            ["uniprot_id", "protein_sequence"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "BBBB"},
+            ],
+        )
 
-    assert original_count == 3
-    assert {row["sequence_id"]: row["protein_sequence"] for row in unique_rows} == {
-        "mut_1": "MUT",
-        "mut_1__wildtype_sequence": "WILD",
-        "real_1": "REAL",
-    }
+        unique_sequences, original_count = build_unique_sequences([self.root / "properties"])
+
+        self.assertEqual(original_count, 3)
+        rows_by_sequence = {
+            row["protein_sequence"]: row["sequence_id"]
+            for row in unique_sequences
+        }
+        self.assertEqual(rows_by_sequence["AAAA"], "P1__as")
+        self.assertEqual(rows_by_sequence["BBBB"], "P1__bs")
+        self.assertEqual(rows_by_sequence["CCCC"], "P2")
+
+    def test_conflicting_ids_within_same_dataset_get_stable_indexes(self) -> None:
+        write_csv(
+            self.root / "properties" / "binding" / "biolip_binding.csv",
+            ["uniprot_id", "protein_sequence"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "BBBB"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA"},
+                {"uniprot_id": "P1", "protein_sequence": "BBBB"},
+            ],
+        )
+
+        unique_sequences, original_count = build_unique_sequences([self.root / "properties"])
+
+        self.assertEqual(original_count, 3)
+        rows_by_sequence = {
+            row["protein_sequence"]: row["sequence_id"]
+            for row in unique_sequences
+        }
+        self.assertEqual(rows_by_sequence["AAAA"], "P1__bi_1")
+        self.assertEqual(rows_by_sequence["BBBB"], "P1__bi_2")
+
+
+if __name__ == "__main__":
+    unittest.main()

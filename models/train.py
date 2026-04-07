@@ -322,7 +322,6 @@ def build_Xy_ligand_direct(
     config,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build X/y for protein_ligand_global from pre-pooled embeddings + rdkit ligand features."""
-    from data_loading.splits import clean_text, normalize_sequence as _norm_seq
     from data_loading.features import _default_rdkit_featurize
 
     X_list: list[np.ndarray] = []
@@ -330,16 +329,7 @@ def build_Xy_ligand_direct(
     skipped = 0
 
     for row in rows:
-        emb: np.ndarray | None = None
-        for col in config.sample_id_candidates:
-            key = clean_text(row.get(col, ""))
-            if key and key in by_id:
-                emb = by_id[key]
-                break
-        if emb is None:
-            seq = _norm_seq(row.get(config.sequence_column, ""))
-            if seq:
-                emb = by_seq.get(seq)
+        emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
         if emb is None:
             skipped += 1
             continue
@@ -374,17 +364,17 @@ def _lookup_pooled_embedding(
 ) -> np.ndarray | None:
     from data_loading.splits import clean_text, normalize_sequence as _norm_seq
 
-    emb: np.ndarray | None = None
+    seq = _norm_seq(row.get(config.sequence_column, ""))
+    if seq:
+        emb = by_seq.get(seq)
+        if emb is not None:
+            return emb
+
     for col in config.sample_id_candidates:
         key = clean_text(row.get(col, ""))
         if key and key in by_id:
-            emb = by_id[key]
-            break
-    if emb is None:
-        seq = _norm_seq(row.get(config.sequence_column, ""))
-        if seq:
-            emb = by_seq.get(seq)
-    return emb
+            return by_id[key]
+    return None
 
 
 def build_multilabel_ec_direct(

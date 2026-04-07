@@ -10,6 +10,7 @@ from unittest import mock
 
 import numpy as np
 
+from src.data_loading.collators import ProteinResidueCollator
 from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.labels import FlatECLabelBuilder, StandardScaler1D
 from src.data_loading.registry import TaskConfig
@@ -147,7 +148,7 @@ class DataLoadingTests(unittest.TestCase):
         )
         np.testing.assert_array_equal(
             merged_store.lookup_row({"uniprot_id": "P1", "protein_sequence": "AAAA"}),
-            np.ones((4, 2), dtype=np.float32),
+            np.full((4, 2), 3.0, dtype=np.float32),
         )
 
     def test_regression_scaler_fits_only_on_train_rows(self) -> None:
@@ -604,6 +605,71 @@ class DataLoadingTests(unittest.TestCase):
         )
         self.assertEqual(len(bundle.dataset), 1)
         self.assertEqual(bundle.dataset.skipped_rows, 1)
+
+    def test_missing_policy_skip_filters_residue_rows_with_length_mismatch(self) -> None:
+        dataset_path = self.root / "active_sites_skip.csv"
+        split_path = self.root / "active_sites_skip_split.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "active_site"],
+            [
+                {"uniprot_id": "keep_me", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
+                {"uniprot_id": "drop_me", "protein_sequence": "AAAAA", "active_site": "[2]"},
+            ],
+        )
+        write_csv(
+            split_path,
+            ["uniprot_id", "split"],
+            [
+                {"uniprot_id": "keep_me", "split": "train"},
+                {"uniprot_id": "drop_me", "split": "train"},
+            ],
+        )
+        config = TaskConfig(
+            name="active_sites_skip",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_path=dataset_path,
+            target_column=None,
+            residue_positions_column="active_site",
+            sample_id_candidates=("uniprot_id",),
+            split_files={"random": split_path},
+            split_id_candidates=("uniprot_id",),
+        )
+        store = ResidueEmbeddingStore(
+            by_id={
+                "keep_me": np.ones((4, 2), dtype=np.float32),
+                "drop_me": np.ones((3, 2), dtype=np.float32),
+            }
+        )
+
+        bundle = build_dataset_from_config(
+            config,
+            store,
+            split_name="train",
+            missing_policy="skip",
+        )
+        self.assertEqual(len(bundle.dataset), 1)
+        self.assertEqual(bundle.dataset.skipped_rows, 1)
+        self.assertEqual(bundle.dataset[0]["sample_id"], "keep_me")
+
+    def test_protein_residue_collator_raises_clear_error_on_length_mismatch(self) -> None:
+        collator = ProteinResidueCollator()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Protein embedding and residue target length mismatch for sample 'bad_sample'",
+        ):
+            collator(
+                [
+                    {
+                        "sample_id": "bad_sample",
+                        "protein_emb": np.ones((2, 2), dtype=np.float32),
+                        "target_per_residue": np.array([1.0, 0.0, 1.0], dtype=np.float32),
+                        "target_mask": np.array([True, True, True], dtype=bool),
+                    }
+                ]
+            )
 
 
 if __name__ == "__main__":
