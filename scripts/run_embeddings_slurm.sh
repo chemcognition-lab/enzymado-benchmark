@@ -4,6 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=100G
 #SBATCH --output=logs/embed_%A_%a.out
+#SBATCH --nodelist=gpu4
 
 # Run from the git root:
 #   sbatch scripts/run_embeddings_slurm.sh
