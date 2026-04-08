@@ -30,7 +30,7 @@ For each property in `benchmark_card.json`, training follows this order:
 
 ## Main Training Routes
 
-There are five active training routes:
+There are five training routes:
 
 1. `protein_global` + `binary` or `scalar_regression`
    Mean-pool protein embeddings first, then train on 2D arrays.
@@ -69,17 +69,14 @@ There are five active training routes:
 | `ec_number` | `ec_number` | classification | `protein_global` | `multilabel_ec` | pooled hierarchical EC or pooled flat EC for XGBoost | `mlp_classification`, `sgd_classification`, `xgb_classification` |
 | `active_sites` | `active_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, residue `xgb_classification` |
 | `binding_site` | `binding_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, residue `xgb_classification` |
-| `fluorescence` | none | regression | none | none | skipped | none |
 
 ## Important Clarifications
 
 - Every registered property now has a training path for the repository's model families:
   `MLP`, `SGD`, and `XGBoost`.
-- The only benchmark-card property that is still skipped entirely is `fluorescence`,
-  because it is not registered in `TASK_REGISTRY`.
-- `ec_number` now supports XGBoost through a flat concatenated EC target vector.
-- `active_sites` and `binding_site` do use a dedicated structured model map, including residue-level XGBoost.
-- `fluorescence` is present in the benchmark card but is skipped because it is not registered in `TASK_REGISTRY`.
+- `ec_number` supports XGBoost through a flat concatenated EC target vector.
+- `active_sites` and `binding_site` do use a dedicated structured model map.
+- `fluorescence` is present in the benchmark card but is skipped because it is does not contain enzymes.
 
 ## Reading Guide
 
