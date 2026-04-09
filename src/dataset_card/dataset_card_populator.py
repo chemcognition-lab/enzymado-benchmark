@@ -722,7 +722,7 @@ if __name__ == "__main__":
     parser.add_argument("--emb_model", default=None,
                         help="Embedding model for UMAP (e.g. esm2_650M). Skipped if not provided.")
     parser.add_argument("--embeddings_json", default="embeddings_models_output.json")
-    parser.add_argument("--seq_identity", type=float, default=0.5,
+    parser.add_argument("--seq_identity", type=float, default=0.3,
                         help="MMSeqs2 min-seq-id for whole-dataset clustering. Default: 0.5")
     args = parser.parse_args()
     DatasetCardPopulator(
