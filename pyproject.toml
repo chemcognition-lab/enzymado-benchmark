@@ -35,10 +35,12 @@ dependencies = [
 requires-python = "~=3.13.0"
 
 [project.optional-dependencies]
+# Install torch separately on Killarney so the CUDA wheel matches the cluster driver.
+# Example:
+#   uv pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cu126
 train = [
     "h5py",
     "joblib",
-    "torch",
     "xgboost",
     "rdkit",
     "requests",
@@ -46,7 +48,6 @@ train = [
 ]
 embeddings = [
     "h5py",
-    "torch",
     "transformers",
     "sentencepiece",
     "biopython",
