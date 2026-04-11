@@ -313,11 +313,19 @@ def load_pooled_h5_subset(
             if h5_key not in handle:
                 missing += 1
                 continue
-            arr = np.asarray(handle[h5_key], dtype=np.float32).mean(axis=0)
+            arr = np.asarray(handle[h5_key], dtype=np.float32)
+            if arr.ndim == 2:
+                pooled = arr.mean(axis=0)
+            elif arr.ndim == 1:
+                pooled = arr
+            else:
+                raise ValueError(
+                    f"Expected 1D or 2D embedding array for key '{h5_key}', got shape {arr.shape}."
+                )
             if id_key is not None:
-                by_id[id_key] = arr
+                by_id[id_key] = pooled
             if seq is not None:
-                by_seq[seq] = arr
+                by_seq[seq] = pooled
             if i % log_interval == 0 or i == total:
                 elapsed = time.time() - t_load_start
                 rate = i / elapsed
@@ -802,8 +810,20 @@ def update_card_locked(card_path: Path, task_name: str, result_key: str, result_
 # Main
 # ---------------------------------------------------------------------------
 
-def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter: str | None = None):
+def main(
+    card_path: str,
+    embeddings_json: str,
+    output_dir: str,
+    emb_name_filter: str | None = None,
+    model_prefix_filter: str | None = None,
+    skip_label_kinds: set[str] | None = None,
+):
     log(f"[startup] Python started. emb_name={emb_name_filter}")
+    if model_prefix_filter is not None:
+        log(f"[startup] Filtering model names by prefix: {model_prefix_filter}")
+    skip_label_kinds = skip_label_kinds or set()
+    if skip_label_kinds:
+        log(f"[startup] Skipping label kinds: {sorted(skip_label_kinds)}")
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
     log(f"[startup] JSON loaded. {len(embeddings)} embedding models, {len(card['properties'])} tasks.")
@@ -831,6 +851,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 continue
 
             config = get_task_config(registry_name)
+            if config.label_kind in skip_label_kinds:
+                log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' filtered by CLI)")
+                continue
 
             if config.label_kind in SKIP_LABEL_KINDS:
                 log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' not yet supported)")
@@ -848,6 +871,15 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
                 # Check whether all models for this task are already trained — skip H5 loading if so
                 prospective_model_map = get_model_map(task_type, config.label_kind)
+                if model_prefix_filter is not None:
+                    prospective_model_map = {
+                        name: info
+                        for name, info in prospective_model_map.items()
+                        if name.startswith(model_prefix_filter)
+                    }
+                if not prospective_model_map:
+                    log("    No models selected after filters — skipping task.")
+                    continue
                 already_done = [
                     m for m in prospective_model_map
                     if is_run_complete(output_dir / f"{emb_name}__{task_name}__{m}")
@@ -1016,7 +1048,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 else:
                     log("    Validation disabled: empty val split after filtering")
 
-                model_map = get_model_map(task_type, config.label_kind)
+                model_map = prospective_model_map
 
                 for model_name, model_info in model_map.items():
                     run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
@@ -1188,5 +1220,23 @@ if __name__ == "__main__":
     parser.add_argument("embeddings_json", help="Path to embeddings_models_output.json")
     parser.add_argument("output_dir", help="Directory to write prediction and model files")
     parser.add_argument("--emb_name", default=None, help="Train only this embedding (for SLURM arrays)")
+    parser.add_argument(
+        "--model_prefix",
+        default=None,
+        help="Train only models whose name starts with this prefix, e.g. 'mlp_'.",
+    )
+    parser.add_argument(
+        "--skip_label_kind",
+        action="append",
+        default=[],
+        help="Skip tasks with this label_kind. Repeatable.",
+    )
     args = parser.parse_args()
-    main(args.card_path, args.embeddings_json, args.output_dir, args.emb_name)
+    main(
+        args.card_path,
+        args.embeddings_json,
+        args.output_dir,
+        args.emb_name,
+        model_prefix_filter=args.model_prefix,
+        skip_label_kinds=set(args.skip_label_kind),
+    )
