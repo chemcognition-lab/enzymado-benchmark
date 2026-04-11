@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=enzymado_embed
-#SBATCH --array=0-13%2
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=128G
@@ -11,7 +10,7 @@ set -euo pipefail
 
 # Submit examples:
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
-#   sbatch --account="$AIP_ACCOUNT" scripts/run_embeddings_killarney.slurm
+#   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_embeddings_killarney.slurm
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm3_open scripts/run_embeddings_killarney.slurm
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm2_650M,PER_PROTEIN=1 scripts/run_embeddings_killarney.slurm
 
@@ -128,6 +127,10 @@ MODEL_REFS=(
 
 select_index() {
     if [[ -n "${EMBED_MODEL:-}" ]]; then
+        if [[ -n "${SLURM_ARRAY_TASK_ID:-}" && "${SLURM_ARRAY_TASK_ID}" != "0" ]]; then
+            echo "EMBED_MODEL=${EMBED_MODEL} provided; skipping duplicate array task ${SLURM_ARRAY_TASK_ID}."
+            exit 0
+        fi
         local index
         for index in "${!MODELS[@]}"; do
             if [[ "${MODELS[$index]}" == "${EMBED_MODEL}" ]]; then
@@ -141,7 +144,7 @@ select_index() {
     fi
 
     if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
-        echo "ERROR: Provide EMBED_MODEL or submit as a Slurm array job." >&2
+        echo "ERROR: Provide EMBED_MODEL for a single job, or submit with --array=0-13%2 for all models." >&2
         exit 1
     fi
 
