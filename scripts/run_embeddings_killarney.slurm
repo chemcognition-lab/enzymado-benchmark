@@ -15,7 +15,11 @@ set -euo pipefail
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm2_650M,PER_PROTEIN=1 scripts/run_embeddings_killarney.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+    REPO="${SLURM_SUBMIT_DIR}"
+else
+    REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 
 if ! type module >/dev/null 2>&1; then
     source /etc/profile

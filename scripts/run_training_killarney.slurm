@@ -15,7 +15,11 @@ set -euo pipefail
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions_mean_pooled_mlp,MODEL_PREFIX=mlp_,SKIP_LABEL_KINDS=residue_binary_vector scripts/run_training_killarney.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+    REPO="${SLURM_SUBMIT_DIR}"
+else
+    REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 
 if ! type module >/dev/null 2>&1; then
     source /etc/profile
