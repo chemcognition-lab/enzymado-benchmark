@@ -38,8 +38,9 @@ fi
 : "${TMPDIR:=/scratch/${USER}/enzymado/tmp}"
 : "${UV_LINK_MODE:=copy}"
 : "${PER_PROTEIN:=0}"
+: "${ALLOW_PARTIAL:=0}"
 
-export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE PER_PROTEIN
+export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE PER_PROTEIN ALLOW_PARTIAL
 export PYTHONNOUSERSITE=1
 
 mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
@@ -129,6 +130,23 @@ MODEL_REFS=(
     Profluent-Bio/E1-600m
 )
 
+MODEL_DIMS=(
+    1024
+    1024
+    1024
+    1280
+    2560
+    1536
+    960
+    1152
+    768
+    1536
+    1536
+    2560
+    1024
+    1280
+)
+
 select_index() {
     if [[ -n "${EMBED_MODEL:-}" ]]; then
         if [[ -n "${SLURM_ARRAY_TASK_ID:-}" && "${SLURM_ARRAY_TASK_ID}" != "0" ]]; then
@@ -166,6 +184,7 @@ PYTHON_MODULE="${PYTHON_MODULES[$TASK_INDEX]}"
 VENV_PATH="${VENVS[$TASK_INDEX]}"
 SCRIPT_PATH="${SCRIPTS[$TASK_INDEX]}"
 MODEL_REF="${MODEL_REFS[$TASK_INDEX]}"
+MODEL_DIM="${MODEL_DIMS[$TASK_INDEX]}"
 
 module load "${PYTHON_MODULE}" git-lfs/3.4.0 >/dev/null 2>&1 || module load "${PYTHON_MODULE}" >/dev/null 2>&1
 
@@ -206,6 +225,10 @@ if [[ "${MODEL_NAME}" == "esm3_open" && -z "${HF_TOKEN:-}" ]]; then
     exit 1
 fi
 
+if [[ "${MODEL_NAME}" == "ankh3_large" || "${MODEL_NAME}" == "ankh3_xl" ]]; then
+    export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION="${PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION:-python}"
+fi
+
 echo "Job host: $(hostname)"
 echo "Model: ${MODEL_NAME}"
 echo "Python module: ${PYTHON_MODULE}"
@@ -219,3 +242,16 @@ python "${REPO}/${SCRIPT_PATH}" \
     --output "${OUT_PATH}" \
     --model "${MODEL_REF}" \
     --per_protein "${PER_PROTEIN}"
+
+EXPECTED_COUNT="$(grep -c '^>' "${FASTA_PATH}")"
+if python "${REPO}/scripts/enzyme_utils/validate_embedding_h5.py" \
+    --h5 "${OUT_PATH}" \
+    --expected-count "${EXPECTED_COUNT}" \
+    --expected-dim "${MODEL_DIM}"; then
+    echo "Embedding file validated successfully."
+elif [[ "${ALLOW_PARTIAL}" == "1" ]]; then
+    echo "WARNING: validation failed, but ALLOW_PARTIAL=1 so the job will still exit successfully." >&2
+else
+    echo "ERROR: embedding output validation failed." >&2
+    exit 1
+fi
