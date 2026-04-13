@@ -55,7 +55,16 @@ CARD_TO_REGISTRY: dict[str, str] = {
     "phopt": "ph_opt",
     "binding_site": "binding_sites",
 }
-SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
+PREFERRED_SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
+LEGACY_SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
+
+
+def resolve_sequence_index_path() -> Path | None:
+    if PREFERRED_SEQUENCE_INDEX_PATH.exists():
+        return PREFERRED_SEQUENCE_INDEX_PATH
+    if LEGACY_SEQUENCE_INDEX_PATH.exists():
+        return LEGACY_SEQUENCE_INDEX_PATH
+    return None
 
 
 def resolve_registry_name(card_task_name: str) -> str | None:
@@ -283,7 +292,7 @@ def _build_seq_to_h5key(
     seq_to_h5key: dict[str, str] = {}
 
     # Try sequence index first (maps sequence_id → sequence)
-    seq_index_path = SEQUENCE_INDEX_PATH if SEQUENCE_INDEX_PATH.exists() else None
+    seq_index_path = resolve_sequence_index_path()
     if seq_index_path is not None and normalized_sequences:
         import csv
         with open(seq_index_path, newline="", encoding="utf-8") as fh:
@@ -338,7 +347,7 @@ def load_embedding_store_subset(
     needed_sequences: set[str],
 ) -> ResidueEmbeddingStore:
     """Load only the embeddings needed for a task from an H5 file."""
-    sequence_index_path = SEQUENCE_INDEX_PATH if SEQUENCE_INDEX_PATH.exists() else None
+    sequence_index_path = resolve_sequence_index_path()
     return ResidueEmbeddingStore.from_h5_subset(
         PROJECT_ROOT / h5_path,
         needed_ids=needed_ids,
@@ -923,8 +932,9 @@ def main(
     sequence_to_id: dict[str, str] = {}
     if allowed_ids_path is not None:
         allowed_ids = load_allowed_ids(allowed_ids_path)
-        if SEQUENCE_INDEX_PATH.exists():
-            sequence_to_id = load_sequence_to_id_index(SEQUENCE_INDEX_PATH)
+        sequence_index_path = resolve_sequence_index_path()
+        if sequence_index_path is not None:
+            sequence_to_id = load_sequence_to_id_index(sequence_index_path)
         log(
             f"[startup] Restricting training rows to {len(allowed_ids):,} embedding IDs "
             f"from {allowed_ids_path}"
@@ -1007,6 +1017,9 @@ def main(
                         f" val={len(val_rows):,}/{orig_val_rows:,}"
                         f" test={len(test_rows):,}/{orig_test_rows:,}"
                     )
+                if not train_rows and not val_rows and not test_rows:
+                    log("    Skipping task: allowed-id filtering left no rows in train/val/test.")
+                    continue
                 needed_ids, needed_sequences = collect_needed_lookup_keys(train_rows + val_rows + test_rows, config)
                 log(f"    Rows loaded: train={len(train_rows)}, val={len(val_rows)}, test={len(test_rows)} | need {len(needed_ids)} ids, {len(needed_sequences)} seqs")
 
@@ -1140,12 +1153,13 @@ def main(
                 orig_total = orig_train + orig_val + orig_test
                 kept_total = n_train + n_val + n_test
                 dropped    = orig_total - kept_total
+                dropped_pct = (100 * dropped / orig_total) if orig_total > 0 else 0.0
 
                 log(
                     f"    Data summary:"
                     f"\n      original : train={orig_train:,}  val={orig_val:,}  test={orig_test:,}  total={orig_total:,}"
                     f"\n      kept     : train={n_train:,}  val={n_val:,}  test={n_test:,}  total={kept_total:,}"
-                    f"\n      dropped  : {dropped:,} ({100*dropped/orig_total:.1f}% of original)"
+                    f"\n      dropped  : {dropped:,} ({dropped_pct:.1f}% of original)"
                     + (f"  ← missing embeddings/ligand features" if dropped > 0 else "")
                 )
 
