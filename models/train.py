@@ -4,6 +4,7 @@ import fcntl
 import argparse
 import inspect
 import time
+import csv
 from pathlib import Path
 
 import joblib
@@ -34,6 +35,7 @@ from data_loading.adapters import (
     MutationDeltaAdapter,
     ProteinResidueAdapter,
 )
+from data_loading.splits import clean_text, normalize_sequence
 
 def log(msg: str) -> None:
     ts = time.strftime("%H:%M:%S")
@@ -69,6 +71,92 @@ def resolve_split_variant(default_split: str | None) -> str | None:
     if "similarity" in default_split:
         return "similarity"
     return None
+
+
+def load_allowed_ids(path: str | Path) -> set[str]:
+    allowed_ids: set[str] = set()
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            value = line.strip()
+            if value:
+                allowed_ids.add(value)
+    return allowed_ids
+
+
+def load_sequence_to_id_index(index_path: Path) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    with open(index_path, "r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            sequence = row.get("protein_sequence", "")
+            sequence_id = row.get("sequence_id", "")
+            normalized_sequence = normalize_sequence(sequence)
+            normalized_id = clean_text(sequence_id)
+            if normalized_sequence and normalized_id:
+                mapping[normalized_sequence] = normalized_id
+    return mapping
+
+
+def candidate_embedding_keys(
+    row: dict[str, str],
+    sequence_column: str,
+    id_columns: tuple[str, ...],
+    sequence_to_id: dict[str, str],
+) -> set[str]:
+    candidates: set[str] = set()
+
+    sequence = normalize_sequence(row.get(sequence_column, ""))
+    if sequence:
+        sequence_id = sequence_to_id.get(sequence)
+        if sequence_id:
+            candidates.add(sequence_id)
+        candidates.add(sequence)
+
+    for column in id_columns:
+        value = clean_text(row.get(column, ""))
+        if value:
+            candidates.add(value)
+
+    return candidates
+
+
+def row_matches_allowed_ids(
+    row: dict[str, str],
+    config,
+    allowed_ids: set[str],
+    sequence_to_id: dict[str, str],
+) -> bool:
+    main_candidates = candidate_embedding_keys(
+        row,
+        sequence_column=config.sequence_column,
+        id_columns=config.sample_id_candidates,
+        sequence_to_id=sequence_to_id,
+    )
+    if not main_candidates or not any(key in allowed_ids for key in main_candidates):
+        return False
+
+    if config.batch_kind == "mutation_delta_global" and config.wildtype_sequence_column:
+        wildtype_candidates = candidate_embedding_keys(
+            row,
+            sequence_column=config.wildtype_sequence_column,
+            id_columns=(),
+            sequence_to_id=sequence_to_id,
+        )
+        if not wildtype_candidates or not any(key in allowed_ids for key in wildtype_candidates):
+            return False
+
+    return True
+
+
+def filter_rows_to_allowed_ids(
+    rows: list[dict[str, str]],
+    config,
+    allowed_ids: set[str],
+    sequence_to_id: dict[str, str],
+) -> list[dict[str, str]]:
+    return [
+        row for row in rows
+        if row_matches_allowed_ids(row, config, allowed_ids, sequence_to_id)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -817,6 +905,7 @@ def main(
     emb_name_filter: str | None = None,
     model_prefix_filter: str | None = None,
     skip_label_kinds: set[str] | None = None,
+    allowed_ids_path: str | None = None,
 ):
     log(f"[startup] Python started. emb_name={emb_name_filter}")
     if model_prefix_filter is not None:
@@ -830,6 +919,16 @@ def main(
     card_path = Path(card_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    allowed_ids: set[str] | None = None
+    sequence_to_id: dict[str, str] = {}
+    if allowed_ids_path is not None:
+        allowed_ids = load_allowed_ids(allowed_ids_path)
+        if SEQUENCE_INDEX_PATH.exists():
+            sequence_to_id = load_sequence_to_id_index(SEQUENCE_INDEX_PATH)
+        log(
+            f"[startup] Restricting training rows to {len(allowed_ids):,} embedding IDs "
+            f"from {allowed_ids_path}"
+        )
 
     if emb_name_filter is not None and emb_name_filter not in embeddings:
         raise ValueError(f"Unknown embedding '{emb_name_filter}'. Available: {', '.join(embeddings)}")
@@ -895,6 +994,19 @@ def main(
                 train_rows = get_task_rows(config, "train", split_variant)
                 val_rows = get_task_rows(config, "val", split_variant)
                 test_rows = get_task_rows(config, "test", split_variant)
+                if allowed_ids is not None:
+                    orig_train_rows = len(train_rows)
+                    orig_val_rows = len(val_rows)
+                    orig_test_rows = len(test_rows)
+                    train_rows = filter_rows_to_allowed_ids(train_rows, config, allowed_ids, sequence_to_id)
+                    val_rows = filter_rows_to_allowed_ids(val_rows, config, allowed_ids, sequence_to_id)
+                    test_rows = filter_rows_to_allowed_ids(test_rows, config, allowed_ids, sequence_to_id)
+                    log(
+                        "    Applied allowed-id filter:"
+                        f" train={len(train_rows):,}/{orig_train_rows:,}"
+                        f" val={len(val_rows):,}/{orig_val_rows:,}"
+                        f" test={len(test_rows):,}/{orig_test_rows:,}"
+                    )
                 needed_ids, needed_sequences = collect_needed_lookup_keys(train_rows + val_rows + test_rows, config)
                 log(f"    Rows loaded: train={len(train_rows)}, val={len(val_rows)}, test={len(test_rows)} | need {len(needed_ids)} ids, {len(needed_sequences)} seqs")
 
@@ -1231,6 +1343,11 @@ if __name__ == "__main__":
         default=[],
         help="Skip tasks with this label_kind. Repeatable.",
     )
+    parser.add_argument(
+        "--allowed_ids",
+        default=None,
+        help="Optional path to common_ids.txt. Rows whose embeddings are not in this ID set are excluded.",
+    )
     args = parser.parse_args()
     main(
         args.card_path,
@@ -1239,4 +1356,5 @@ if __name__ == "__main__":
         args.emb_name,
         model_prefix_filter=args.model_prefix,
         skip_label_kinds=set(args.skip_label_kind),
+        allowed_ids_path=args.allowed_ids,
     )

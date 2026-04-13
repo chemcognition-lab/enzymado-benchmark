@@ -41,6 +41,7 @@ fi
 : "${OUTPUT_DIR:=${REPO}/results/predictions}"
 : "${MODEL_PREFIX:=}"
 : "${SKIP_LABEL_KINDS:=}"
+: "${COMMON_IDS_PATH:=}"
 
 export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
 export PYTHONNOUSERSITE=1
@@ -121,6 +122,9 @@ fi
 if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
     echo "Skip label kinds: ${SKIP_LABEL_KINDS}"
 fi
+if [[ -n "${COMMON_IDS_PATH}" ]]; then
+    echo "Allowed IDs: ${COMMON_IDS_PATH}"
+fi
 
 TRAIN_ARGS=(
     "${CARD_PATH}"
@@ -140,6 +144,10 @@ if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
             TRAIN_ARGS+=(--skip_label_kind "${_skip_kind}")
         fi
     done
+fi
+
+if [[ -n "${COMMON_IDS_PATH}" ]]; then
+    TRAIN_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
 fi
 
 python -u "${REPO}/models/train.py" "${TRAIN_ARGS[@]}"
