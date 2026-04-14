@@ -24,7 +24,13 @@ def create_parser() -> argparse.ArgumentParser:
         "--expected-dim",
         type=int,
         default=None,
-        help="Optional expected shape for each embedding vector, e.g. 1024 for shape (1024,).",
+        help="Expected embedding dimension. For pooled mode this expects shape (D,); for residue mode it expects shape (L, D).",
+    )
+    parser.add_argument(
+        "--layout",
+        choices=("pooled", "residue"),
+        default="pooled",
+        help="Expected dataset layout: pooled=(D,), residue=(L, D). Default: pooled.",
     )
     parser.add_argument(
         "--sample-bad-shapes",
@@ -51,13 +57,20 @@ def main() -> int:
             if args.expected_dim is not None:
                 for key in h5.keys():
                     shape = tuple(h5[key].shape)
-                    if shape != (args.expected_dim,):
+                    if args.layout == "pooled":
+                        shape_ok = shape == (args.expected_dim,)
+                    else:
+                        shape_ok = len(shape) == 2 and shape[1] == args.expected_dim
+                    if not shape_ok:
                         if len(bad_shapes) < args.sample_bad_shapes:
                             bad_shapes.append((key, shape))
             print(f"H5: {args.h5}")
             print(f"Dataset count: {n}/{args.expected_count}")
             if args.expected_dim is not None:
-                print(f"Expected dim: ({args.expected_dim},)")
+                if args.layout == "pooled":
+                    print(f"Expected shape: ({args.expected_dim},)")
+                else:
+                    print(f"Expected trailing dim: {args.expected_dim} with rank-2 residue embeddings")
     except BlockingIOError as exc:
         print(f"ERROR: H5 is locked or still being written: {args.h5} ({exc})", file=sys.stderr)
         return 1

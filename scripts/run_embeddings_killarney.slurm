@@ -247,10 +247,16 @@ python "${REPO}/${SCRIPT_PATH}" \
     --per_protein "${PER_PROTEIN}"
 
 EXPECTED_COUNT="$(grep -c '^>' "${FASTA_PATH}")"
+if [[ "${PER_PROTEIN}" == "1" ]]; then
+    VALIDATION_LAYOUT="pooled"
+else
+    VALIDATION_LAYOUT="residue"
+fi
 if python "${REPO}/scripts/enzyme_utils/validate_embedding_h5.py" \
     --h5 "${OUT_PATH}" \
     --expected-count "${EXPECTED_COUNT}" \
-    --expected-dim "${MODEL_DIM}"; then
+    --expected-dim "${MODEL_DIM}" \
+    --layout "${VALIDATION_LAYOUT}"; then
     echo "Embedding file validated successfully."
 elif [[ "${ALLOW_PARTIAL}" == "1" ]]; then
     echo "WARNING: validation failed, but ALLOW_PARTIAL=1 so the job will still exit successfully." >&2
