@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Central task registry describing dataset paths, labels, and split files."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 @dataclass(frozen=True)
 class TaskConfig:
+    """Configuration needed to build datasets and loaders for one task."""
     name: str
     batch_kind: str
     label_kind: str
@@ -220,6 +222,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
 
 
 def get_task_config(task_name: str) -> TaskConfig:
+    """Return the registered config for a task name."""
     try:
         return TASK_REGISTRY[task_name]
     except KeyError as exc:

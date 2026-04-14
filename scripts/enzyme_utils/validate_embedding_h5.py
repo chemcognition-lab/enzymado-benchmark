@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+"""Validate embedding H5 files before they are fed into training jobs."""
 
 import argparse
 import sys

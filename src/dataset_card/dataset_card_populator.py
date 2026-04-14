@@ -1,3 +1,5 @@
+"""Populate dataset card JSON files with statistics computed from processed CSVs."""
+
 import pandas as pd
 import numpy as np
 import json
@@ -6,6 +8,7 @@ from datetime import datetime
 from typing import Dict, Any
 
 class DatasetCardPopulator:
+    """Compute dataset statistics and write them back into dataset card files."""
     def __init__(self, base_directory: str):
         self.base_dir = Path(base_directory)
         self.template_path = self.base_dir / "active_sites" / "dataset_card_template.json"
@@ -31,6 +34,7 @@ class DatasetCardPopulator:
         }
 
     def sanitize_for_json(self, obj: Any) -> Any:
+        """Convert pandas and NumPy values into JSON-safe Python objects."""
         if isinstance(obj, dict):
             return {str(k): self.sanitize_for_json(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple, set)):
@@ -45,6 +49,7 @@ class DatasetCardPopulator:
             return str(obj)
 
     def get_files(self, directory: Path) -> Dict[str, Any]:
+        """Discover the base CSV, split CSVs, and card path for one property."""
         files = {"base": None, "splits": {}, "json": directory / "dataset_card.json"}
         for file in directory.glob("*.csv"):
             if "splits" not in file.name:
@@ -54,6 +59,7 @@ class DatasetCardPopulator:
         return files
 
     def calc_distribution(self, series: pd.Series) -> Any:
+        """Summarize a label distribution for categorical or numeric targets."""
         series = series.dropna()
         if series.empty: return None
 
@@ -86,6 +92,7 @@ class DatasetCardPopulator:
             }
 
     def process_splits(self, base_df: pd.DataFrame, split_path: Path, target_col: str) -> Dict[str, Any]:
+        """Compute leakage checks, split sizes, and per-split label distributions."""
         split_df = pd.read_csv(split_path)
         split_col = [c for c in split_df.columns if c.lower() in ['split', 'set']]
         
@@ -111,6 +118,7 @@ class DatasetCardPopulator:
         return {"leakage": leakage, "distributions": distributions, "sizes": sizes}
 
     def calc_stats(self, base_df: pd.DataFrame, prop_name: str, split_files: Dict[str, Path]) -> Dict[str, Any]:
+        """Collect dataset-wide statistics for one processed property table."""
         seq_col = next((c for c in base_df.columns if c in ['protein_sequence', 'wildtype_sequence']), None)
         target_col = self.target_map.get(prop_name)
 
@@ -169,6 +177,7 @@ class DatasetCardPopulator:
         })
 
     def run(self):
+        """Populate every dataset card below the configured base directory."""
         print("Starting Dataset Card Population Pipeline...\n")
         
         for prop_dir in sorted(self.base_dir.iterdir()):

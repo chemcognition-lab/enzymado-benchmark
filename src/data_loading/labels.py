@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Label builders for scalar, binary, multilabel, and residue-level tasks."""
 
 import ast
 from dataclasses import dataclass, field
@@ -10,10 +11,12 @@ from .splits import clean_text, normalize_sequence
 
 @dataclass
 class StandardScaler1D:
+    """Minimal 1D standard scaler used for numeric targets."""
     mean_: float | None = None
     scale_: float | None = None
 
     def fit(self, values: list[float] | np.ndarray) -> "StandardScaler1D":
+        """Estimate mean and scale from 1D numeric values."""
         array = np.asarray(values, dtype=np.float32).reshape(-1)
         if array.size == 0:
             raise ValueError("Cannot fit StandardScaler1D on an empty array.")
@@ -23,12 +26,14 @@ class StandardScaler1D:
         return self
 
     def transform(self, values: list[float] | np.ndarray) -> np.ndarray:
+        """Standardize values using the fitted statistics."""
         if self.mean_ is None or self.scale_ is None:
             raise ValueError("StandardScaler1D must be fit before calling transform().")
         array = np.asarray(values, dtype=np.float32)
         return (array - self.mean_) / self.scale_
 
     def inverse_transform(self, values: list[float] | np.ndarray) -> np.ndarray:
+        """Undo standardization for model outputs or labels."""
         if self.mean_ is None or self.scale_ is None:
             raise ValueError("StandardScaler1D must be fit before calling inverse_transform().")
         array = np.asarray(values, dtype=np.float32)
@@ -36,15 +41,18 @@ class StandardScaler1D:
 
     @classmethod
     def from_rows(cls, rows: list[dict[str, str]], target_column: str) -> "StandardScaler1D":
+        """Fit a scaler directly from a list of dataset rows."""
         values = [float(clean_text(row.get(target_column))) for row in rows]
         return cls().fit(values)
 
 
 @dataclass
 class ScalarRegressionLabelBuilder:
+    """Parse numeric regression targets from dataset rows."""
     target_column: str
 
     def build(self, row: dict[str, str]) -> np.float32:
+        """Build a single float32 regression target."""
         value = clean_text(row.get(self.target_column))
         if not value:
             raise ValueError(
@@ -54,6 +62,7 @@ class ScalarRegressionLabelBuilder:
         return np.float32(float(value))
 
     def validate_row(self, row: dict[str, str]) -> str | None:
+        """Validate that a regression target can be parsed."""
         try:
             self.build(row)
         except ValueError as exc:
@@ -63,11 +72,13 @@ class ScalarRegressionLabelBuilder:
 
 @dataclass
 class BinaryLabelBuilder:
+    """Parse binary targets into `0.0` or `1.0` float labels."""
     target_column: str
     true_values: tuple[str, ...] = ("1", "1.0", "true", "True")
     false_values: tuple[str, ...] = ("0", "0.0", "false", "False")
 
     def build(self, row: dict[str, str]) -> np.float32:
+        """Build a float32 binary label from string-like values."""
         value = clean_text(row.get(self.target_column))
         if value in self.true_values:
             return np.float32(1.0)
@@ -79,6 +90,7 @@ class BinaryLabelBuilder:
         )
 
     def validate_row(self, row: dict[str, str]) -> str | None:
+        """Validate that a row contains a supported binary label value."""
         try:
             self.build(row)
         except ValueError as exc:
@@ -88,12 +100,14 @@ class BinaryLabelBuilder:
 
 @dataclass
 class HierarchicalECLabelBuilder:
+    """Build level-wise multilabel EC targets from semicolon-separated labels."""
     target_column: str = "ec_number"
     separator: str = ";"
     vocabulary_by_level: dict[str, tuple[str, ...]] | None = None
     _index_by_level: dict[str, dict[str, int]] = field(default_factory=dict, init=False)
 
     def fit(self, rows: list[dict[str, str]]) -> "HierarchicalECLabelBuilder":
+        """Fit the EC vocabulary from training rows only."""
         labels_by_level = {
             level_name: sorted(
                 {
@@ -115,6 +129,7 @@ class HierarchicalECLabelBuilder:
         return self
 
     def parse_labels(self, row: dict[str, str]) -> list[str]:
+        """Split the raw EC payload into individual EC labels."""
         raw_value = clean_text(row.get(self.target_column))
         if not raw_value:
             return []
@@ -122,15 +137,18 @@ class HierarchicalECLabelBuilder:
 
     @staticmethod
     def level_names() -> tuple[str, ...]:
+        """Return the canonical EC hierarchy levels."""
         return ("level_1", "level_2", "level_3", "level_4")
 
     def _parse_single_ec(self, ec_label: str) -> tuple[str, str, str, str]:
+        """Parse a four-level EC string into its hierarchy components."""
         parts = [part.strip() for part in ec_label.split(".")]
         if len(parts) != 4:
             raise ValueError(f"Invalid EC label '{ec_label}'. Expected four levels.")
         return tuple(parts)  # type: ignore[return-value]
 
     def extract_level_labels(self, row: dict[str, str]) -> dict[str, set[str]]:
+        """Expand EC labels into active targets for each hierarchy level."""
         labels_by_level = {level_name: set() for level_name in self.level_names()}
         for ec_label in self.parse_labels(row):
             level_1, level_2, level_3, level_4 = self._parse_single_ec(ec_label)
@@ -145,6 +163,7 @@ class HierarchicalECLabelBuilder:
         return labels_by_level
 
     def build(self, row: dict[str, str]) -> dict[str, dict[str, np.ndarray]]:
+        """Build per-level multilabel targets and their masks."""
         if self.vocabulary_by_level is None:
             raise ValueError("HierarchicalECLabelBuilder must be fit before calling build().")
         if not self._index_by_level:
@@ -175,6 +194,7 @@ class HierarchicalECLabelBuilder:
         }
 
     def validate_row(self, row: dict[str, str]) -> str | None:
+        """Validate EC labels without requiring a fitted vocabulary."""
         try:
             self.extract_level_labels(row)
         except ValueError as exc:
@@ -184,15 +204,18 @@ class HierarchicalECLabelBuilder:
 
 @dataclass
 class FlatECLabelBuilder(HierarchicalECLabelBuilder):
+    """Flatten hierarchical EC targets into one concatenated multilabel vector."""
     flat_vocabulary: tuple[str, ...] | None = None
     _offset_by_level: dict[str, int] = field(default_factory=dict, init=False)
 
     def fit(self, rows: list[dict[str, str]]) -> "FlatECLabelBuilder":
+        """Fit hierarchy vocabularies and derive the flattened index."""
         super().fit(rows)
         self._ensure_flat_index()
         return self
 
     def _ensure_flat_index(self) -> None:
+        """Build the flattened vocabulary and level offsets on first use."""
         if self.vocabulary_by_level is None:
             raise ValueError("FlatECLabelBuilder must be fit before calling build().")
         if not self._index_by_level:
@@ -213,6 +236,7 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
         self.flat_vocabulary = tuple(flat_labels)
 
     def level_offsets(self) -> dict[str, int]:
+        """Return the start offset for each hierarchy level in the flat vector."""
         self._ensure_flat_index()
         return dict(self._offset_by_level)
 
@@ -220,6 +244,7 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
         self,
         ec_label: str,
     ) -> tuple[list[tuple[str, str]], tuple[str, ...], int | None]:
+        """Resolve known EC prefixes and track the first unknown hierarchy level."""
         level_names = self.level_names()
         resolved_labels: list[tuple[str, str]] = []
         resolved_prefix_parts: list[str] = []
@@ -244,6 +269,7 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
         resolved_prefix_parts: tuple[str, ...],
         first_unknown_level: int,
     ) -> None:
+        """Mask descendants beneath a partially known EC prefix."""
         prefix = ".".join(resolved_prefix_parts)
         for level_name in self.level_names()[first_unknown_level - 1:]:
             offset = self._offset_by_level[level_name]
@@ -252,6 +278,7 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
                     target_mask[offset + index] = False
 
     def build(self, row: dict[str, str]) -> dict[str, np.ndarray]:
+        """Build a flat multilabel EC target with unknown descendants masked out."""
         self._ensure_flat_index()
         total_dim = len(self.flat_vocabulary or ())
         target = np.zeros(total_dim, dtype=np.float32)
@@ -289,6 +316,7 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
 
 
 def _parse_position_list(raw_value: str) -> list[int]:
+    """Parse residue position payloads stored as Python literals."""
     cleaned = clean_text(raw_value)
     if not cleaned:
         return []
@@ -305,10 +333,12 @@ def _parse_position_list(raw_value: str) -> list[int]:
 
 @dataclass
 class ResidueBinaryVectorLabelBuilder:
+    """Build residue-wise binary vectors for active- and binding-site tasks."""
     positions_column: str
     sequence_column: str = "protein_sequence"
 
     def build(self, row: dict[str, str]) -> tuple[np.ndarray, np.ndarray]:
+        """Build residue targets and the matching residue mask for one row."""
         sequence = normalize_sequence(row.get(self.sequence_column))
         if not sequence:
             raise ValueError(

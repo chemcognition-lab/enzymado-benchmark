@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate per-sequence or pooled ESM-2 embeddings and store them in H5."""
+
 import argparse
 import time
 from pathlib import Path

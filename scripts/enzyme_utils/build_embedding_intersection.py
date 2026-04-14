@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+"""Summarize overlap and shape consistency across generated embedding files."""
 
 import argparse
 import json

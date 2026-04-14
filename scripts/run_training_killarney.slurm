@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+# Submit one embedding configuration per array task or override `EMB_NAME`.
+
 # Submit examples:
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
 #   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_training_killarney.slurm

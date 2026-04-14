@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Convert the BioLiP text export into a CSV with a stable header row."""
+
 import argparse
 import csv
 import gzip

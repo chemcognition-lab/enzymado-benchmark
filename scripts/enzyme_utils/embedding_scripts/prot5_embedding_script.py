@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Sep 23 18:33:22 2020
-
-@author: mheinzinger
+Generate ProtT5 embeddings from a FASTA file and save them to an H5 store.
 """
 
 import argparse

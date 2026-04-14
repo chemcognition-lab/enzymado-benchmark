@@ -1,17 +1,11 @@
-# -----------------------------------------------------------------------------
-# Made By Jose Manuel Barraza Chavez @ ChemicalCognitionLab @ University of Toronto (2025)
-# Finding better representations for enzymes!
-# Protein Language Model Embedders Factory
-# For more crappy code go to: @ChemistryPlus on GitHub
-# -----------------------------------------------------------------------------
+"""Small factory for loading the protein embedding backends used in the repo."""
 
 import torch
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List, Union, Optional
-# -----------------------------------------------------------------------------
-# SAFE IMPORTS
-# -----------------------------------------------------------------------------
+# Optional dependencies are loaded lazily so the module can still import in
+# environments that only need a subset of the embedders.
 try:
     from transformers import T5Tokenizer, T5EncoderModel, AutoTokenizer, AutoModel
 except ImportError:

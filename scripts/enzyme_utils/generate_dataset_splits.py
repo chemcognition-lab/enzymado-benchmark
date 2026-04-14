@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""CLI shim for the dataset splitting utilities in :mod:`src.dataset_splitting`."""
+
 from pathlib import Path
 import sys
 

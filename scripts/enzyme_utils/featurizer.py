@@ -1,3 +1,5 @@
+"""Helpers for featurizing ligands, proteins, and loading saved embeddings."""
+
 import pandas as pd
 import requests
 import numpy as np

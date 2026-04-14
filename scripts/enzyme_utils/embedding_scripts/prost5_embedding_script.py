@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jun 16 14:27:44 2023
-
-@author: mheinzinger
+Generate ProsT5 embeddings from a FASTA file and save them to an H5 store.
 """
 
 import argparse

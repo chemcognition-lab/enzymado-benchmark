@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+"""Build a deduplicated FASTA file from the canonical protein sequence index."""
 
 import argparse
 import csv

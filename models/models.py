@@ -1,3 +1,5 @@
+"""Model wrappers and registries used by the benchmark training pipeline."""
+
 import copy
 
 try:
@@ -11,6 +13,7 @@ import torch.nn as nn
 
 
 class SGDModel(nn.Module):
+    """Single linear layer used by the SGD baseline wrappers."""
     def __init__(self, input_dim, output_dim):
         super().__init__()
         self.linear = nn.Linear(input_dim, output_dim)
@@ -20,6 +23,7 @@ class SGDModel(nn.Module):
 
 
 class MLPModel(nn.Module):
+    """Feed-forward MLP used for pooled or residue-wise embedding inputs."""
     def __init__(self, input_dim, hidden_dims, output_dim):
         super().__init__()
         layers = []
@@ -36,6 +40,7 @@ class MLPModel(nn.Module):
 
 
 class SharedMLPBackbone(nn.Module):
+    """Shared hidden stack for multi-head EC prediction models."""
     def __init__(self, input_dim, hidden_dims):
         super().__init__()
         layers = []
@@ -52,6 +57,7 @@ class SharedMLPBackbone(nn.Module):
 
 
 class MultiHeadMLPModel(nn.Module):
+    """Shared MLP backbone followed by one linear head per target group."""
     def __init__(self, input_dim, hidden_dims, output_dims):
         super().__init__()
         self.backbone = SharedMLPBackbone(input_dim, hidden_dims)
@@ -81,6 +87,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def _make_optimizer(parameters, optimizer_name: str, lr: float):
+    """Instantiate the optimizer requested by a lightweight wrapper config."""
     if optimizer_name == "sgd":
         return torch.optim.SGD(parameters, lr=lr)
     if optimizer_name == "adam":
@@ -89,6 +96,7 @@ def _make_optimizer(parameters, optimizer_name: str, lr: float):
 
 
 def _pad_1d_array_list(arrays: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
+    """Pad variable-length 1D outputs into a rectangular NumPy array."""
     if not arrays:
         return np.zeros((0, 0), dtype=dtype)
     max_length = max(array.shape[0] for array in arrays)
@@ -147,6 +155,7 @@ def _run_training_with_early_stopping(
     min_delta: float = 0.0,
     log_every: int = 10,
 ) -> tuple[int | None, float | None]:
+    """Run a training loop and optionally restore the best validation checkpoint."""
     import sys, time as _time
     if val_loss_fn is None or patience is None or patience <= 0:
         for ep in range(epochs):
@@ -300,7 +309,7 @@ class SGDRegressorTorch:
 
 
 class SGDClassifierTorch:
-    """SGDModel wrapper for classification. Accepts 2D (n, emb) or 3D (n, seq, emb) + mask."""
+    """Linear classifier for pooled or residue-aware embedding inputs."""
 
     def __init__(self, lr=0.01, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
         self.lr = lr
@@ -461,7 +470,7 @@ class SGDClassifierTorch:
 
 
 class MLPRegressorTorch:
-    """MLPModel wrapper for regression. Accepts 2D (n, emb) or 3D (n, seq, emb) + mask."""
+    """MLP regressor for pooled or residue-aware embedding inputs."""
 
     def __init__(self, hidden_dims=(512, 256), lr=1e-3, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
         self.hidden_dims = hidden_dims
@@ -570,7 +579,7 @@ class MLPRegressorTorch:
 
 
 class MLPClassifierTorch:
-    """MLPModel wrapper for classification. Accepts 2D (n, emb) or 3D (n, seq, emb) + mask."""
+    """MLP classifier for pooled or residue-aware embedding inputs."""
 
     def __init__(self, hidden_dims=(512, 256), lr=1e-3, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
         self.hidden_dims = hidden_dims
@@ -755,6 +764,7 @@ class ECMultiHeadClassifierTorch:
 
     @staticmethod
     def _targets_to_tensors(y, target_mask, device: torch.device):
+        """Move nested EC target dictionaries onto the training device."""
         y_t = {
             level_name: torch.from_numpy(np.asarray(target, dtype=np.float32)).to(device)
             for level_name, target in y.items()
@@ -767,6 +777,7 @@ class ECMultiHeadClassifierTorch:
 
     @staticmethod
     def _compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
+        """Average masked BCE losses across EC hierarchy levels."""
         loss_terms = []
         for level_name, logits in logits_by_level.items():
             level_loss = criterion(logits, y_t[level_name]).mean(dim=1)
@@ -780,6 +791,7 @@ class ECMultiHeadClassifierTorch:
         return torch.stack(loss_terms).mean()
 
     def _forward(self, X_t: torch.Tensor):
+        """Forward pass for already pooled embedding inputs."""
         if X_t.ndim != 2:
             raise ValueError(f"ECMultiHeadClassifierTorch expects pooled 2D inputs, got shape {tuple(X_t.shape)}")
         return self.model(X_t)
@@ -924,6 +936,7 @@ class XGBFlatECClassifier:
         y,
         target_mask=None,
     ) -> tuple[np.ndarray, np.ndarray]:
+        """Combine explicit masks with NaN-based unknown-label masking."""
         y_np = np.asarray(y, dtype=np.float32)
         if y_np.ndim != 2:
             raise ValueError(f"XGBFlatECClassifier expects 2D targets, got shape {y_np.shape}")
@@ -1070,6 +1083,7 @@ class ResidueBinaryClassifierTorch:
 
     @staticmethod
     def _batch_to_input(batch, device: torch.device):
+        """Convert a residue-level batch object into tensors on the target device."""
         X_t = torch.from_numpy(np.asarray(batch.protein_emb, dtype=np.float32)).to(device)
         y_t = torch.from_numpy(np.asarray(batch.target_per_residue, dtype=np.float32)).to(device)
         target_mask_t = torch.from_numpy(np.asarray(batch.target_mask, dtype=bool)).to(device)
@@ -1086,8 +1100,8 @@ class ResidueBinaryClassifierTorch:
         optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
-
         def compute_batch_loss(logits, y_t, target_mask_t):
+            """Mask padded residues out of the BCE loss."""
             loss = criterion(logits, y_t)
             mask_f = target_mask_t.float()
             return (loss * mask_f).sum() / mask_f.sum().clamp(min=1.0)
@@ -1174,6 +1188,7 @@ class XGBResidueBinaryClassifier:
 
     @staticmethod
     def _flatten_batch(batch) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Flatten only valid residues into XGBoost-ready residue examples."""
         X = np.asarray(batch.protein_emb, dtype=np.float32)
         y = np.asarray(batch.target_per_residue, dtype=np.float32)
         mask = np.asarray(batch.target_mask, dtype=bool)
@@ -1185,6 +1200,7 @@ class XGBResidueBinaryClassifier:
 
     @classmethod
     def _flatten_loader(cls, dataloader) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Flatten an entire residue-level loader into X, y, and per-sample lengths."""
         X_chunks: list[np.ndarray] = []
         y_chunks: list[np.ndarray] = []
         lengths: list[int] = []
@@ -1212,6 +1228,7 @@ class XGBResidueBinaryClassifier:
 
     @staticmethod
     def _split_flat_predictions(flat_pred: np.ndarray, lengths: np.ndarray) -> list[np.ndarray]:
+        """Recover per-protein residue predictions from flattened XGBoost outputs."""
         rows: list[np.ndarray] = []
         start = 0
         for length in lengths.tolist():
@@ -1281,7 +1298,7 @@ class XGBResidueBinaryClassifier:
 
         return _pad_1d_array_list(pred_rows, dtype=np.float32)
 
-
+# Baseline pooled models keyed by the high-level task type in the benchmark card.
 MODEL_MAP = {
     "classification": {
         "mlp_classification": {
@@ -1343,7 +1360,8 @@ if XGBRegressor is not None:
         "params": {"n_estimators": 100, "max_depth": 6, "learning_rate": 0.1, "n_jobs": -1, "device": "cuda"},
     }
 
-
+# Structured tasks have custom wrappers because their targets are not simple 1D
+# arrays and need masking or multiple output heads.
 STRUCTURED_MODEL_MAP = {
     "multilabel_ec": {
         "mlp_classification": {

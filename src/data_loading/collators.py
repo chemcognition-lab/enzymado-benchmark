@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Batch collation utilities for the benchmark's supported task types."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -7,6 +8,7 @@ import numpy as np
 
 
 def _pad_residue_embeddings(embeddings: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    """Pad variable-length residue embeddings and return a boolean residue mask."""
     if not embeddings:
         raise ValueError("Cannot collate an empty batch.")
     max_length = max(embedding.shape[0] for embedding in embeddings)
@@ -22,6 +24,7 @@ def _pad_residue_embeddings(embeddings: list[np.ndarray]) -> tuple[np.ndarray, n
 
 
 def _pad_vectors(vectors: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
+    """Pad 1D arrays to the maximum length present in the batch."""
     max_length = max(vector.shape[0] for vector in vectors)
     batch = np.zeros((len(vectors), max_length), dtype=dtype)
     for index, vector in enumerate(vectors):
@@ -30,6 +33,7 @@ def _pad_vectors(vectors: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
 
 
 def _stack_targets(targets: list[Any]) -> np.ndarray:
+    """Stack scalar, vector, or nested target payloads into batch arrays."""
     if isinstance(targets[0], dict):
         return {
             key: _stack_targets([target[key] for target in targets])
@@ -44,6 +48,7 @@ def _stack_targets(targets: list[Any]) -> np.ndarray:
 
 
 def _validate_residue_sample_lengths(samples: list[dict[str, Any]]) -> None:
+    """Validate residue-level samples before they are padded into a batch."""
     for sample in samples:
         sample_id = sample.get("sample_id", "")
         embedding_length = sample["protein_emb"].shape[0]
@@ -64,6 +69,7 @@ def _validate_residue_sample_lengths(samples: list[dict[str, Any]]) -> None:
 
 @dataclass
 class ProteinGlobalBatch:
+    """Padded batch for protein-level tasks without ligand features."""
     sample_id: list[str]
     protein_emb: np.ndarray
     protein_mask: np.ndarray
@@ -73,6 +79,7 @@ class ProteinGlobalBatch:
 
 @dataclass
 class ProteinLigandGlobalBatch:
+    """Padded batch for protein-ligand tasks."""
     sample_id: list[str]
     protein_emb: np.ndarray
     protein_mask: np.ndarray
@@ -83,6 +90,7 @@ class ProteinLigandGlobalBatch:
 
 @dataclass
 class MutationDeltaGlobalBatch:
+    """Padded batch for mutation-delta tasks."""
     sample_id: list[str]
     protein_delta_emb: np.ndarray
     protein_mask: np.ndarray
@@ -92,6 +100,7 @@ class MutationDeltaGlobalBatch:
 
 @dataclass
 class ProteinResidueBatch:
+    """Padded batch for residue-wise supervision."""
     sample_id: list[str]
     protein_emb: np.ndarray
     protein_mask: np.ndarray
@@ -100,6 +109,7 @@ class ProteinResidueBatch:
 
 
 class ProteinGlobalCollator:
+    """Collate global protein samples into a padded batch."""
     def __call__(self, samples: list[dict[str, Any]]) -> ProteinGlobalBatch:
         protein_emb, protein_mask = _pad_residue_embeddings(
             [sample["protein_emb"] for sample in samples]
@@ -118,6 +128,7 @@ class ProteinGlobalCollator:
 
 
 class ProteinLigandGlobalCollator:
+    """Collate protein and ligand features for joint prediction tasks."""
     def __call__(self, samples: list[dict[str, Any]]) -> ProteinLigandGlobalBatch:
         protein_emb, protein_mask = _pad_residue_embeddings(
             [sample["protein_emb"] for sample in samples]
@@ -141,6 +152,7 @@ class ProteinLigandGlobalCollator:
 
 
 class MutationDeltaGlobalCollator:
+    """Collate mutation-delta embeddings for regression or classification."""
     def __call__(self, samples: list[dict[str, Any]]) -> MutationDeltaGlobalBatch:
         protein_delta_emb, protein_mask = _pad_residue_embeddings(
             [sample["protein_delta_emb"] for sample in samples]
@@ -159,6 +171,7 @@ class MutationDeltaGlobalCollator:
 
 
 class ProteinResidueCollator:
+    """Collate residue-level labels while preserving residue masks."""
     def __call__(self, samples: list[dict[str, Any]]) -> ProteinResidueBatch:
         _validate_residue_sample_lengths(samples)
         protein_emb, protein_mask = _pad_residue_embeddings(

@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+# Submit one embedding model per array task or override `EMBED_MODEL` directly.
+
 # Submit examples:
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
 #   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_embeddings_killarney.slurm
@@ -39,8 +41,9 @@ fi
 : "${UV_LINK_MODE:=copy}"
 : "${PER_PROTEIN:=0}"
 : "${ALLOW_PARTIAL:=0}"
+: "${EMBED_OUTPUT_ROOT:=${REPO}/data}"
 
-export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE PER_PROTEIN ALLOW_PARTIAL
+export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT
 export PYTHONNOUSERSITE=1
 
 mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
@@ -200,9 +203,9 @@ CSV_PATH="${REPO}/data/processed/protein_sequences_unique.csv"
 FASTA_PATH="${REPO}/data/fastas/protein_sequences_unique.fasta"
 
 if [[ "${PER_PROTEIN}" == "1" ]]; then
-    OUT_DIR="${REPO}/data/embeddings_mean_pooled/protein_sequences_unique"
+    OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings_mean_pooled/protein_sequences_unique"
 else
-    OUT_DIR="${REPO}/data/embeddings/protein_sequences_unique"
+    OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings/protein_sequences_unique"
 fi
 
 OUT_PATH="${OUT_DIR}/${MODEL_NAME}.h5"

@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Utilities for generating random or similarity-aware dataset split CSV files."""
 
 import argparse
 import csv
@@ -31,11 +32,26 @@ ID_COLUMN_ALIASES = (
 )
 
 
+def sanitize_output_tag(output_tag: str | None) -> str | None:
+    """Return a filesystem-safe filename fragment or ``None`` when no tag is set."""
+    if output_tag is None:
+        return None
+
+    cleaned = "".join(
+        character if character.isalnum() or character in {"-", "_", "."} else "_"
+        for character in output_tag.strip()
+    ).strip("._-")
+    if not cleaned:
+        raise ValueError("Output tag must contain at least one alphanumeric character.")
+    return cleaned
+
+
 def validate_split_fractions(
     train_fraction: float,
     val_fraction: float,
     test_fraction: float,
 ) -> dict[str, float]:
+    """Validate train/val/test fractions and return them as a split map."""
     fractions = {
         "train": float(train_fraction),
         "val": float(val_fraction),
@@ -58,6 +74,7 @@ def validate_split_fractions(
 
 
 def clean_sequence(sequence: str | None) -> str:
+    """Strip whitespace and uppercase a protein sequence."""
     if sequence is None:
         return ""
     return "".join(str(sequence).split()).upper()
@@ -67,6 +84,7 @@ def detect_sequence_column(
     fieldnames: list[str],
     sequence_col: str | None = None,
 ) -> str:
+    """Resolve the sequence column explicitly or from common aliases."""
     if sequence_col:
         if sequence_col not in fieldnames:
             raise ValueError(f"Sequence column '{sequence_col}' is not present in the dataset.")
@@ -83,6 +101,7 @@ def detect_sequence_column(
 
 
 def detect_id_column(fieldnames: list[str]) -> str | None:
+    """Return the first identifier-like column present in a dataset."""
     for alias in ID_COLUMN_ALIASES:
         if alias in fieldnames:
             return alias
@@ -93,6 +112,7 @@ def can_use_id_column(
     rows: list[dict[str, str]],
     id_col: str,
 ) -> bool:
+    """Check whether an identifier column yields a one-split-per-id mapping."""
     assignment_by_id: dict[str, str] = {}
     saw_value = False
 
@@ -116,6 +136,7 @@ def select_output_id_column(
     fieldnames: list[str],
     preferred_id_col: str | None = None,
 ) -> str:
+    """Choose the safest identifier column for writing split assignment files."""
     candidates: list[str] = []
     if preferred_id_col:
         candidates.append(preferred_id_col)
@@ -136,6 +157,7 @@ def select_output_id_column(
 
 
 def read_csv_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read a CSV into fieldnames and row dictionaries."""
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = list(reader.fieldnames or [])
@@ -152,6 +174,7 @@ def build_group_index(
     sequence_col: str,
     group_col: str | None = None,
 ) -> tuple[dict[str, list[int]], dict[str, str]]:
+    """Group rows by sequence or by an explicit grouping column."""
     group_to_indices: dict[str, list[int]] = defaultdict(list)
     group_to_sequence: dict[str, str] = {}
 
@@ -186,6 +209,7 @@ def assign_items_to_splits(
     fractions: dict[str, float],
     seed: int = 42,
 ) -> dict[str, str]:
+    """Greedily assign weighted groups to splits while approximating target ratios."""
     items = list(item_weights.items())
     positive_splits = [split for split in SPLIT_NAMES if fractions[split] > 0]
     if len(items) < len(positive_splits):
@@ -211,6 +235,7 @@ def assign_items_to_splits(
         key=lambda split: target_weights[split],
         reverse=True,
     )
+    # Seed each requested split with one group so small splits are not left empty.
     seeded_items = items[: len(split_priority)]
     remaining_items = items[len(split_priority) :]
     for (item_name, item_weight), split in zip(seeded_items, split_priority, strict=True):
@@ -251,6 +276,7 @@ def apply_group_assignments(
     group_to_indices: dict[str, list[int]],
     assignments: dict[str, str],
 ) -> tuple[list[str], list[dict[str, str]]]:
+    """Attach a split label to every row according to its group assignment."""
     output_fieldnames = list(fieldnames)
     if "split" not in output_fieldnames:
         output_fieldnames.append("split")
@@ -268,6 +294,7 @@ def summarize_split_rows(
     rows: list[dict[str, str]],
     sequence_col: str,
 ) -> dict[str, dict[str, int]]:
+    """Summarize row and unique-protein counts for each split."""
     summary: dict[str, dict[str, int]] = {}
     for split_name in SPLIT_NAMES:
         split_rows = [row for row in rows if row.get("split") == split_name]
@@ -284,6 +311,7 @@ def build_split_assignment_rows(
     fieldnames: list[str],
     id_col: str | None = None,
 ) -> tuple[list[str], list[dict[str, str]]]:
+    """Build the compact `id,split` table consumed by the training pipeline."""
     resolved_id_col = select_output_id_column(
         rows,
         fieldnames,
@@ -330,6 +358,7 @@ def generate_random_split_rows(
     group_col: str | None = None,
     seed: int = 42,
 ) -> tuple[list[str], list[dict[str, str]], dict[str, dict[str, int]]]:
+    """Generate random but group-aware split assignments."""
     fractions = validate_split_fractions(train_fraction, val_fraction, test_fraction)
     group_to_indices, _ = build_group_index(rows, sequence_col, group_col=group_col)
     group_weights = {
@@ -349,6 +378,7 @@ def generate_random_split_rows(
 def build_sequence_dedup_index(
     group_to_sequence: dict[str, str],
 ) -> tuple[dict[str, str], dict[str, str]]:
+    """Deduplicate repeated sequences before MMseqs2 clustering."""
     sequence_to_sequence_id: dict[str, str] = {}
     group_to_sequence_id: dict[str, str] = {}
 
@@ -367,6 +397,7 @@ def build_sequence_dedup_index(
 
 
 def write_fasta(sequence_id_to_sequence: dict[str, str], fasta_path: Path) -> None:
+    """Write a temporary FASTA file used for MMseqs2 clustering."""
     with fasta_path.open("w", encoding="utf-8") as handle:
         for sequence_id, sequence in sequence_id_to_sequence.items():
             handle.write(f">{sequence_id}\n{sequence}\n")
@@ -376,6 +407,7 @@ def parse_mmseqs_cluster_tsv(
     cluster_tsv_path: Path,
     sequence_ids: set[str],
 ) -> dict[str, str]:
+    """Parse MMseqs2 output into sequence-id to cluster-id assignments."""
     cluster_assignments = {sequence_id: sequence_id for sequence_id in sequence_ids}
     with cluster_tsv_path.open("r", encoding="utf-8") as handle:
         for line in handle:
@@ -387,10 +419,76 @@ def parse_mmseqs_cluster_tsv(
     return cluster_assignments
 
 
+def build_mmseqs_cluster_command(
+    db_path: Path,
+    cluster_db_path: Path,
+    tmp_work_dir: Path,
+    *,
+    identity_threshold: float,
+    coverage_threshold: float | None = None,
+    coverage_mode: int | None = None,
+    cluster_mode: int | None = None,
+    similarity_type: int | None = None,
+    sensitivity: float | None = None,
+    e_value: float | None = None,
+    alignment_mode: int | None = None,
+    seq_id_mode: int | None = None,
+    max_seqs: int | None = None,
+    single_step_clustering: bool = False,
+    cluster_reassign: bool = False,
+) -> list[str]:
+    """Build the ``mmseqs cluster`` command with optional clustering controls."""
+    command = [
+        "mmseqs",
+        "cluster",
+        str(db_path),
+        str(cluster_db_path),
+        str(tmp_work_dir),
+        "--min-seq-id",
+        str(identity_threshold),
+    ]
+    if coverage_threshold is not None:
+        command.extend(["-c", str(coverage_threshold)])
+    if coverage_mode is not None:
+        command.extend(["--cov-mode", str(coverage_mode)])
+    if cluster_mode is not None:
+        command.extend(["--cluster-mode", str(cluster_mode)])
+    if similarity_type is not None:
+        command.extend(["--similarity-type", str(similarity_type)])
+    if sensitivity is not None:
+        command.extend(["-s", str(sensitivity)])
+    if e_value is not None:
+        command.extend(["-e", str(e_value)])
+    if alignment_mode is not None:
+        command.extend(["--alignment-mode", str(alignment_mode)])
+    if seq_id_mode is not None:
+        command.extend(["--seq-id-mode", str(seq_id_mode)])
+    if max_seqs is not None:
+        command.extend(["--max-seqs", str(max_seqs)])
+    if single_step_clustering:
+        command.extend(["--single-step-clustering", "1"])
+    if cluster_reassign:
+        command.extend(["--cluster-reassign", "1"])
+    return command
+
+
 def cluster_sequences_with_mmseqs2(
     sequence_id_to_sequence: dict[str, str],
     identity_threshold: float,
+    *,
+    coverage_threshold: float | None = None,
+    coverage_mode: int | None = None,
+    cluster_mode: int | None = None,
+    similarity_type: int | None = None,
+    sensitivity: float | None = None,
+    e_value: float | None = None,
+    alignment_mode: int | None = None,
+    seq_id_mode: int | None = None,
+    max_seqs: int | None = None,
+    single_step_clustering: bool = False,
+    cluster_reassign: bool = False,
 ) -> dict[str, str]:
+    """Cluster sequences with MMseqs2 and return a representative per sequence."""
     if shutil.which("mmseqs") is None:
         raise FileNotFoundError("mmseqs is not available in PATH.")
 
@@ -402,6 +500,8 @@ def cluster_sequences_with_mmseqs2(
         cluster_tsv_path = tmp_dir / "clusters.tsv"
         tmp_work_dir = tmp_dir / "tmp"
 
+        # Keep all MMseqs2 scratch files inside a temporary directory so split
+        # generation does not leave intermediate databases in the repo tree.
         write_fasta(sequence_id_to_sequence, fasta_path)
         subprocess.run(
             ["mmseqs", "createdb", str(fasta_path), str(db_path)],
@@ -410,15 +510,23 @@ def cluster_sequences_with_mmseqs2(
             text=True,
         )
         subprocess.run(
-            [
-                "mmseqs",
-                "cluster",
-                str(db_path),
-                str(cluster_db_path),
-                str(tmp_work_dir),
-                "--min-seq-id",
-                str(identity_threshold),
-            ],
+            build_mmseqs_cluster_command(
+                db_path,
+                cluster_db_path,
+                tmp_work_dir,
+                identity_threshold=identity_threshold,
+                coverage_threshold=coverage_threshold,
+                coverage_mode=coverage_mode,
+                cluster_mode=cluster_mode,
+                similarity_type=similarity_type,
+                sensitivity=sensitivity,
+                e_value=e_value,
+                alignment_mode=alignment_mode,
+                seq_id_mode=seq_id_mode,
+                max_seqs=max_seqs,
+                single_step_clustering=single_step_clustering,
+                cluster_reassign=cluster_reassign,
+            ),
             check=True,
             capture_output=True,
             text=True,
@@ -436,17 +544,41 @@ def cluster_sequences_with_mmseqs2(
             capture_output=True,
             text=True,
         )
-
         return parse_mmseqs_cluster_tsv(cluster_tsv_path, set(sequence_id_to_sequence))
+
+
 def build_group_clusters(
     group_to_sequence: dict[str, str],
     *,
     identity_threshold: float,
+    coverage_threshold: float | None = None,
+    coverage_mode: int | None = None,
+    cluster_mode: int | None = None,
+    similarity_type: int | None = None,
+    sensitivity: float | None = None,
+    e_value: float | None = None,
+    alignment_mode: int | None = None,
+    seq_id_mode: int | None = None,
+    max_seqs: int | None = None,
+    single_step_clustering: bool = False,
+    cluster_reassign: bool = False,
 ) -> dict[str, str]:
+    """Map each group key onto the cluster id of its representative sequence."""
     group_to_sequence_id, sequence_id_to_sequence = build_sequence_dedup_index(group_to_sequence)
     sequence_clusters = cluster_sequences_with_mmseqs2(
         sequence_id_to_sequence,
         identity_threshold,
+        coverage_threshold=coverage_threshold,
+        coverage_mode=coverage_mode,
+        cluster_mode=cluster_mode,
+        similarity_type=similarity_type,
+        sensitivity=sensitivity,
+        e_value=e_value,
+        alignment_mode=alignment_mode,
+        seq_id_mode=seq_id_mode,
+        max_seqs=max_seqs,
+        single_step_clustering=single_step_clustering,
+        cluster_reassign=cluster_reassign,
     )
 
     return {
@@ -467,6 +599,7 @@ def generate_similarity_split_from_clusters(
     group_col: str | None = None,
     seed: int = 42,
 ) -> tuple[list[str], list[dict[str, str]], dict[str, dict[str, int]]]:
+    """Assign whole sequence clusters to splits to reduce homology leakage."""
     fractions = validate_split_fractions(train_fraction, val_fraction, test_fraction)
     group_to_indices, _ = build_group_index(rows, sequence_col, group_col=group_col)
 
@@ -511,8 +644,20 @@ def generate_similarity_split_rows(
     sequence_col: str,
     group_col: str | None = None,
     identity_threshold: float = 0.3,
+    coverage_threshold: float | None = None,
+    coverage_mode: int | None = None,
+    cluster_mode: int | None = None,
+    similarity_type: int | None = None,
+    sensitivity: float | None = None,
+    e_value: float | None = None,
+    alignment_mode: int | None = None,
+    seq_id_mode: int | None = None,
+    max_seqs: int | None = None,
+    single_step_clustering: bool = False,
+    cluster_reassign: bool = False,
     seed: int = 42,
 ) -> tuple[list[str], list[dict[str, str]], dict[str, dict[str, int]]]:
+    """Cluster groups first, then derive split rows from those clusters."""
     group_to_indices, group_to_sequence = build_group_index(
         rows,
         sequence_col,
@@ -524,6 +669,17 @@ def generate_similarity_split_rows(
     group_clusters = build_group_clusters(
         group_to_sequence,
         identity_threshold=identity_threshold,
+        coverage_threshold=coverage_threshold,
+        coverage_mode=coverage_mode,
+        cluster_mode=cluster_mode,
+        similarity_type=similarity_type,
+        sensitivity=sensitivity,
+        e_value=e_value,
+        alignment_mode=alignment_mode,
+        seq_id_mode=seq_id_mode,
+        max_seqs=max_seqs,
+        single_step_clustering=single_step_clustering,
+        cluster_reassign=cluster_reassign,
     )
     return generate_similarity_split_from_clusters(
         rows,
@@ -544,6 +700,7 @@ def write_split_outputs(
     fieldnames: list[str],
     id_col: str | None = None,
 ) -> None:
+    """Write the compact split assignment CSV for one dataset."""
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     output_fieldnames, assignment_rows = build_split_assignment_rows(
@@ -557,7 +714,20 @@ def write_split_outputs(
         writer.writerows(assignment_rows)
 
 
+def write_split_metadata(
+    output_csv_path: Path,
+    metadata: dict[str, object],
+) -> Path:
+    """Persist a sidecar JSON describing how a split file was generated."""
+    metadata_path = output_csv_path.parent / f"{output_csv_path.stem}.metadata.json"
+    with metadata_path.open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    return metadata_path
+
+
 def resolve_csv_inputs(input_path: Path) -> list[Path]:
+    """Expand a file or directory argument into source CSV datasets."""
     def is_source_dataset(path: Path) -> bool:
         return path.suffix == ".csv" and not path.name.endswith("_splits.csv")
 
@@ -573,6 +743,7 @@ def format_fraction_label(
     val_fraction: float,
     test_fraction: float,
 ) -> str:
+    """Format split fractions into the filename suffix used in the repo."""
     return (
         f"{int(round(train_fraction * 100))}_"
         f"{int(round(val_fraction * 100))}_"
@@ -588,12 +759,19 @@ def build_output_csv_path(
     val_fraction: float,
     test_fraction: float,
     output_root: Path | None = None,
+    output_tag: str | None = None,
 ) -> Path:
+    """Build the output path for a generated split CSV."""
     fraction_label = format_fraction_label(train_fraction, val_fraction, test_fraction)
+    resolved_output_tag = sanitize_output_tag(output_tag)
+    tag_suffix = f"_{resolved_output_tag}" if resolved_output_tag else ""
     if mode == "random":
-        filename = f"{input_csv_path.stem}_random_{fraction_label}_splits.csv"
+        filename = f"{input_csv_path.stem}_random_{fraction_label}{tag_suffix}_splits.csv"
     elif mode == "similarity":
-        filename = f"{input_csv_path.stem}_similarity_mmseqs2_{fraction_label}_splits.csv"
+        filename = (
+            f"{input_csv_path.stem}_similarity_mmseqs2_"
+            f"{fraction_label}{tag_suffix}_splits.csv"
+        )
     else:
         raise ValueError(f"Unsupported split mode: {mode}.")
 
@@ -614,8 +792,20 @@ def split_dataset_csv(
     sequence_col: str | None = None,
     group_col: str | None = None,
     identity_threshold: float = 0.3,
+    coverage_threshold: float | None = None,
+    coverage_mode: int | None = None,
+    cluster_mode: int | None = None,
+    similarity_type: int | None = None,
+    sensitivity: float | None = None,
+    e_value: float | None = None,
+    alignment_mode: int | None = None,
+    seq_id_mode: int | None = None,
+    max_seqs: int | None = None,
+    single_step_clustering: bool = False,
+    cluster_reassign: bool = False,
     seed: int = 42,
 ) -> dict[str, dict[str, int]]:
+    """Generate one split file and return a small split summary."""
     fieldnames, rows = read_csv_rows(input_csv_path)
     if not rows:
         raise ValueError(f"{input_csv_path} does not contain any data rows.")
@@ -645,21 +835,68 @@ def split_dataset_csv(
             sequence_col=resolved_sequence_col,
             group_col=resolved_group_col,
             identity_threshold=identity_threshold,
+            coverage_threshold=coverage_threshold,
+            coverage_mode=coverage_mode,
+            cluster_mode=cluster_mode,
+            similarity_type=similarity_type,
+            sensitivity=sensitivity,
+            e_value=e_value,
+            alignment_mode=alignment_mode,
+            seq_id_mode=seq_id_mode,
+            max_seqs=max_seqs,
+            single_step_clustering=single_step_clustering,
+            cluster_reassign=cluster_reassign,
             seed=seed,
         )
     else:
         raise ValueError(f"Unsupported split mode: {mode}.")
 
+    # Training jobs consume the compact `id,split` artifact written here.
     write_split_outputs(
         output_csv_path,
         split_rows,
         output_fieldnames,
         id_col=resolved_id_col,
     )
+    write_split_metadata(
+        output_csv_path,
+        metadata={
+            "input_csv_path": str(input_csv_path),
+            "output_csv_path": str(output_csv_path),
+            "mode": mode,
+            "sequence_col": resolved_sequence_col,
+            "group_col": resolved_group_col,
+            "id_col": resolved_id_col,
+            "train_fraction": train_fraction,
+            "val_fraction": val_fraction,
+            "test_fraction": test_fraction,
+            "seed": seed,
+            "summary": summary,
+            "mmseqs": (
+                {
+                    "min_seq_id": identity_threshold,
+                    "coverage_threshold": coverage_threshold,
+                    "coverage_mode": coverage_mode,
+                    "cluster_mode": cluster_mode,
+                    "similarity_type": similarity_type,
+                    "sensitivity": sensitivity,
+                    "e_value": e_value,
+                    "alignment_mode": alignment_mode,
+                    "seq_id_mode": seq_id_mode,
+                    "max_seqs": max_seqs,
+                    "single_step_clustering": single_step_clustering,
+                    "cluster_reassign": cluster_reassign,
+                }
+                if mode == "similarity"
+                else None
+            ),
+        },
+    )
     return summary
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
+    """Construct the CLI parser for split generation."""
     parser = argparse.ArgumentParser(
         description=(
             "Generate train/val/test splits for one CSV or a directory of CSV datasets. "
@@ -727,6 +964,76 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Minimum sequence identity used to cluster similar proteins.",
     )
     parser.add_argument(
+        "--mmseqs-coverage-threshold",
+        type=float,
+        default=None,
+        help="Optional MMseqs2 alignment coverage threshold (-c).",
+    )
+    parser.add_argument(
+        "--mmseqs-coverage-mode",
+        type=int,
+        default=None,
+        help="Optional MMseqs2 coverage mode (--cov-mode).",
+    )
+    parser.add_argument(
+        "--mmseqs-cluster-mode",
+        type=int,
+        default=None,
+        help="Optional MMseqs2 clustering strategy (--cluster-mode).",
+    )
+    parser.add_argument(
+        "--mmseqs-similarity-type",
+        type=int,
+        default=None,
+        help="Optional MMseqs2 similarity metric (--similarity-type).",
+    )
+    parser.add_argument(
+        "--mmseqs-sensitivity",
+        type=float,
+        default=None,
+        help="Optional MMseqs2 sensitivity (-s).",
+    )
+    parser.add_argument(
+        "--mmseqs-evalue",
+        type=float,
+        default=None,
+        help="Optional MMseqs2 E-value threshold (-e).",
+    )
+    parser.add_argument(
+        "--mmseqs-alignment-mode",
+        type=int,
+        default=None,
+        help="Optional MMseqs2 alignment mode (--alignment-mode).",
+    )
+    parser.add_argument(
+        "--mmseqs-seq-id-mode",
+        type=int,
+        default=None,
+        help="Optional MMseqs2 sequence identity mode (--seq-id-mode).",
+    )
+    parser.add_argument(
+        "--mmseqs-max-seqs",
+        type=int,
+        default=None,
+        help="Optional MMseqs2 prefilter cap (--max-seqs).",
+    )
+    parser.add_argument(
+        "--mmseqs-single-step-clustering",
+        action="store_true",
+        help="Enable MMseqs2 single-step clustering (--single-step-clustering 1).",
+    )
+    parser.add_argument(
+        "--mmseqs-cluster-reassign",
+        action="store_true",
+        help="Enable MMseqs2 cluster reassignment (--cluster-reassign 1).",
+    )
+    parser.add_argument(
+        "--output-tag",
+        type=str,
+        default=None,
+        help="Optional filename tag so exploratory split variants do not overwrite each other.",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=42,
@@ -736,6 +1043,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Parse CLI arguments and generate split files for one or more datasets."""
     args = build_argument_parser().parse_args()
 
     if args.mode == "similarity" and shutil.which("mmseqs") is None:
@@ -758,6 +1066,7 @@ def main() -> None:
             val_fraction=args.val_fraction,
             test_fraction=args.test_fraction,
             output_root=args.output_root,
+            output_tag=args.output_tag,
         )
         try:
             summary = split_dataset_csv(
@@ -770,6 +1079,17 @@ def main() -> None:
                 sequence_col=args.sequence_col,
                 group_col=args.group_col,
                 identity_threshold=args.identity_threshold,
+                coverage_threshold=args.mmseqs_coverage_threshold,
+                coverage_mode=args.mmseqs_coverage_mode,
+                cluster_mode=args.mmseqs_cluster_mode,
+                similarity_type=args.mmseqs_similarity_type,
+                sensitivity=args.mmseqs_sensitivity,
+                e_value=args.mmseqs_evalue,
+                alignment_mode=args.mmseqs_alignment_mode,
+                seq_id_mode=args.mmseqs_seq_id_mode,
+                max_seqs=args.mmseqs_max_seqs,
+                single_step_clustering=args.mmseqs_single_step_clustering,
+                cluster_reassign=args.mmseqs_cluster_reassign,
                 seed=args.seed,
             )
         except Exception as exc:

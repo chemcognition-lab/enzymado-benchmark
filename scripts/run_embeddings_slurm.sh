@@ -6,6 +6,8 @@
 #SBATCH --output=logs/embed_%A_%a.out
 #SBATCH --nodelist=gpu4
 
+# Run one embedding model per array task on the legacy SLURM environment.
+#
 # Run from the git root:
 #   sbatch scripts/run_embeddings_slurm.sh
 
@@ -16,7 +18,7 @@ REPO="/uss/ralmadamonter/enzymado-benchmark"
 cd "$REPO" || { echo "ERROR: cannot cd to $REPO"; exit 1; }
 SCRIPTS="scripts/enzyme_utils/embedding_scripts"
 
-# ── Generate FASTA from protein_sequences_unique.csv if needed ───────
+# Generate the canonical FASTA only when it is missing.
 FASTA="$REPO/data/fastas/protein_sequences_unique_no_fluorescence.fasta"
 CSV="$REPO/data/processed/protein_sequences_unique_no_fluorescence.csv"
 OUTDIR="$REPO/data/embeddings/protein_sequences_unique"
