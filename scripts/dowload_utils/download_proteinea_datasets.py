@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+"""Export ProteinEA Hugging Face datasets into the repository's CSV schema."""
 
 import argparse
 import csv

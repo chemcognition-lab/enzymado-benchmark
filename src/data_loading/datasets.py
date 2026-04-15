@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Composable dataset builders that connect adapters, features, and labels."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,7 @@ from .registry import TaskConfig, get_task_config
 
 
 class BaseComposableDataset(TorchDataset):
+    """Base dataset that validates rows before exposing training samples."""
     def __init__(
         self,
         rows: list[dict[str, str]],
@@ -54,12 +56,15 @@ class BaseComposableDataset(TorchDataset):
         return len(self.rows)
 
     def _feature_builders(self) -> tuple[Any, ...]:
+        """Return builders that contribute feature validation for each row."""
         raise NotImplementedError
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
+        """Convert one normalized row into the sample payload used by a collator."""
         raise NotImplementedError
 
     def _validate_row(self, row: dict[str, str]) -> list[str]:
+        """Run each builder's validator and collect all reported issues."""
         errors: list[str] = []
         for builder in (*self._feature_builders(), self.label_builder):
             validator = getattr(builder, "validate_row", None)
@@ -71,6 +76,7 @@ class BaseComposableDataset(TorchDataset):
         return errors
 
     def _apply_missing_policy(self, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+        """Either keep, skip, or reject rows with missing features or labels."""
         if self.missing_policy not in {"raise", "skip"}:
             raise ValueError("missing_policy must be either 'raise' or 'skip'.")
 
@@ -94,10 +100,12 @@ class BaseComposableDataset(TorchDataset):
         return kept_rows
 
     def __getitem__(self, index: int) -> dict[str, Any]:
+        """Build one sample on demand."""
         return self._build_sample(self.rows[index])
 
     @staticmethod
     def _merge_label_payload(label_payload: Any) -> dict[str, Any]:
+        """Normalize label payloads to the dict shape expected by collators."""
         if isinstance(label_payload, dict) and "target" in label_payload:
             merged_payload = dict(label_payload)
             return merged_payload
@@ -105,6 +113,7 @@ class BaseComposableDataset(TorchDataset):
 
 
 class ProteinGlobalDataset(BaseComposableDataset):
+    """Dataset for global protein-property prediction tasks."""
     def __init__(
         self,
         rows: list[dict[str, str]],
@@ -119,6 +128,7 @@ class ProteinGlobalDataset(BaseComposableDataset):
         return (self.protein_builder,)
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
+        """Attach the protein embedding and scalar or multilabel target."""
         sample = {
             "sample_id": row["sample_id"],
             "protein_emb": self.protein_builder.build(row),
@@ -128,6 +138,7 @@ class ProteinGlobalDataset(BaseComposableDataset):
 
 
 class ProteinLigandGlobalDataset(BaseComposableDataset):
+    """Dataset for tasks that combine protein embeddings with ligand features."""
     def __init__(
         self,
         rows: list[dict[str, str]],
@@ -144,6 +155,7 @@ class ProteinLigandGlobalDataset(BaseComposableDataset):
         return (self.protein_builder, self.ligand_builder)
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
+        """Attach protein, ligand, and target payloads for one sample."""
         sample = {
             "sample_id": row["sample_id"],
             "protein_emb": self.protein_builder.build(row),
@@ -154,6 +166,7 @@ class ProteinLigandGlobalDataset(BaseComposableDataset):
 
 
 class MutationDeltaGlobalDataset(BaseComposableDataset):
+    """Dataset for mutation-effect tasks using mutant-wildtype deltas."""
     def __init__(
         self,
         rows: list[dict[str, str]],
@@ -168,6 +181,7 @@ class MutationDeltaGlobalDataset(BaseComposableDataset):
         return (self.mutation_builder,)
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
+        """Attach the precomputed mutation delta embedding and target."""
         sample = {
             "sample_id": row["sample_id"],
             "protein_delta_emb": self.mutation_builder.build(row),
@@ -177,6 +191,7 @@ class MutationDeltaGlobalDataset(BaseComposableDataset):
 
 
 class ProteinResidueDataset(BaseComposableDataset):
+    """Dataset for residue-wise supervision such as active-site prediction."""
     def __init__(
         self,
         rows: list[dict[str, str]],
@@ -191,6 +206,7 @@ class ProteinResidueDataset(BaseComposableDataset):
         return (self.protein_builder,)
 
     def _validate_row(self, row: dict[str, str]) -> list[str]:
+        """Validate row-level payloads and residue-length compatibility."""
         errors = super()._validate_row(row)
         if errors:
             return errors
@@ -216,6 +232,7 @@ class ProteinResidueDataset(BaseComposableDataset):
         return []
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
+        """Build a residue-level sample and enforce length alignment."""
         target_per_residue, target_mask = self.label_builder.build(row)
         protein_emb = self.protein_builder.build(row)
         if protein_emb.shape[0] != target_per_residue.shape[0]:
@@ -240,6 +257,7 @@ class ProteinResidueDataset(BaseComposableDataset):
 
 @dataclass
 class TaskDatasetBundle:
+    """Bundle the dataset, collator, labels, and config for one task split."""
     config: TaskConfig
     rows: list[dict[str, str]]
     dataset: BaseComposableDataset
@@ -252,6 +270,7 @@ def _build_adapter(
     split_name: str | None = None,
     split_variant: str = "random",
 ) -> DatasetAdapter:
+    """Instantiate the adapter configured for the task's batch type."""
     split_path = None
     if split_name is not None and config.split_column is None:
         if split_variant not in config.split_files:
@@ -289,6 +308,7 @@ def _build_label_builder(
     rows: list[dict[str, str]],
     ec_vocabulary: dict[str, tuple[str, ...]] | None = None,
 ) -> Any:
+    """Create the label builder required by the task configuration."""
     if config.label_kind == "scalar_regression":
         return ScalarRegressionLabelBuilder(target_column=str(config.target_column))
     if config.label_kind == "binary":
@@ -319,6 +339,7 @@ def build_dataset_from_config(
     ligand_featurizer: Any | None = None,
     ec_vocabulary: dict[str, tuple[str, ...]] | None = None,
 ) -> TaskDatasetBundle:
+    """Build a split-specific dataset bundle from a registered task config."""
     adapter = _build_adapter(config, split_name=split_name, split_variant=split_variant)
     rows = adapter.load_rows()
 
@@ -328,6 +349,8 @@ def build_dataset_from_config(
             "Pass ec_vocabulary explicitly to avoid leakage."
         )
 
+    # Features and labels are instantiated after rows are loaded so train-derived
+    # vocabularies or split-specific checks can depend on the actual payload.
     label_builder = _build_label_builder(config, rows=rows, ec_vocabulary=ec_vocabulary)
     protein_builder = ProteinResidueEmbeddingBuilder(
         embedding_store=embedding_store,
@@ -397,6 +420,7 @@ def build_task_dataset(
     ligand_featurizer: Any | None = None,
     ec_vocabulary: dict[str, tuple[str, ...]] | None = None,
 ) -> TaskDatasetBundle:
+    """Convenience wrapper around `build_dataset_from_config` keyed by task name."""
     return build_dataset_from_config(
         get_task_config(task_name),
         embedding_store=embedding_store,

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Convert a FireProtDB dump into a plain CSV for downstream processing."""
+
 import argparse
 import csv
 import gzip

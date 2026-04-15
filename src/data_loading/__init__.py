@@ -1,3 +1,5 @@
+"""Composable dataset, feature, label, and split-loading utilities."""
+
 from .adapters import (
     DatasetAdapter,
     MutationDeltaAdapter,

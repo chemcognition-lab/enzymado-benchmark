@@ -6,6 +6,8 @@
 #SBATCH --output=scripts/logs/train_%A_%a.out
 #SBATCH --nodelist=gpu4
 
+# Run one embedding configuration per array task on the legacy SLURM setup.
+#
 # Run from the git root:
 #   sbatch scripts/run_training_slurm.sh
 

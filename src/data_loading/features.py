@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Feature builders and embedding stores used by training and evaluation."""
 
 import csv
 from functools import lru_cache
@@ -12,10 +13,12 @@ from .splits import clean_text, normalize_identifier, normalize_sequence
 
 
 class EmbeddingLookupError(KeyError):
+    """Raised when a row cannot be matched to a stored residue embedding."""
     pass
 
 
 def _ensure_2d_array(value: np.ndarray, key: str) -> np.ndarray:
+    """Validate that residue embeddings keep the expected `(length, dim)` shape."""
     array = np.asarray(value, dtype=np.float32)
     if array.ndim != 2:
         raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {array.shape}.")
@@ -24,6 +27,7 @@ def _ensure_2d_array(value: np.ndarray, key: str) -> np.ndarray:
 
 @lru_cache(maxsize=None)
 def _load_sequence_index(sequence_index_path: str) -> dict[str, str]:
+    """Load the normalized sequence-to-sequence-id index used for H5 subsets."""
     mapping: dict[str, str] = {}
     csv_path = Path(sequence_index_path)
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
@@ -39,10 +43,12 @@ def _load_sequence_index(sequence_index_path: str) -> dict[str, str]:
 
 @dataclass
 class ResidueEmbeddingStore:
+    """Lookup store for residue embeddings keyed by sequence and/or identifier."""
     by_sequence: dict[str, np.ndarray] = field(default_factory=dict)
     by_id: dict[str, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Normalize keys once so downstream lookups stay consistent."""
         self.by_sequence = {
             normalize_sequence(key): _ensure_2d_array(value, key)
             for key, value in self.by_sequence.items()
@@ -54,6 +60,7 @@ class ResidueEmbeddingStore:
 
     @classmethod
     def _load_h5_mapping(cls, file_path: Path | str) -> dict[str, np.ndarray]:
+        """Load every top-level H5 dataset into memory as a float32 array."""
         try:
             import h5py
         except ModuleNotFoundError as exc:
@@ -73,6 +80,7 @@ class ResidueEmbeddingStore:
         file_path: Path | str,
         key_kind: str = "id",
     ) -> "ResidueEmbeddingStore":
+        """Build a store from a single H5 file keyed by id or sequence."""
         mapping = cls._load_h5_mapping(file_path)
         if key_kind == "id":
             return cls(by_id=mapping)
@@ -86,6 +94,7 @@ class ResidueEmbeddingStore:
         id_h5_path: Path | str | None = None,
         sequence_h5_path: Path | str | None = None,
     ) -> "ResidueEmbeddingStore":
+        """Build a store from separate identifier-keyed and sequence-keyed H5 files."""
         if id_h5_path is None and sequence_h5_path is None:
             raise ValueError("Provide at least one of id_h5_path or sequence_h5_path.")
 
@@ -105,6 +114,7 @@ class ResidueEmbeddingStore:
         needed_sequences: set[str] | None = None,
         sequence_index_path: Path | str | None = None,
     ) -> "ResidueEmbeddingStore":
+        """Load only the identifiers and sequences required for a dataset split."""
         try:
             import h5py
         except ModuleNotFoundError as exc:
@@ -154,12 +164,15 @@ class ResidueEmbeddingStore:
         return cls(by_id=by_id, by_sequence=by_sequence)
 
     def has_sequence(self, sequence: str) -> bool:
+        """Return whether a normalized sequence key is present."""
         return normalize_sequence(sequence) in self.by_sequence
 
     def has_id(self, identifier: str) -> bool:
+        """Return whether a normalized identifier key is present."""
         return clean_text(identifier) in self.by_id
 
     def lookup_sequence(self, sequence: str) -> np.ndarray:
+        """Fetch an embedding by normalized sequence."""
         normalized = normalize_sequence(sequence)
         try:
             return self.by_sequence[normalized]
@@ -167,6 +180,7 @@ class ResidueEmbeddingStore:
             raise EmbeddingLookupError(f"Missing residue embedding for sequence '{normalized[:20]}...'") from exc
 
     def lookup_id(self, identifier: str) -> np.ndarray:
+        """Fetch an embedding by normalized identifier."""
         normalized = clean_text(identifier)
         try:
             return self.by_id[normalized]
@@ -179,6 +193,7 @@ class ResidueEmbeddingStore:
         id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id"),
         sequence_column: str = "protein_sequence",
     ) -> np.ndarray:
+        """Resolve the best available embedding key for a dataset row."""
         sequence = normalize_sequence(row.get(sequence_column))
         if sequence and self.has_sequence(sequence):
             return self.lookup_sequence(sequence)
@@ -199,11 +214,13 @@ class ResidueEmbeddingStore:
 
 @dataclass
 class ProteinResidueEmbeddingBuilder:
+    """Build residue embeddings for rows in protein-centric tasks."""
     embedding_store: ResidueEmbeddingStore
     sequence_column: str = "protein_sequence"
     id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
     def build(self, row: dict[str, str]) -> np.ndarray:
+        """Materialize the residue embedding for one row."""
         return self.embedding_store.lookup_row(
             row,
             id_columns=self.id_columns,
@@ -211,6 +228,7 @@ class ProteinResidueEmbeddingBuilder:
         )
 
     def validate_row(self, row: dict[str, str]) -> str | None:
+        """Check lookup availability without forcing a full embedding read."""
         # Check existence only — avoids loading the full embedding during dataset construction.
         # Critical for lazy stores where build() triggers an H5 read per row.
         for col in self.id_columns:
@@ -228,6 +246,7 @@ class ProteinResidueEmbeddingBuilder:
 
 
 def _default_rdkit_featurize(smiles: str) -> np.ndarray:
+    """Build a compact ligand descriptor vector with RDKit."""
     try:
         from rdkit import Chem
         from rdkit.Chem import Crippen
@@ -262,10 +281,12 @@ def _default_rdkit_featurize(smiles: str) -> np.ndarray:
 
 @dataclass
 class RDKitLigandFeatureBuilder:
+    """Build fixed-size ligand features from SMILES strings."""
     ligand_column: str = "smiles"
     featurize_smiles: Callable[[str], np.ndarray] | None = None
 
     def build(self, row: dict[str, str]) -> np.ndarray:
+        """Featurize the ligand referenced by a dataset row."""
         smiles = clean_text(row.get(self.ligand_column))
         if not smiles:
             raise ValueError(
@@ -280,6 +301,7 @@ class RDKitLigandFeatureBuilder:
         return array
 
     def validate_row(self, row: dict[str, str]) -> str | None:
+        """Validate a ligand row by attempting feature construction."""
         try:
             self.build(row)
         except (ImportError, ValueError) as exc:
@@ -289,12 +311,14 @@ class RDKitLigandFeatureBuilder:
 
 @dataclass
 class MutationDeltaEmbeddingBuilder:
+    """Build mutant-minus-wildtype residue deltas for mutation-effect tasks."""
     embedding_store: ResidueEmbeddingStore
     mutation_sequence_column: str = "protein_sequence"
     wildtype_sequence_column: str = "wildtype_sequence"
     id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
     def build(self, row: dict[str, str]) -> np.ndarray:
+        """Return the residue-wise embedding delta for a mutation row."""
         mutant_embedding = self.embedding_store.lookup_row(
             row,
             id_columns=self.id_columns,
@@ -329,6 +353,7 @@ class MutationDeltaEmbeddingBuilder:
         return (mutant_embedding - wildtype_embedding).astype(np.float32, copy=False)
 
     def validate_row(self, row: dict[str, str]) -> str | None:
+        """Check that both mutant and wildtype embeddings can be resolved."""
         # Check existence only — avoids loading the full embedding during dataset construction.
         # Critical for lazy stores where build() triggers an H5 read per row.
         store = self.embedding_store

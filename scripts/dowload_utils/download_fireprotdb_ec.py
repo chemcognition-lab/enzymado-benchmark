@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Download FireProtDB exports and keep only rows with usable EC annotations."""
+
 import argparse
 import csv
 import gzip

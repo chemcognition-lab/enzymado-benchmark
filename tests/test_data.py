@@ -1,9 +1,12 @@
 from src.dataset_splitting import (
+    build_mmseqs_cluster_command,
+    build_output_csv_path,
     build_split_assignment_rows,
     generate_random_split_rows,
     generate_similarity_split_from_clusters,
     validate_split_fractions,
 )
+from pathlib import Path
 
 
 def build_rows() -> tuple[list[str], list[dict[str, str]]]:
@@ -132,3 +135,71 @@ def test_build_split_assignment_rows_keeps_only_id_and_split():
     assert output_fieldnames == ["uniprot_id", "split"]
     assert len(output_rows) == 5
     assert all(set(row) == {"uniprot_id", "split"} for row in output_rows)
+
+
+def test_build_output_csv_path_appends_output_tag():
+    output_path = build_output_csv_path(
+        Path("data/example.csv"),
+        mode="similarity",
+        train_fraction=0.8,
+        val_fraction=0.1,
+        test_fraction=0.1,
+        output_tag="id030 cov080 mode1",
+    )
+
+    assert (
+        output_path.name
+        == "example_similarity_mmseqs2_80_10_10_id030_cov080_mode1_splits.csv"
+    )
+
+
+def test_build_mmseqs_cluster_command_includes_optional_flags():
+    command = build_mmseqs_cluster_command(
+        Path("db"),
+        Path("cluster_db"),
+        Path("tmp"),
+        identity_threshold=0.3,
+        coverage_threshold=0.8,
+        coverage_mode=1,
+        cluster_mode=2,
+        similarity_type=2,
+        sensitivity=7.5,
+        e_value=1e-4,
+        alignment_mode=3,
+        seq_id_mode=1,
+        max_seqs=200,
+        single_step_clustering=True,
+        cluster_reassign=True,
+    )
+
+    assert command == [
+        "mmseqs",
+        "cluster",
+        "db",
+        "cluster_db",
+        "tmp",
+        "--min-seq-id",
+        "0.3",
+        "-c",
+        "0.8",
+        "--cov-mode",
+        "1",
+        "--cluster-mode",
+        "2",
+        "--similarity-type",
+        "2",
+        "-s",
+        "7.5",
+        "-e",
+        "0.0001",
+        "--alignment-mode",
+        "3",
+        "--seq-id-mode",
+        "1",
+        "--max-seqs",
+        "200",
+        "--single-step-clustering",
+        "1",
+        "--cluster-reassign",
+        "1",
+    ]

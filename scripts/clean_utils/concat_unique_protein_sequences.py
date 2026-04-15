@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+"""Build the canonical unique-sequence index consumed by embedding pipelines."""
 
 import argparse
 import csv

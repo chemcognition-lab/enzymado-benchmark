@@ -1,26 +1,31 @@
 from __future__ import annotations
+"""Helpers for normalizing CSV rows and resolving split assignments."""
 
 import csv
 from pathlib import Path
 
 
 def clean_text(value: str | None) -> str:
+    """Return a stripped string, using an empty string for missing values."""
     if value is None:
         return ""
     return value.strip()
 
 
 def normalize_sequence(value: str | None) -> str:
+    """Normalize sequences so split and embedding lookups use a stable key."""
     return "".join(clean_text(value).split()).upper()
 
 
 def normalize_identifier(column_name: str, value: str | None) -> str:
+    """Normalize identifiers, treating sequence-like columns specially."""
     if "sequence" in column_name:
         return normalize_sequence(value)
     return clean_text(value)
 
 
 def read_csv_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read a CSV file and eagerly strip whitespace from every field."""
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = list(reader.fieldnames or [])
@@ -29,6 +34,7 @@ def read_csv_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 
 def detect_split_id_column(fieldnames: list[str]) -> str:
+    """Return the non-`split` column used to join a split assignment file."""
     candidates = [fieldname for fieldname in fieldnames if fieldname != "split"]
     if not candidates:
         raise ValueError("Split assignment file must contain one id column besides 'split'.")
@@ -36,6 +42,7 @@ def detect_split_id_column(fieldnames: list[str]) -> str:
 
 
 def load_split_assignments(split_path: Path) -> tuple[str, dict[str, str]]:
+    """Load a split CSV into a normalized identifier-to-split mapping."""
     fieldnames, rows = read_csv_rows(split_path)
     id_column = detect_split_id_column(fieldnames)
 
@@ -55,6 +62,7 @@ def resolve_row_split(
     split_assignments: dict[str, str] | None = None,
     split_id_candidates: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence"),
 ) -> str:
+    """Resolve a row's split from an inline column or an external split table."""
     if split_column and split_column in row and clean_text(row.get(split_column)):
         return clean_text(row.get(split_column))
 
@@ -81,6 +89,7 @@ def filter_rows_by_split(
     split_assignments: dict[str, str] | None = None,
     split_id_candidates: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence"),
 ) -> list[dict[str, str]]:
+    """Filter rows to a requested split while preserving the resolved split label."""
     if split_name is None:
         return list(rows)
 

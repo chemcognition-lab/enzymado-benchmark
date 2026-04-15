@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+"""Normalize the repository's real-case datasets into benchmark-ready CSV files."""
 
 import argparse
 import csv

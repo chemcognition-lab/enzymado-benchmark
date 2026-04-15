@@ -1,9 +1,12 @@
+"""Train benchmark models across embedding sets and registered benchmark tasks."""
+
 import sys
 import json
 import fcntl
 import argparse
 import inspect
 import time
+import csv
 from pathlib import Path
 
 import joblib
@@ -34,8 +37,11 @@ from data_loading.adapters import (
     MutationDeltaAdapter,
     ProteinResidueAdapter,
 )
+from data_loading.splits import clean_text, normalize_sequence
+
 
 def log(msg: str) -> None:
+    """Print a timestamped log line that stays readable in batch-job logs."""
     ts = time.strftime("%H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
 
@@ -53,15 +59,27 @@ CARD_TO_REGISTRY: dict[str, str] = {
     "phopt": "ph_opt",
     "binding_site": "binding_sites",
 }
-SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
+PREFERRED_SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
+LEGACY_SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
+
+
+def resolve_sequence_index_path() -> Path | None:
+    """Return the preferred sequence index, falling back to the legacy filename."""
+    if PREFERRED_SEQUENCE_INDEX_PATH.exists():
+        return PREFERRED_SEQUENCE_INDEX_PATH
+    if LEGACY_SEQUENCE_INDEX_PATH.exists():
+        return LEGACY_SEQUENCE_INDEX_PATH
+    return None
 
 
 def resolve_registry_name(card_task_name: str) -> str | None:
+    """Map dataset-card task names onto the internal task registry when needed."""
     name = CARD_TO_REGISTRY.get(card_task_name, card_task_name)
     return name if name in TASK_REGISTRY else None
 
 
 def resolve_split_variant(default_split: str | None) -> str | None:
+    """Infer the split family from the card's default split filename."""
     if not default_split:
         return None
     if "random" in default_split:
@@ -69,6 +87,97 @@ def resolve_split_variant(default_split: str | None) -> str | None:
     if "similarity" in default_split:
         return "similarity"
     return None
+
+
+def load_allowed_ids(path: str | Path) -> set[str]:
+    """Load the optional allowlist used to restrict training to shared embeddings."""
+    allowed_ids: set[str] = set()
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            value = line.strip()
+            if value:
+                allowed_ids.add(value)
+    return allowed_ids
+
+
+def load_sequence_to_id_index(index_path: Path) -> dict[str, str]:
+    """Load a normalized sequence-to-sequence-id mapping for embedding filters."""
+    mapping: dict[str, str] = {}
+    with open(index_path, "r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            sequence = row.get("protein_sequence", "")
+            sequence_id = row.get("sequence_id", "")
+            normalized_sequence = normalize_sequence(sequence)
+            normalized_id = clean_text(sequence_id)
+            if normalized_sequence and normalized_id:
+                mapping[normalized_sequence] = normalized_id
+    return mapping
+
+
+def candidate_embedding_keys(
+    row: dict[str, str],
+    sequence_column: str,
+    id_columns: tuple[str, ...],
+    sequence_to_id: dict[str, str],
+) -> set[str]:
+    """Collect every embedding key that could match a dataset row."""
+    candidates: set[str] = set()
+
+    sequence = normalize_sequence(row.get(sequence_column, ""))
+    if sequence:
+        sequence_id = sequence_to_id.get(sequence)
+        if sequence_id:
+            candidates.add(sequence_id)
+        candidates.add(sequence)
+
+    for column in id_columns:
+        value = clean_text(row.get(column, ""))
+        if value:
+            candidates.add(value)
+
+    return candidates
+
+
+def row_matches_allowed_ids(
+    row: dict[str, str],
+    config,
+    allowed_ids: set[str],
+    sequence_to_id: dict[str, str],
+) -> bool:
+    """Return whether a row can be matched to at least one allowed embedding key."""
+    main_candidates = candidate_embedding_keys(
+        row,
+        sequence_column=config.sequence_column,
+        id_columns=config.sample_id_candidates,
+        sequence_to_id=sequence_to_id,
+    )
+    if not main_candidates or not any(key in allowed_ids for key in main_candidates):
+        return False
+
+    if config.batch_kind == "mutation_delta_global" and config.wildtype_sequence_column:
+        wildtype_candidates = candidate_embedding_keys(
+            row,
+            sequence_column=config.wildtype_sequence_column,
+            id_columns=(),
+            sequence_to_id=sequence_to_id,
+        )
+        if not wildtype_candidates or not any(key in allowed_ids for key in wildtype_candidates):
+            return False
+
+    return True
+
+
+def filter_rows_to_allowed_ids(
+    rows: list[dict[str, str]],
+    config,
+    allowed_ids: set[str],
+    sequence_to_id: dict[str, str],
+) -> list[dict[str, str]]:
+    """Keep only rows whose embedding ids survive the optional allowlist filter."""
+    return [
+        row for row in rows
+        if row_matches_allowed_ids(row, config, allowed_ids, sequence_to_id)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -138,19 +247,23 @@ class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
         self._seq_to_h5key: dict[str, str] = seq_to_h5key     # norm_seq → H5 key
 
     def _open(self):
+        """Open the H5 file lazily on first lookup."""
         import h5py
         if self._h5 is None or not self._h5.id.valid:
             self._h5 = h5py.File(self._h5_path, "r")
 
     def has_id(self, identifier: str) -> bool:
+        """Check id availability without loading any embedding arrays."""
         from data_loading.splits import clean_text
         return clean_text(identifier) in self._available_ids
 
     def has_sequence(self, sequence: str) -> bool:
+        """Check sequence availability without loading any embedding arrays."""
         from data_loading.splits import normalize_sequence as _ns
         return _ns(sequence) in self._seq_to_h5key
 
     def lookup_id(self, identifier: str) -> np.ndarray:
+        """Read one identifier-keyed embedding directly from the H5 file."""
         from data_loading.splits import clean_text
         from data_loading.features import EmbeddingLookupError
         key = clean_text(identifier)
@@ -163,6 +276,7 @@ class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
             raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
 
     def lookup_sequence(self, sequence: str) -> np.ndarray:
+        """Read one sequence-keyed embedding directly from the H5 file."""
         from data_loading.splits import normalize_sequence as _ns
         from data_loading.features import EmbeddingLookupError
         norm_seq = _ns(sequence)
@@ -176,6 +290,7 @@ class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
             raise EmbeddingLookupError("Missing residue embedding for sequence.")
 
     def __del__(self):
+        """Close the H5 handle when the store is garbage collected."""
         if getattr(self, "_h5", None) is not None:
             try:
                 self._h5.close()
@@ -195,7 +310,7 @@ def _build_seq_to_h5key(
     seq_to_h5key: dict[str, str] = {}
 
     # Try sequence index first (maps sequence_id → sequence)
-    seq_index_path = SEQUENCE_INDEX_PATH if SEQUENCE_INDEX_PATH.exists() else None
+    seq_index_path = resolve_sequence_index_path()
     if seq_index_path is not None and normalized_sequences:
         import csv
         with open(seq_index_path, newline="", encoding="utf-8") as fh:
@@ -219,18 +334,18 @@ def load_lazy_embedding_store(
     needed_ids: set[str],
     needed_sequences: set[str],
 ) -> LazyResidueEmbeddingStore:
-    """Return a LazyResidueEmbeddingStore — scans H5 keys but loads no data."""
+    """Index only the H5 keys needed for a lazily loaded training run."""
     import h5py
     from data_loading.splits import clean_text
 
     full_path = PROJECT_ROOT / h5_path
 
-    # Collect which needed_ids actually exist in H5
+    # Collect which needed identifiers are actually present in the H5 file.
     with h5py.File(str(full_path), "r") as handle:
         h5_keys = {clean_text(k) for k in handle.keys()}
 
     normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)} & h5_keys
-    # Filter seq_to_h5key so only mappings whose H5 key actually exists are kept
+    # Keep only sequence mappings that resolve to real H5 keys.
     seq_to_h5key = {
         seq: key
         for seq, key in _build_seq_to_h5key(full_path, needed_sequences).items()
@@ -249,8 +364,8 @@ def load_embedding_store_subset(
     needed_ids: set[str],
     needed_sequences: set[str],
 ) -> ResidueEmbeddingStore:
-    """Load only the embeddings needed for a task from an H5 file."""
-    sequence_index_path = SEQUENCE_INDEX_PATH if SEQUENCE_INDEX_PATH.exists() else None
+    """Materialize only the embeddings required for a specific task split."""
+    sequence_index_path = resolve_sequence_index_path()
     return ResidueEmbeddingStore.from_h5_subset(
         PROJECT_ROOT / h5_path,
         needed_ids=needed_ids,
@@ -275,7 +390,7 @@ def load_pooled_h5_subset(
     normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)}
     normalized_sequences = {_norm_seq(v) for v in needed_sequences if _norm_seq(v)}
 
-    # Build seq → H5 key mapping via sequence index, then fall back to direct key match
+    # Build seq → H5 key mapping via sequence index, then fall back to direct key match.
     seq_to_h5key = _build_seq_to_h5key(PROJECT_ROOT / h5_path, normalized_sequences)
 
     with h5py.File(str(PROJECT_ROOT / h5_path), "r") as handle:
@@ -288,8 +403,7 @@ def load_pooled_h5_subset(
         if key in h5_keys
     }
 
-    # Collect the exact set of H5 keys to load and what they map to
-    # key → (id_key | None, seq | None)
+    # Collect the exact H5 keys to load and the id/sequence aliases they should populate.
     keys_to_load: dict[str, tuple[str | None, str | None]] = {}
     for id_key in normalized_ids:
         entry = keys_to_load.get(id_key, (None, None))
@@ -313,11 +427,19 @@ def load_pooled_h5_subset(
             if h5_key not in handle:
                 missing += 1
                 continue
-            arr = np.asarray(handle[h5_key], dtype=np.float32).mean(axis=0)
+            arr = np.asarray(handle[h5_key], dtype=np.float32)
+            if arr.ndim == 2:
+                pooled = arr.mean(axis=0)
+            elif arr.ndim == 1:
+                pooled = arr
+            else:
+                raise ValueError(
+                    f"Expected 1D or 2D embedding array for key '{h5_key}', got shape {arr.shape}."
+                )
             if id_key is not None:
-                by_id[id_key] = arr
+                by_id[id_key] = pooled
             if seq is not None:
-                by_seq[seq] = arr
+                by_seq[seq] = pooled
             if i % log_interval == 0 or i == total:
                 elapsed = time.time() - t_load_start
                 rate = i / elapsed
@@ -335,7 +457,7 @@ def build_Xy_ligand_direct(
     by_seq: dict[str, np.ndarray],
     config,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build X/y for protein_ligand_global from pre-pooled embeddings + rdkit ligand features."""
+    """Build pooled protein-plus-ligand features without constructing dataset objects."""
     from data_loading.features import _default_rdkit_featurize
 
     X_list: list[np.ndarray] = []
@@ -376,6 +498,7 @@ def _lookup_pooled_embedding(
     by_seq: dict[str, np.ndarray],
     config,
 ) -> np.ndarray | None:
+    """Resolve a pooled embedding from sequence first, then fallback identifiers."""
     from data_loading.splits import clean_text, normalize_sequence as _norm_seq
 
     seq = _norm_seq(row.get(config.sequence_column, ""))
@@ -398,6 +521,7 @@ def build_multilabel_ec_direct(
     config,
     label_builder: HierarchicalECLabelBuilder,
 ) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Build pooled EC features plus per-level targets and masks."""
     level_names = label_builder.level_names()
     X_list: list[np.ndarray] = []
     targets = {level_name: [] for level_name in level_names}
@@ -457,6 +581,7 @@ def build_flat_multilabel_ec_direct(
     config,
     label_builder: FlatECLabelBuilder,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build pooled EC features using flattened targets for XGBoost models."""
     label_builder._ensure_flat_index()
     X_list: list[np.ndarray] = []
     targets: list[np.ndarray] = []
@@ -498,6 +623,7 @@ def build_protein_global_Xy_direct(
     by_seq: dict[str, np.ndarray],
     config,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Build pooled protein-only features for scalar or binary tasks."""
     if config.label_kind == "scalar_regression":
         label_builder = ScalarRegressionLabelBuilder(target_column=str(config.target_column))
     elif config.label_kind == "binary":
@@ -544,6 +670,7 @@ def build_mutation_delta_Xy_direct(
     by_seq: dict[str, np.ndarray],
     config,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Build pooled mutant-minus-wildtype features for mutation-effect tasks."""
     if config.label_kind == "scalar_regression":
         label_builder = ScalarRegressionLabelBuilder(target_column=str(config.target_column))
     elif config.label_kind == "binary":
@@ -596,6 +723,7 @@ def build_mutation_delta_Xy_direct(
 
 
 def get_model_map(task_type: str, label_kind: str) -> dict[str, dict]:
+    """Return the model registry appropriate for the task's label structure."""
     if label_kind in STRUCTURED_MODEL_MAP:
         return STRUCTURED_MODEL_MAP[label_kind]
     return MODEL_MAP[task_type]
@@ -627,6 +755,7 @@ def build_Xy_pooled(bundle, batch_kind: str):
 
 
 def get_dataloader(bundle, batch_size: int = 32) -> DataLoader:
+    """Build a deterministic DataLoader for one dataset bundle."""
     return DataLoader(
         bundle.dataset,
         batch_size=batch_size,
@@ -637,6 +766,7 @@ def get_dataloader(bundle, batch_size: int = 32) -> DataLoader:
 
 
 def _pad_1d_array_list(arrays: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
+    """Pad variable-length 1D arrays into a rectangular batch."""
     if not arrays:
         return np.zeros((0, 0), dtype=dtype)
     max_length = max(array.shape[0] for array in arrays)
@@ -707,6 +837,7 @@ def get_target_payload(bundle):
 # ---------------------------------------------------------------------------
 
 def train_model(model_info: dict, X_train, y_train, X_val=None, y_val=None, **extra_fit_kwargs):
+    """Instantiate and fit a model wrapper using only supported keyword args."""
     model = model_info["wrap"](**model_info["params"])
     fit_signature = inspect.signature(model.fit)
     fit_kwargs = {}
@@ -721,6 +852,7 @@ def train_model(model_info: dict, X_train, y_train, X_val=None, y_val=None, **ex
 
 
 def train_model_loader(model_info: dict, train_loader: DataLoader, batch_kind: str, val_loader: DataLoader | None = None):
+    """Instantiate and fit a model wrapper that trains from DataLoaders."""
     model = model_info["wrap"](**model_info["params"])
     fit_loader_signature = inspect.signature(model.fit_loader)
     fit_kwargs = {}
@@ -735,6 +867,7 @@ def train_model_loader(model_info: dict, train_loader: DataLoader, batch_kind: s
 # ---------------------------------------------------------------------------
 
 def _flatten_npz_payload(prefix: str, payload) -> dict[str, np.ndarray]:
+    """Flatten nested prediction payloads so they can be saved in one NPZ file."""
     if payload is None:
         return {}
     if isinstance(payload, dict):
@@ -746,6 +879,7 @@ def _flatten_npz_payload(prefix: str, payload) -> dict[str, np.ndarray]:
 
 
 def make_predictions_file(y_true, pred, run_dir: Path, split: str, target_mask=None):
+    """Persist predictions, labels, and optional masks for one data split."""
     payload = {}
     payload.update(_flatten_npz_payload("y_true", y_true))
     payload.update(_flatten_npz_payload("predictions", pred))
@@ -754,6 +888,7 @@ def make_predictions_file(y_true, pred, run_dir: Path, split: str, target_mask=N
 
 
 def save_model(trained, run_dir: Path) -> Path:
+    """Save Torch state dicts or joblib-compatible estimators to disk."""
     if hasattr(trained, "model") and isinstance(trained.model, torch.nn.Module):
         path = run_dir / "model.pt"
         torch.save(trained.model.state_dict(), path)
@@ -764,6 +899,7 @@ def save_model(trained, run_dir: Path) -> Path:
 
 
 def make_result_entry(emb_name, model_name, model_info, run_dir: Path, model_file: Path) -> dict:
+    """Build the dataset-card payload describing one trained model artifact."""
     return {
         "embedding_model": emb_name,
         "name": model_name,
@@ -775,11 +911,13 @@ def make_result_entry(emb_name, model_name, model_info, run_dir: Path, model_fil
 
 
 def read_json(path) -> dict:
+    """Read a JSON file into a Python dictionary."""
     with open(path) as f:
         return json.load(f)
 
 
 def write_json(data: dict, path):
+    """Write a JSON payload with stable indentation for diffs."""
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -802,14 +940,39 @@ def update_card_locked(card_path: Path, task_name: str, result_key: str, result_
 # Main
 # ---------------------------------------------------------------------------
 
-def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter: str | None = None):
+def main(
+    card_path: str,
+    embeddings_json: str,
+    output_dir: str,
+    emb_name_filter: str | None = None,
+    model_prefix_filter: str | None = None,
+    skip_label_kinds: set[str] | None = None,
+    allowed_ids_path: str | None = None,
+):
+    """Train all selected embedding-model and task combinations described by the card."""
     log(f"[startup] Python started. emb_name={emb_name_filter}")
+    if model_prefix_filter is not None:
+        log(f"[startup] Filtering model names by prefix: {model_prefix_filter}")
+    skip_label_kinds = skip_label_kinds or set()
+    if skip_label_kinds:
+        log(f"[startup] Skipping label kinds: {sorted(skip_label_kinds)}")
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
     log(f"[startup] JSON loaded. {len(embeddings)} embedding models, {len(card['properties'])} tasks.")
     card_path = Path(card_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    allowed_ids: set[str] | None = None
+    sequence_to_id: dict[str, str] = {}
+    if allowed_ids_path is not None:
+        allowed_ids = load_allowed_ids(allowed_ids_path)
+        sequence_index_path = resolve_sequence_index_path()
+        if sequence_index_path is not None:
+            sequence_to_id = load_sequence_to_id_index(sequence_index_path)
+        log(
+            f"[startup] Restricting training rows to {len(allowed_ids):,} embedding IDs "
+            f"from {allowed_ids_path}"
+        )
 
     if emb_name_filter is not None and emb_name_filter not in embeddings:
         raise ValueError(f"Unknown embedding '{emb_name_filter}'. Available: {', '.join(embeddings)}")
@@ -831,6 +994,9 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 continue
 
             config = get_task_config(registry_name)
+            if config.label_kind in skip_label_kinds:
+                log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' filtered by CLI)")
+                continue
 
             if config.label_kind in SKIP_LABEL_KINDS:
                 log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' not yet supported)")
@@ -848,6 +1014,15 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
 
                 # Check whether all models for this task are already trained — skip H5 loading if so
                 prospective_model_map = get_model_map(task_type, config.label_kind)
+                if model_prefix_filter is not None:
+                    prospective_model_map = {
+                        name: info
+                        for name, info in prospective_model_map.items()
+                        if name.startswith(model_prefix_filter)
+                    }
+                if not prospective_model_map:
+                    log("    No models selected after filters — skipping task.")
+                    continue
                 already_done = [
                     m for m in prospective_model_map
                     if is_run_complete(output_dir / f"{emb_name}__{task_name}__{m}")
@@ -858,11 +1033,27 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 if already_done:
                     log(f"    {len(already_done)}/{len(prospective_model_map)} models already done: {already_done}")
 
-                # Load only the embeddings needed for this task (not the entire H5)
+                # Load only the embeddings required by this task instead of materializing the whole H5 file.
                 log(f"    Loading CSV rows...")
                 train_rows = get_task_rows(config, "train", split_variant)
                 val_rows = get_task_rows(config, "val", split_variant)
                 test_rows = get_task_rows(config, "test", split_variant)
+                if allowed_ids is not None:
+                    orig_train_rows = len(train_rows)
+                    orig_val_rows = len(val_rows)
+                    orig_test_rows = len(test_rows)
+                    train_rows = filter_rows_to_allowed_ids(train_rows, config, allowed_ids, sequence_to_id)
+                    val_rows = filter_rows_to_allowed_ids(val_rows, config, allowed_ids, sequence_to_id)
+                    test_rows = filter_rows_to_allowed_ids(test_rows, config, allowed_ids, sequence_to_id)
+                    log(
+                        "    Applied allowed-id filter:"
+                        f" train={len(train_rows):,}/{orig_train_rows:,}"
+                        f" val={len(val_rows):,}/{orig_val_rows:,}"
+                        f" test={len(test_rows):,}/{orig_test_rows:,}"
+                    )
+                if not train_rows and not val_rows and not test_rows:
+                    log("    Skipping task: allowed-id filtering left no rows in train/val/test.")
+                    continue
                 needed_ids, needed_sequences = collect_needed_lookup_keys(train_rows + val_rows + test_rows, config)
                 log(f"    Rows loaded: train={len(train_rows)}, val={len(val_rows)}, test={len(test_rows)} | need {len(needed_ids)} ids, {len(needed_sequences)} seqs")
 
@@ -882,7 +1073,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 X_test_flat_ec = y_test_flat_ec = target_mask_test_flat_ec = None
 
                 if is_ligand_task:
-                    # Pool on H5 load — avoids storing (seq_len, emb_dim) arrays for large datasets
+                    # Pool on H5 load to avoid keeping large `(seq_len, emb_dim)` arrays in memory.
                     log(f"    Loading pooled embeddings from H5 (ligand task)...")
                     t0 = time.time()
                     by_id, by_seq = load_pooled_h5_subset(emb_info["path"], needed_ids, needed_sequences)
@@ -954,7 +1145,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                     X_test, y_test = build_mutation_delta_Xy_direct(test_rows, by_id, by_seq, config)
                     store = None
                 else:
-                    # Lazy store — scans H5 keys but reads embeddings on-demand per mini-batch
+                    # Lazy loading keeps residue-level training feasible without loading every embedding first.
                     log(f"    Scanning H5 keys for lazy store...")
                     t0 = time.time()
                     store = load_lazy_embedding_store(emb_info["path"], needed_ids, needed_sequences)
@@ -996,12 +1187,13 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 orig_total = orig_train + orig_val + orig_test
                 kept_total = n_train + n_val + n_test
                 dropped    = orig_total - kept_total
+                dropped_pct = (100 * dropped / orig_total) if orig_total > 0 else 0.0
 
                 log(
                     f"    Data summary:"
                     f"\n      original : train={orig_train:,}  val={orig_val:,}  test={orig_test:,}  total={orig_total:,}"
                     f"\n      kept     : train={n_train:,}  val={n_val:,}  test={n_test:,}  total={kept_total:,}"
-                    f"\n      dropped  : {dropped:,} ({100*dropped/orig_total:.1f}% of original)"
+                    f"\n      dropped  : {dropped:,} ({dropped_pct:.1f}% of original)"
                     + (f"  ← missing embeddings/ligand features" if dropped > 0 else "")
                 )
 
@@ -1016,7 +1208,7 @@ def main(card_path: str, embeddings_json: str, output_dir: str, emb_name_filter:
                 else:
                     log("    Validation disabled: empty val split after filtering")
 
-                model_map = get_model_map(task_type, config.label_kind)
+                model_map = prospective_model_map
 
                 for model_name, model_info in model_map.items():
                     run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
@@ -1188,5 +1380,29 @@ if __name__ == "__main__":
     parser.add_argument("embeddings_json", help="Path to embeddings_models_output.json")
     parser.add_argument("output_dir", help="Directory to write prediction and model files")
     parser.add_argument("--emb_name", default=None, help="Train only this embedding (for SLURM arrays)")
+    parser.add_argument(
+        "--model_prefix",
+        default=None,
+        help="Train only models whose name starts with this prefix, e.g. 'mlp_'.",
+    )
+    parser.add_argument(
+        "--skip_label_kind",
+        action="append",
+        default=[],
+        help="Skip tasks with this label_kind. Repeatable.",
+    )
+    parser.add_argument(
+        "--allowed_ids",
+        default=None,
+        help="Optional path to common_ids.txt. Rows whose embeddings are not in this ID set are excluded.",
+    )
     args = parser.parse_args()
-    main(args.card_path, args.embeddings_json, args.output_dir, args.emb_name)
+    main(
+        args.card_path,
+        args.embeddings_json,
+        args.output_dir,
+        args.emb_name,
+        model_prefix_filter=args.model_prefix,
+        skip_label_kinds=set(args.skip_label_kind),
+        allowed_ids_path=args.allowed_ids,
+    )

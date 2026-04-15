@@ -1,3 +1,5 @@
+"""Shared filesystem paths and column-name constants used by data scripts."""
+
 from pathlib import Path
 
 

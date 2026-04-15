@@ -18,7 +18,7 @@ cluster_env.sh
 
 logs/
 scripts/logs/
-results/predictions/
+results/predictions_mean_pooled_mlp/
 
 data/embeddings
 data/fastas
