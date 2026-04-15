@@ -1,3 +1,191 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:1ff5d6fa339ca09ce52a63e901a17a7887f30770fbc47bf6023527dc9372048d
-size 4470
+{
+  "property_name": "solubility",
+  "dataset_id": "proteinea_solubility",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 3665,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "ec_number": 0,
+        "solubility": 0,
+        "split": 0
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 0
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 3665,
+      "number_of_clusters": 2994,
+      "singleton_clusters": 2574,
+      "largest_cluster_size": 11,
+      "ratio_unique_variants": 0.8169,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/solubility_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 3665,
+        "classes": {
+          "1": {
+            "count": 2056,
+            "ratio": 0.561
+          },
+          "0": {
+            "count": 1609,
+            "ratio": 0.439
+          }
+        }
+      },
+      "train": {
+        "proteinea_solubility_random_80_10_10_splits": {
+          "total_valid_labels": 2932,
+          "classes": {
+            "1": {
+              "count": 1650,
+              "ratio": 0.5628
+            },
+            "0": {
+              "count": 1282,
+              "ratio": 0.4372
+            }
+          }
+        },
+        "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 2932,
+          "classes": {
+            "1": {
+              "count": 1720,
+              "ratio": 0.5866
+            },
+            "0": {
+              "count": 1212,
+              "ratio": 0.4134
+            }
+          }
+        }
+      },
+      "validation": {
+        "proteinea_solubility_random_80_10_10_splits": {
+          "total_valid_labels": 366,
+          "classes": {
+            "1": {
+              "count": 189,
+              "ratio": 0.5164
+            },
+            "0": {
+              "count": 177,
+              "ratio": 0.4836
+            }
+          }
+        },
+        "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 366,
+          "classes": {
+            "0": {
+              "count": 184,
+              "ratio": 0.5027
+            },
+            "1": {
+              "count": 182,
+              "ratio": 0.4973
+            }
+          }
+        }
+      },
+      "test": {
+        "proteinea_solubility_random_80_10_10_splits": {
+          "total_valid_labels": 367,
+          "classes": {
+            "1": {
+              "count": 217,
+              "ratio": 0.5913
+            },
+            "0": {
+              "count": 150,
+              "ratio": 0.4087
+            }
+          }
+        },
+        "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 367,
+          "classes": {
+            "0": {
+              "count": 213,
+              "ratio": 0.5804
+            },
+            "1": {
+              "count": 154,
+              "ratio": 0.4196
+            }
+          }
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "proteinea_solubility_random_80_10_10_splits": {
+        "train": 2932,
+        "test": 367,
+        "val": 366
+      },
+      "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": {
+        "train": 2932,
+        "test": 367,
+        "val": 366
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 61,
+      "max": 1645,
+      "mean": 358.85,
+      "median": 329.0,
+      "p95": 713.0,
+      "count_greater_than_1024": 32,
+      "contains_non_standard_aas": 0
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "proteinea_solubility_random_80_10_10_splits": false,
+        "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": false
+      }
+    },
+    "notes": null,
+    "last_updated": "2026-04-11 02:20:37",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/solubility_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/solubility_prot5_xl_uniref50_splits.png"
+    }
+  }
+}

@@ -1,3 +1,155 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:72419e554cd919b2133db7916b7ac3974698f0eff6a742e76e019ce87cf652b4
-size 3699
+{
+  "property_name": "ph_opt",
+  "dataset_id": "brenda_phopt",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 11464,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "phopt_median": 0,
+        "n_measurements": 0,
+        "phopt_std": 9539
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 296
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 11110,
+      "number_of_clusters": 6885,
+      "singleton_clusters": 5132,
+      "largest_cluster_size": 41,
+      "ratio_unique_variants": 0.6197,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/ph_opt_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 11464,
+        "mean": 7.193,
+        "std": 1.1898,
+        "min": 1.5,
+        "max": 12.0,
+        "median": 7.45
+      },
+      "train": {
+        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 9171,
+          "mean": 7.2397,
+          "std": 1.1346,
+          "min": 1.5,
+          "max": 12.0,
+          "median": 7.5
+        },
+        "brenda_phopt_random_80_10_10_splits": {
+          "total_valid_labels": 9171,
+          "mean": 7.1934,
+          "std": 1.1924,
+          "min": 1.5,
+          "max": 12.0,
+          "median": 7.45
+        }
+      },
+      "validation": {
+        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 1147,
+          "mean": 6.935,
+          "std": 1.2815,
+          "min": 2.0,
+          "max": 11.5,
+          "median": 7.3
+        },
+        "brenda_phopt_random_80_10_10_splits": {
+          "total_valid_labels": 1146,
+          "mean": 7.2269,
+          "std": 1.1612,
+          "min": 3.0,
+          "max": 11.0,
+          "median": 7.5
+        }
+      },
+      "test": {
+        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 1146,
+          "mean": 7.0774,
+          "std": 1.4562,
+          "min": 2.4,
+          "max": 12.0,
+          "median": 7.4
+        },
+        "brenda_phopt_random_80_10_10_splits": {
+          "total_valid_labels": 1147,
+          "mean": 7.1558,
+          "std": 1.197,
+          "min": 1.7,
+          "max": 12.0,
+          "median": 7.4
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
+        "train": 8954,
+        "val": 1113,
+        "test": 1101
+      },
+      "brenda_phopt_random_80_10_10_splits": {
+        "train": 9081,
+        "test": 1047,
+        "val": 1040
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 5,
+      "max": 7096,
+      "mean": 469.81,
+      "median": 408.0,
+      "p95": 921.0,
+      "count_greater_than_1024": 411,
+      "contains_non_standard_aas": 56
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": false,
+        "brenda_phopt_random_80_10_10_splits": false
+      }
+    },
+    "notes": null,
+    "last_updated": "2026-04-11 02:17:47",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/ph_opt_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/ph_opt_prot5_xl_uniref50_splits.png"
+    }
+  }
+}

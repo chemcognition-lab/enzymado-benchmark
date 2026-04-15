@@ -1,3 +1,133 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:133f72023b0427aa1056f84ac636771421270ea443d5fb9a78de7b22a1702d4f
-size 3519
+{
+  "property_name": "active_sites",
+  "dataset_id": "swissprot_active_site",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 90436,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "ec_number": 0,
+        "protein_sequence": 0,
+        "active_site": 0
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 0
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 89725,
+      "number_of_clusters": 17764,
+      "singleton_clusters": 9347,
+      "largest_cluster_size": 701,
+      "ratio_unique_variants": 0.198,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/active_sites_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 90436,
+        "format": "categorical_high_variance",
+        "unique_classes": 15758
+      },
+      "train": {
+        "swissprot_active_site_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 72349,
+          "format": "categorical_high_variance",
+          "unique_classes": 14159
+        },
+        "swissprot_active_site_random_80_10_10_splits": {
+          "total_valid_labels": 72349,
+          "format": "categorical_high_variance",
+          "unique_classes": 13712
+        }
+      },
+      "validation": {
+        "swissprot_active_site_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 9043,
+          "format": "categorical_high_variance",
+          "unique_classes": 809
+        },
+        "swissprot_active_site_random_80_10_10_splits": {
+          "total_valid_labels": 9044,
+          "format": "categorical_high_variance",
+          "unique_classes": 3351
+        }
+      },
+      "test": {
+        "swissprot_active_site_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 9044,
+          "format": "categorical_high_variance",
+          "unique_classes": 1550
+        },
+        "swissprot_active_site_random_80_10_10_splits": {
+          "total_valid_labels": 9043,
+          "format": "categorical_high_variance",
+          "unique_classes": 3347
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "swissprot_active_site_similarity_mmseqs2_80_10_10_splits": {
+        "train": 72349,
+        "test": 9044,
+        "val": 9043
+      },
+      "swissprot_active_site_random_80_10_10_splits": {
+        "train": 72349,
+        "val": 9044,
+        "test": 9043
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 8,
+      "max": 35213,
+      "mean": 439.37,
+      "median": 352.0,
+      "p95": 926.0,
+      "count_greater_than_1024": 3462,
+      "contains_non_standard_aas": 449
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "swissprot_active_site_similarity_mmseqs2_80_10_10_splits": false,
+        "swissprot_active_site_random_80_10_10_splits": false
+      }
+    },
+    "notes": null,
+    "last_updated": "2026-04-11 01:38:58",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/active_sites_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/active_sites_prot5_xl_uniref50_splits.png"
+    }
+  }
+}

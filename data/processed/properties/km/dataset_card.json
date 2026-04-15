@@ -1,3 +1,156 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:6a49c7813c77d775f0d50ec73e46bc94be991d285a84494a57df77cebef76c1f
-size 3773
+{
+  "property_name": "km",
+  "dataset_id": "catpred_km",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 41174,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "temperature": 1831,
+        "ph": 1430,
+        "km": 0
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 0
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 12355,
+      "number_of_clusters": 7270,
+      "singleton_clusters": 5255,
+      "largest_cluster_size": 74,
+      "ratio_unique_variants": 0.5884,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/km_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 41174,
+        "mean": -0.731,
+        "std": 1.273,
+        "min": -8.0,
+        "max": 4.0,
+        "median": -0.7388
+      },
+      "train": {
+        "catpred_km_random_80_10_10_splits": {
+          "total_valid_labels": 32939,
+          "mean": -0.7087,
+          "std": 1.2607,
+          "min": -7.699,
+          "max": 4.0,
+          "median": -0.7212
+        },
+        "catpred_km_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 32939,
+          "mean": -0.7066,
+          "std": 1.2632,
+          "min": -8.0,
+          "max": 4.0,
+          "median": -0.7212
+        }
+      },
+      "validation": {
+        "catpred_km_random_80_10_10_splits": {
+          "total_valid_labels": 4117,
+          "mean": -0.8057,
+          "std": 1.331,
+          "min": -5.0969,
+          "max": 4.0,
+          "median": -0.7696
+        },
+        "catpred_km_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 4118,
+          "mean": -0.6341,
+          "std": 1.277,
+          "min": -6.301,
+          "max": 3.679,
+          "median": -0.6021
+        }
+      },
+      "test": {
+        "catpred_km_random_80_10_10_splits": {
+          "total_valid_labels": 4118,
+          "mean": -0.8344,
+          "std": 1.3036,
+          "min": -8.0,
+          "max": 3.4771,
+          "median": -0.8239
+        },
+        "catpred_km_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 4117,
+          "mean": -1.0224,
+          "std": 1.3084,
+          "min": -6.301,
+          "max": 4.0,
+          "median": -1.0132
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "catpred_km_random_80_10_10_splits": {
+        "train": 11914,
+        "test": 277,
+        "val": 275
+      },
+      "catpred_km_similarity_mmseqs2_80_10_10_splits": {
+        "train": 10596,
+        "val": 1042,
+        "test": 828
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 5,
+      "max": 2590,
+      "mean": 437.55,
+      "median": 389.0,
+      "p95": 822.0,
+      "count_greater_than_1024": 996,
+      "contains_non_standard_aas": 229
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "catpred_km_random_80_10_10_splits": false,
+        "catpred_km_similarity_mmseqs2_80_10_10_splits": false
+      }
+    },
+    "notes": "Target values for km appear to be log10-transformed.",
+    "last_updated": "2026-04-11 02:14:13",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/km_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/km_prot5_xl_uniref50_splits.png"
+    }
+  }
+}

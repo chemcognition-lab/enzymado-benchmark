@@ -1,3 +1,132 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:f94cd9904f17286651b4ef3602c1c1f68740f59135f832e4d73404ec3115c573
-size 3529
+{
+  "property_name": "binding_site",
+  "dataset_id": "swissprot_binding_site",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 158681,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "binding_positions": 0
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 0
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 157433,
+      "number_of_clusters": 27759,
+      "singleton_clusters": 14338,
+      "largest_cluster_size": 808,
+      "ratio_unique_variants": 0.1763,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/binding_site_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 158681,
+        "format": "categorical_high_variance",
+        "unique_classes": 56830
+      },
+      "train": {
+        "swissprot_binding_site_random_80_10_10_splits": {
+          "total_valid_labels": 126945,
+          "format": "categorical_high_variance",
+          "unique_classes": 48812
+        },
+        "swissprot_binding_site_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 126945,
+          "format": "categorical_high_variance",
+          "unique_classes": 50381
+        }
+      },
+      "validation": {
+        "swissprot_binding_site_random_80_10_10_splits": {
+          "total_valid_labels": 15868,
+          "format": "categorical_high_variance",
+          "unique_classes": 10321
+        },
+        "swissprot_binding_site_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 15868,
+          "format": "categorical_high_variance",
+          "unique_classes": 3736
+        }
+      },
+      "test": {
+        "swissprot_binding_site_random_80_10_10_splits": {
+          "total_valid_labels": 15868,
+          "format": "categorical_high_variance",
+          "unique_classes": 10354
+        },
+        "swissprot_binding_site_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 15868,
+          "format": "categorical_high_variance",
+          "unique_classes": 3138
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "swissprot_binding_site_random_80_10_10_splits": {
+        "train": 126945,
+        "val": 15868,
+        "test": 15868
+      },
+      "swissprot_binding_site_similarity_mmseqs2_80_10_10_splits": {
+        "train": 126945,
+        "val": 15868,
+        "test": 15868
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 8,
+      "max": 35213,
+      "mean": 437.49,
+      "median": 369.0,
+      "p95": 912.0,
+      "count_greater_than_1024": 5541,
+      "contains_non_standard_aas": 531
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "swissprot_binding_site_random_80_10_10_splits": false,
+        "swissprot_binding_site_similarity_mmseqs2_80_10_10_splits": false
+      }
+    },
+    "notes": null,
+    "last_updated": "2026-04-11 01:49:20",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/binding_site_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/binding_site_prot5_xl_uniref50_splits.png"
+    }
+  }
+}

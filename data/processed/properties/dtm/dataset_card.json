@@ -1,3 +1,156 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:5a85a78008cae5512411387b376d61e74c14256b8d7fafe3ab56a063f5672c68
-size 3749
+{
+  "property_name": "dtm",
+  "dataset_id": "fireprotdb_dtm",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 3338,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "uniprot_id": 0,
+        "wildtype_sequence": 0,
+        "mutation": 0,
+        "protein_sequence": 0,
+        "dtm": 0
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 1026
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 91,
+      "number_of_clusters": 82,
+      "singleton_clusters": 74,
+      "largest_cluster_size": 3,
+      "ratio_unique_variants": 0.9011,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/dtm_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 3338,
+        "mean": -2.7866,
+        "std": 7.1079,
+        "min": -60.79,
+        "max": 72.0,
+        "median": -1.4
+      },
+      "train": {
+        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 2326,
+          "mean": -2.3951,
+          "std": 7.0786,
+          "min": -60.79,
+          "max": 27.9,
+          "median": -1.1
+        },
+        "fireprotdb_dtm_random_80_10_10_splits": {
+          "total_valid_labels": 2670,
+          "mean": -2.9142,
+          "std": 7.3791,
+          "min": -60.79,
+          "max": 72.0,
+          "median": -1.5
+        }
+      },
+      "validation": {
+        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 679,
+          "mean": -4.1026,
+          "std": 5.9695,
+          "min": -41.8,
+          "max": 11.6,
+          "median": -2.6
+        },
+        "fireprotdb_dtm_random_80_10_10_splits": {
+          "total_valid_labels": 334,
+          "mean": -2.3618,
+          "std": 5.7964,
+          "min": -31.5,
+          "max": 20.0,
+          "median": -1.4
+        }
+      },
+      "test": {
+        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 333,
+          "mean": -2.8377,
+          "std": 8.9178,
+          "min": -26.9,
+          "max": 72.0,
+          "median": -2.0
+        },
+        "fireprotdb_dtm_random_80_10_10_splits": {
+          "total_valid_labels": 334,
+          "mean": -2.1911,
+          "std": 5.9659,
+          "min": -47.55,
+          "max": 23.6,
+          "median": -1.1
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
+        "train": 83,
+        "test": 7,
+        "val": 1
+      },
+      "fireprotdb_dtm_random_80_10_10_splits": {
+        "train": 2670,
+        "test": 334,
+        "val": 334
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 96,
+      "max": 2527,
+      "mean": 270.74,
+      "median": 231.0,
+      "p95": 537.0,
+      "count_greater_than_1024": 3,
+      "contains_non_standard_aas": 0
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": false,
+        "fireprotdb_dtm_random_80_10_10_splits": false
+      }
+    },
+    "notes": null,
+    "last_updated": "2026-04-11 01:59:14",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/dtm_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/dtm_prot5_xl_uniref50_splits.png"
+    }
+  }
+}

@@ -1,3 +1,191 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:03f13f5c282fd8bfe7273dd1047b4692456fd534da6cf7047da1d763d864bd7f
-size 4499
+{
+  "property_name": "binding",
+  "dataset_id": "biolip_binding",
+  "origin_of_data": {
+    "source_name": null,
+    "source_url": null,
+    "source_version": null,
+    "release_date": null,
+    "citation": null
+  },
+  "amount_of_removed_data": {
+    "datapoints_before_cleaning": null,
+    "datapoints_after_cleaning": 61115,
+    "datapoints_removed_total": null,
+    "removed_percentage": null,
+    "removed_by_reason": {
+      "missing_values": null,
+      "duplicates": null,
+      "invalid_sequence": null,
+      "was_not_enzyme": null,
+      "other": null
+    }
+  },
+  "statistics": {
+    "ratio_enzyme_proteins": null,
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "ligand_id": 24775,
+        "ligand_name": 24775,
+        "smiles": 0,
+        "binding": 0
+      },
+      "duplicate_rows_full": 11303,
+      "duplicate_rows_by_key": 16149
+    },
+    "entire_protein_pool_cluster_with_mmseqs2": {
+      "cluster_method": "mmseqs2",
+      "cluster_parameters": {
+        "min_sequence_identity": 0.5,
+        "coverage_mode": 0,
+        "coverage_threshold": 0.8
+      },
+      "total_sequences": 19930,
+      "number_of_clusters": 13316,
+      "singleton_clusters": 10128,
+      "largest_cluster_size": 52,
+      "ratio_unique_variants": 0.6681,
+      "cluster_diversity_plot": "results/figures/cluster_diversity/binding_cluster_diversity.png",
+      "dendrogram_plot": null
+    },
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 61115,
+        "classes": {
+          "1": {
+            "count": 36340,
+            "ratio": 0.5946
+          },
+          "0": {
+            "count": 24775,
+            "ratio": 0.4054
+          }
+        }
+      },
+      "train": {
+        "biolip_binding_random_80_10_10_splits": {
+          "total_valid_labels": 48893,
+          "classes": {
+            "1": {
+              "count": 27229,
+              "ratio": 0.5569
+            },
+            "0": {
+              "count": 21664,
+              "ratio": 0.4431
+            }
+          }
+        },
+        "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 48893,
+          "classes": {
+            "1": {
+              "count": 28355,
+              "ratio": 0.5799
+            },
+            "0": {
+              "count": 20538,
+              "ratio": 0.4201
+            }
+          }
+        }
+      },
+      "validation": {
+        "biolip_binding_random_80_10_10_splits": {
+          "total_valid_labels": 6111,
+          "classes": {
+            "1": {
+              "count": 4674,
+              "ratio": 0.7649
+            },
+            "0": {
+              "count": 1437,
+              "ratio": 0.2351
+            }
+          }
+        },
+        "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 6111,
+          "classes": {
+            "1": {
+              "count": 4172,
+              "ratio": 0.6827
+            },
+            "0": {
+              "count": 1939,
+              "ratio": 0.3173
+            }
+          }
+        }
+      },
+      "test": {
+        "biolip_binding_random_80_10_10_splits": {
+          "total_valid_labels": 6111,
+          "classes": {
+            "1": {
+              "count": 4437,
+              "ratio": 0.7261
+            },
+            "0": {
+              "count": 1674,
+              "ratio": 0.2739
+            }
+          }
+        },
+        "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
+          "total_valid_labels": 6111,
+          "classes": {
+            "1": {
+              "count": 3813,
+              "ratio": 0.624
+            },
+            "0": {
+              "count": 2298,
+              "ratio": 0.376
+            }
+          }
+        }
+      }
+    },
+    "split_sizes_by_method": {
+      "biolip_binding_random_80_10_10_splits": {
+        "train": 18526,
+        "test": 760,
+        "val": 644
+      },
+      "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
+        "train": 16869,
+        "test": 1700,
+        "val": 1361
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 30,
+      "max": 4579,
+      "mean": 394.44,
+      "median": 331.0,
+      "p95": 806.0,
+      "count_greater_than_1024": 1668,
+      "contains_non_standard_aas": 0
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "label_format_validated": true,
+      "split_leakage_checked": {
+        "biolip_binding_random_80_10_10_splits": false,
+        "biolip_binding_similarity_mmseqs2_80_10_10_splits": false
+      }
+    },
+    "notes": "Warning: Base dataset contains 11303 full row duplicates.",
+    "last_updated": "2026-04-11 01:45:08",
+    "umap": {
+      "embedding_model": "prot5_xl_uniref50",
+      "label_colored": "results/figures/umaps/binding_prot5_xl_uniref50_labels.png",
+      "split_colored": "results/figures/umaps/binding_prot5_xl_uniref50_splits.png"
+    }
+  }
+}
