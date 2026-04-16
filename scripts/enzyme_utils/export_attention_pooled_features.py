@@ -18,6 +18,7 @@ from data_loading import FlatECLabelBuilder, get_task_config
 from models.attention_models import export_features_with_pooler, get_attention_model_map, load_pooler_from_checkpoint
 from models.train import (
     SKIP_LABEL_KINDS,
+    build_result_run_dir,
     collect_needed_lookup_keys,
     filter_rows_to_allowed_ids,
     get_dataloader,
@@ -169,9 +170,13 @@ def main(
                 continue
 
             for source_model_name in model_map:
-                checkpoint_run_dir = checkpoints_dir_obj / f"{emb_name}__{task_name}__{source_model_name}"
+                checkpoint_run_dir = build_result_run_dir(
+                    checkpoints_dir_obj, split_variant, task_name, emb_name, source_model_name
+                )
                 checkpoint_path = checkpoint_run_dir / "model.pt"
-                export_run_dir = output_dir_obj / f"{emb_name}__{task_name}__{source_model_name}"
+                export_run_dir = build_result_run_dir(
+                    output_dir_obj, split_variant, task_name, emb_name, source_model_name
+                )
 
                 if not is_run_complete(checkpoint_run_dir) or not checkpoint_path.exists():
                     log(f"  Skipping '{task_name}' / '{source_model_name}' (missing trained checkpoint)")
@@ -298,7 +303,7 @@ def main(
                     }
                     with open(export_run_dir / "metadata.json", "w", encoding="utf-8") as handle:
                         json.dump(metadata, handle, indent=2)
-                    log(f"    Saved attention features → {export_run_dir.name}")
+                    log(f"    Saved attention features → {export_run_dir.relative_to(output_dir_obj)}")
                 finally:
                     del store
 

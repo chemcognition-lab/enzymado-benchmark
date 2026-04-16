@@ -12,9 +12,9 @@ set -euo pipefail
 
 # Submit examples:
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
-#   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_embeddings_killarney.slurm
-#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm3_open scripts/run_embeddings_killarney.slurm
-#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm2_650M,PER_PROTEIN=1 scripts/run_embeddings_killarney.slurm
+#   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_embeddings_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm3_open scripts/run_embeddings_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBED_MODEL=esm2_650M,PER_PROTEIN=1 scripts/run_embeddings_cluster.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
@@ -33,20 +33,15 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-: "${UV_CACHE_DIR:=/scratch/${USER}/enzymado/uv-cache}"
-: "${HF_HOME:=/scratch/${USER}/enzymado/hf-cache}"
-: "${TORCH_HOME:=/scratch/${USER}/enzymado/torch-cache}"
-: "${XDG_CACHE_HOME:=/scratch/${USER}/enzymado/xdg-cache}"
-: "${TMPDIR:=/scratch/${USER}/enzymado/tmp}"
-: "${UV_LINK_MODE:=copy}"
+# shellcheck disable=SC1091
+source "${REPO}/scripts/cluster_scratch_paths.sh"
+init_cluster_runtime_dirs
+
 : "${PER_PROTEIN:=0}"
 : "${ALLOW_PARTIAL:=0}"
-: "${EMBED_OUTPUT_ROOT:=${REPO}/data}"
+: "${EMBED_OUTPUT_ROOT:=${SCRATCH_ROOT}/data}"
 
-export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT
-export PYTHONNOUSERSITE=1
-
-mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
+export PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT
 
 MODELS=(
     prot5_xl_half_uniref50

@@ -53,6 +53,45 @@ def is_run_complete(run_dir: Path) -> bool:
     return has_preds and has_model
 
 
+def _path_token(value: str) -> str:
+    """Normalize dynamic path components used in scratch result trees."""
+    return value.strip().replace("/", "_")
+
+
+def build_result_run_dir(
+    output_root: Path,
+    split_variant: str,
+    task_name: str,
+    emb_name: str,
+    model_name: str,
+) -> Path:
+    """Return a deterministic result directory rooted at split/task/embedding/model."""
+    return (
+        output_root
+        / _path_token(split_variant)
+        / _path_token(task_name)
+        / _path_token(emb_name)
+        / _path_token(model_name)
+    )
+
+
+def discover_embedding_names(result_root: Path) -> list[str]:
+    """Return embedding directory names from a nested split/task/embedding/model tree."""
+    discovered: set[str] = set()
+    if not result_root.exists():
+        return []
+    for split_dir in result_root.iterdir():
+        if not split_dir.is_dir():
+            continue
+        for task_dir in split_dir.iterdir():
+            if not task_dir.is_dir():
+                continue
+            for emb_dir in task_dir.iterdir():
+                if emb_dir.is_dir():
+                    discovered.add(emb_dir.name)
+    return sorted(discovered)
+
+
 SKIP_LABEL_KINDS: set[str] = set()
 
 CARD_TO_REGISTRY: dict[str, str] = {
@@ -1025,7 +1064,9 @@ def main(
                     continue
                 already_done = [
                     m for m in prospective_model_map
-                    if is_run_complete(output_dir / f"{emb_name}__{task_name}__{m}")
+                    if is_run_complete(
+                        build_result_run_dir(output_dir, split_variant, task_name, emb_name, m)
+                    )
                 ]
                 if len(already_done) == len(prospective_model_map):
                     log(f"    All {len(already_done)} models already trained — skipping task.")
@@ -1211,7 +1252,9 @@ def main(
                 model_map = prospective_model_map
 
                 for model_name, model_info in model_map.items():
-                    run_dir = output_dir / f"{emb_name}__{task_name}__{model_name}"
+                    run_dir = build_result_run_dir(
+                        output_dir, split_variant, task_name, emb_name, model_name
+                    )
 
                     if is_run_complete(run_dir):
                         log(f"    [{model_name}] Already trained — skipping.")
@@ -1362,7 +1405,7 @@ def main(
                     result_key = f"{emb_name}__{model_name}"
                     result_entry = make_result_entry(emb_name, model_name, model_info, run_dir, model_file)
                     update_card_locked(card_path, task_name, result_key, result_entry)
-                    log(f"      Saved → {run_dir.name}")
+                    log(f"      Saved → {run_dir.relative_to(output_dir)}")
 
                 del store  # free task embeddings before loading next task
             except Exception as _task_exc:

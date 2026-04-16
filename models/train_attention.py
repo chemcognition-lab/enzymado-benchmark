@@ -16,6 +16,7 @@ from data_loading import get_task_config
 from models.attention_models import get_attention_model_map, save_attention_checkpoint
 from models.train import (
     SKIP_LABEL_KINDS,
+    build_result_run_dir,
     collect_needed_lookup_keys,
     filter_rows_to_allowed_ids,
     get_dataloader,
@@ -133,7 +134,9 @@ def main(
 
                 already_done = [
                     model_name for model_name in model_map
-                    if is_run_complete(output_dir_obj / f"{emb_name}__{task_name}__{model_name}")
+                    if is_run_complete(
+                        build_result_run_dir(output_dir_obj, split_variant, task_name, emb_name, model_name)
+                    )
                 ]
                 if len(already_done) == len(model_map):
                     log(f"    All {len(already_done)} attention models already trained — skipping task.")
@@ -236,7 +239,9 @@ def main(
                 test_loader = get_dataloader(test_bundle, batch_size=batch_size)
 
                 for model_name, model_info in model_map.items():
-                    run_dir = output_dir_obj / f"{emb_name}__{task_name}__{model_name}"
+                    run_dir = build_result_run_dir(
+                        output_dir_obj, split_variant, task_name, emb_name, model_name
+                    )
                     if is_run_complete(run_dir):
                         log(f"    [{model_name}] Already trained — skipping.")
                         continue
@@ -278,7 +283,7 @@ def main(
                     result_key = f"{emb_name}__{model_name}"
                     result_entry = make_result_entry(emb_name, model_name, model_info, run_dir, model_file)
                     update_card_locked(card_path_obj, task_name, result_key, result_entry)
-                    log(f"      Saved → {run_dir.name}")
+                    log(f"      Saved → {run_dir.relative_to(output_dir_obj)}")
             except Exception as task_exc:
                 import traceback
 

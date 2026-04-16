@@ -24,30 +24,31 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-: "${UV_CACHE_DIR:=/scratch/${USER}/enzymado/uv-cache}"
-: "${HF_HOME:=/scratch/${USER}/enzymado/hf-cache}"
-: "${TORCH_HOME:=/scratch/${USER}/enzymado/torch-cache}"
-: "${XDG_CACHE_HOME:=/scratch/${USER}/enzymado/xdg-cache}"
-: "${TMPDIR:=/scratch/${USER}/enzymado/tmp}"
-: "${UV_LINK_MODE:=copy}"
+# shellcheck disable=SC1091
+source "${REPO}/scripts/cluster_scratch_paths.sh"
+init_cluster_runtime_dirs
+
+: "${EMBEDDINGS_DATA_ROOT:=${SCRATCH_ROOT}/data}"
+: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=1}"
 if [[ -z "${CARD_PATH:-}" ]]; then
     if [[ -f "${REPO}/benchmark_card_attention.json" ]]; then
-        CARD_PATH="${REPO}/benchmark_card_attention.json"
+        CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card_attention.json")"
     else
-        CARD_PATH="${REPO}/benchmark_card.json"
+        CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
     fi
 fi
 : "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
-: "${OUTPUT_DIR:=${REPO}/results/predictions_attention}"
+: "${OUTPUT_DIR:=${SCRATCH_ROOT}/results/predictions_attention}"
 : "${MODEL_PREFIX:=}"
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
 : "${BATCH_SIZE:=16}"
 
-export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
-export PYTHONNOUSERSITE=1
+if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
+    EMBEDDINGS_JSON="$(relocate_manifest_to_scratch "${REPO}" "${EMBEDDINGS_JSON}" "${EMBEDDINGS_DATA_ROOT}")"
+fi
 
-mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
+export EMBEDDINGS_DATA_ROOT AUTO_RELOCATE_EMBEDDINGS_JSON
 
 EMB_MODELS=(
     ankh3_large

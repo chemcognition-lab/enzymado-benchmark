@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=enzymado_attn_xgb
+#SBATCH --job-name=enzymado_attn_export
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=96G
-#SBATCH --time=08:00:00
+#SBATCH --mem=128G
+#SBATCH --time=12:00:00
 #SBATCH --output=%x_%A_%a.out
 
 set -euo pipefail
@@ -24,29 +24,31 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-: "${UV_CACHE_DIR:=/scratch/${USER}/enzymado/uv-cache}"
-: "${HF_HOME:=/scratch/${USER}/enzymado/hf-cache}"
-: "${TORCH_HOME:=/scratch/${USER}/enzymado/torch-cache}"
-: "${XDG_CACHE_HOME:=/scratch/${USER}/enzymado/xdg-cache}"
-: "${TMPDIR:=/scratch/${USER}/enzymado/tmp}"
-: "${UV_LINK_MODE:=copy}"
+# shellcheck disable=SC1091
+source "${REPO}/scripts/cluster_scratch_paths.sh"
+init_cluster_runtime_dirs
+
+: "${EMBEDDINGS_DATA_ROOT:=${SCRATCH_ROOT}/data}"
+: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=1}"
 if [[ -z "${CARD_PATH:-}" ]]; then
-    if [[ -f "${REPO}/benchmark_card_attention_xgb.json" ]]; then
-        CARD_PATH="${REPO}/benchmark_card_attention_xgb.json"
-    elif [[ -f "${REPO}/benchmark_card_attention.json" ]]; then
-        CARD_PATH="${REPO}/benchmark_card_attention.json"
+    if [[ -f "${REPO}/benchmark_card_attention.json" ]]; then
+        CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card_attention.json")"
     else
-        CARD_PATH="${REPO}/benchmark_card.json"
+        CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
     fi
 fi
-: "${FEATURES_DIR:=${REPO}/results/attention_features}"
-: "${OUTPUT_DIR:=${REPO}/results/predictions_attention_xgb}"
+: "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
+: "${CHECKPOINTS_DIR:=${SCRATCH_ROOT}/results/predictions_attention}"
+: "${OUTPUT_DIR:=${SCRATCH_ROOT}/results/attention_features}"
 : "${SOURCE_MODEL_PREFIX:=attention_sgd_}"
+: "${COMMON_IDS_PATH:=}"
+: "${BATCH_SIZE:=16}"
 
-export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
-export PYTHONNOUSERSITE=1
+if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
+    EMBEDDINGS_JSON="$(relocate_manifest_to_scratch "${REPO}" "${EMBEDDINGS_JSON}" "${EMBEDDINGS_DATA_ROOT}")"
+fi
 
-mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
+export EMBEDDINGS_DATA_ROOT AUTO_RELOCATE_EMBEDDINGS_JSON
 
 EMB_MODELS=(
     ankh3_large
@@ -114,16 +116,27 @@ mkdir -p "${OUTPUT_DIR}"
 echo "Job host: $(hostname)"
 echo "Embedding model: ${EMBEDDING_NAME}"
 echo "Card path: ${CARD_PATH}"
-echo "Features dir: ${FEATURES_DIR}"
+echo "Embeddings json: ${EMBEDDINGS_JSON}"
+echo "Checkpoints dir: ${CHECKPOINTS_DIR}"
 echo "Output dir: ${OUTPUT_DIR}"
 echo "Source model prefix: ${SOURCE_MODEL_PREFIX}"
+if [[ -n "${COMMON_IDS_PATH}" ]]; then
+    echo "Allowed IDs: ${COMMON_IDS_PATH}"
+fi
+echo "Batch size: ${BATCH_SIZE}"
 
-TRAIN_ARGS=(
+EXPORT_ARGS=(
     "${CARD_PATH}"
-    "${FEATURES_DIR}"
+    "${EMBEDDINGS_JSON}"
+    "${CHECKPOINTS_DIR}"
     "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
     --source_model_prefix "${SOURCE_MODEL_PREFIX}"
+    --batch_size "${BATCH_SIZE}"
 )
 
-python -u "${REPO}/models/train_attention_xgb.py" "${TRAIN_ARGS[@]}"
+if [[ -n "${COMMON_IDS_PATH}" ]]; then
+    EXPORT_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
+fi
+
+python -u "${REPO}/scripts/enzyme_utils/export_attention_pooled_features.py" "${EXPORT_ARGS[@]}"

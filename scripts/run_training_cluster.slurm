@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=enzymado_attn_export
+#SBATCH --job-name=enzymado_train
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=128G
-#SBATCH --time=12:00:00
+#SBATCH --mem=200G
+#SBATCH --time=24:00:00
 #SBATCH --output=%x_%A_%a.out
 
 set -euo pipefail
+
+# Submit one embedding configuration per array task or override `EMB_NAME`.
+
+# Submit examples:
+#   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
+#   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMB_NAME=esm2_650M scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions_mean_pooled_mlp,MODEL_PREFIX=mlp_,SKIP_LABEL_KINDS=residue_binary_vector scripts/run_training_cluster.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
@@ -24,30 +32,30 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-: "${UV_CACHE_DIR:=/scratch/${USER}/enzymado/uv-cache}"
-: "${HF_HOME:=/scratch/${USER}/enzymado/hf-cache}"
-: "${TORCH_HOME:=/scratch/${USER}/enzymado/torch-cache}"
-: "${XDG_CACHE_HOME:=/scratch/${USER}/enzymado/xdg-cache}"
-: "${TMPDIR:=/scratch/${USER}/enzymado/tmp}"
-: "${UV_LINK_MODE:=copy}"
-if [[ -z "${CARD_PATH:-}" ]]; then
-    if [[ -f "${REPO}/benchmark_card_attention.json" ]]; then
-        CARD_PATH="${REPO}/benchmark_card_attention.json"
-    else
-        CARD_PATH="${REPO}/benchmark_card.json"
-    fi
-fi
-: "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
-: "${CHECKPOINTS_DIR:=${REPO}/results/predictions_attention}"
-: "${OUTPUT_DIR:=${REPO}/results/attention_features}"
-: "${SOURCE_MODEL_PREFIX:=attention_sgd_}"
+# shellcheck disable=SC1091
+source "${REPO}/scripts/cluster_scratch_paths.sh"
+init_cluster_runtime_dirs
+
+: "${EMBEDDINGS_DATA_ROOT:=${SCRATCH_ROOT}/data}"
+: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=1}"
+: "${MODEL_PREFIX:=}"
+: "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
-: "${BATCH_SIZE:=16}"
 
-export UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
-export PYTHONNOUSERSITE=1
+if [[ -z "${CARD_PATH:-}" ]]; then
+    CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
+fi
 
-mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
+if [[ -z "${EMBEDDINGS_JSON:-}" ]]; then
+    EMBEDDINGS_JSON="${REPO}/embeddings_models_output.json"
+fi
+if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
+    EMBEDDINGS_JSON="$(relocate_manifest_to_scratch "${REPO}" "${EMBEDDINGS_JSON}" "${EMBEDDINGS_DATA_ROOT}")"
+fi
+
+: "${OUTPUT_DIR:=${SCRATCH_ROOT}/results/predictions}"
+
+export EMBEDDINGS_DATA_ROOT AUTO_RELOCATE_EMBEDDINGS_JSON
 
 EMB_MODELS=(
     ankh3_large
@@ -116,26 +124,39 @@ echo "Job host: $(hostname)"
 echo "Embedding model: ${EMBEDDING_NAME}"
 echo "Card path: ${CARD_PATH}"
 echo "Embeddings json: ${EMBEDDINGS_JSON}"
-echo "Checkpoints dir: ${CHECKPOINTS_DIR}"
 echo "Output dir: ${OUTPUT_DIR}"
-echo "Source model prefix: ${SOURCE_MODEL_PREFIX}"
+if [[ -n "${MODEL_PREFIX}" ]]; then
+    echo "Model prefix: ${MODEL_PREFIX}"
+fi
+if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
+    echo "Skip label kinds: ${SKIP_LABEL_KINDS}"
+fi
 if [[ -n "${COMMON_IDS_PATH}" ]]; then
     echo "Allowed IDs: ${COMMON_IDS_PATH}"
 fi
-echo "Batch size: ${BATCH_SIZE}"
 
-EXPORT_ARGS=(
+TRAIN_ARGS=(
     "${CARD_PATH}"
     "${EMBEDDINGS_JSON}"
-    "${CHECKPOINTS_DIR}"
     "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
-    --source_model_prefix "${SOURCE_MODEL_PREFIX}"
-    --batch_size "${BATCH_SIZE}"
 )
 
-if [[ -n "${COMMON_IDS_PATH}" ]]; then
-    EXPORT_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
+if [[ -n "${MODEL_PREFIX}" ]]; then
+    TRAIN_ARGS+=(--model_prefix "${MODEL_PREFIX}")
 fi
 
-python -u "${REPO}/scripts/enzyme_utils/export_attention_pooled_features.py" "${EXPORT_ARGS[@]}"
+if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
+    IFS=',' read -r -a _skip_kinds <<< "${SKIP_LABEL_KINDS}"
+    for _skip_kind in "${_skip_kinds[@]}"; do
+        if [[ -n "${_skip_kind}" ]]; then
+            TRAIN_ARGS+=(--skip_label_kind "${_skip_kind}")
+        fi
+    done
+fi
+
+if [[ -n "${COMMON_IDS_PATH}" ]]; then
+    TRAIN_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
+fi
+
+python -u "${REPO}/models/train.py" "${TRAIN_ARGS[@]}"

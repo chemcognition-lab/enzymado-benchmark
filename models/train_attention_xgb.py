@@ -20,12 +20,15 @@ from models.attention_models import get_attention_model_map
 from models.models import XGBClassifier, XGBFlatECClassifier, XGBRegressor
 from models.train import (
     SKIP_LABEL_KINDS,
+    build_result_run_dir,
+    discover_embedding_names,
     is_run_complete,
     log,
     make_predictions_file,
     make_result_entry,
     read_json,
     resolve_registry_name,
+    resolve_split_variant,
     train_model,
     update_card_locked,
 )
@@ -116,11 +119,7 @@ def main(
     output_dir_obj = Path(output_dir)
     output_dir_obj.mkdir(parents=True, exist_ok=True)
 
-    discovered_embeddings = sorted({
-        path.name.split("__", 1)[0]
-        for path in features_dir_obj.iterdir()
-        if path.is_dir() and "__" in path.name
-    })
+    discovered_embeddings = discover_embedding_names(features_dir_obj)
     if emb_name_filter is not None and emb_name_filter not in discovered_embeddings:
         raise ValueError(
             f"Unknown embedding '{emb_name_filter}' in feature exports. Available: {', '.join(discovered_embeddings)}"
@@ -142,6 +141,12 @@ def main(
         if config.label_kind in SKIP_LABEL_KINDS:
             continue
 
+        dataset_info = prop["datasets"][0]
+        default_split = dataset_info.get("splits", {}).get("default_split")
+        split_variant = resolve_split_variant(default_split)
+        if split_variant is None:
+            continue
+
         source_model_map = get_attention_model_map(task_type, config.label_kind)
         if source_model_prefix is not None:
             source_model_map = {
@@ -160,8 +165,12 @@ def main(
                 if emb_name_filter is not None and emb_name != emb_name_filter:
                     continue
 
-                feature_run_dir = features_dir_obj / f"{emb_name}__{task_name}__{source_model_name}"
-                run_dir = output_dir_obj / f"{emb_name}__{task_name}__{xgb_model_name}"
+                feature_run_dir = build_result_run_dir(
+                    features_dir_obj, split_variant, task_name, emb_name, source_model_name
+                )
+                run_dir = build_result_run_dir(
+                    output_dir_obj, split_variant, task_name, emb_name, xgb_model_name
+                )
                 if is_run_complete(run_dir):
                     log(f"[{emb_name} | {task_name} | {xgb_model_name}] Already trained — skipping.")
                     continue
@@ -206,7 +215,7 @@ def main(
                 result_key = f"{emb_name}__{xgb_model_name}"
                 result_entry = make_result_entry(emb_name, xgb_model_name, model_info, run_dir, model_file)
                 update_card_locked(Path(card_path), task_name, result_key, result_entry)
-                log(f"  Saved → {run_dir.name}")
+                log(f"  Saved → {run_dir.relative_to(output_dir_obj)}")
 
     log(f"\nDone. Attention XGBoost results written to {card_path}")
 
