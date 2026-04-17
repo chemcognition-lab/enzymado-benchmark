@@ -38,7 +38,7 @@ source "${REPO}/scripts/cluster_scratch_paths.sh"
 init_cluster_runtime_dirs
 
 : "${PER_PROTEIN:=0}"
-: "${ALLOW_PARTIAL:=0}"
+: "${ALLOW_PARTIAL:=1}"
 : "${EMBED_OUTPUT_ROOT:=${SCRATCH_ROOT}/data}"
 
 export PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT
