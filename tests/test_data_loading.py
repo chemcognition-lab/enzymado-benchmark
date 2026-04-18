@@ -10,7 +10,7 @@ from unittest import mock
 
 import numpy as np
 
-from src.data_loading.collators import ProteinResidueCollator
+from src.data_loading.collators import ProteinResidueCollator, ProteinResidueConcatCollator
 from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.labels import FlatECLabelBuilder, StandardScaler1D
 from src.data_loading.registry import TaskConfig
@@ -564,6 +564,37 @@ class DataLoadingTests(unittest.TestCase):
         np.testing.assert_array_equal(
             batch.target_mask,
             np.array([[True, True, True, True], [True, True, False, False]]),
+        )
+
+    def test_protein_residue_concat_collator_concatenates_residue_batches(self) -> None:
+        collator = ProteinResidueConcatCollator()
+
+        batch = collator(
+            [
+                {
+                    "sample_id": "P1",
+                    "protein_emb": np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+                    "target_per_residue": np.asarray([1.0, 0.0], dtype=np.float32),
+                    "target_mask": np.asarray([True, True], dtype=bool),
+                },
+                {
+                    "sample_id": "P2",
+                    "protein_emb": np.asarray([[2.0, 2.0]], dtype=np.float32),
+                    "target_per_residue": np.asarray([0.0], dtype=np.float32),
+                    "target_mask": np.asarray([True], dtype=bool),
+                },
+            ]
+        )
+
+        self.assertEqual(batch.sample_id, ["P1", "P2"])
+        np.testing.assert_array_equal(batch.lengths, np.asarray([2, 1], dtype=np.int32))
+        np.testing.assert_array_equal(
+            batch.protein_emb,
+            np.asarray([[1.0, 0.0], [0.0, 1.0], [2.0, 2.0]], dtype=np.float32),
+        )
+        np.testing.assert_array_equal(
+            batch.target_per_residue,
+            np.asarray([1.0, 0.0, 0.0], dtype=np.float32),
         )
 
     def test_missing_policy_skip_filters_rows_with_missing_embeddings(self) -> None:

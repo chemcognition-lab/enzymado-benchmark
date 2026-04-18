@@ -15,16 +15,15 @@ import torch
 from torch.utils.data import DataLoader
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-try:
-    from models import MODEL_MAP, STRUCTURED_MODEL_MAP
-except ImportError:
-    from models.models import MODEL_MAP, STRUCTURED_MODEL_MAP
+from models import MODEL_MAP, STRUCTURED_MODEL_MAP
 from data_loading import (
     BinaryLabelBuilder,
     FlatECLabelBuilder,
     HierarchicalECLabelBuilder,
+    ProteinResidueConcatCollator,
     ResidueEmbeddingStore,
     ScalarRegressionLabelBuilder,
     build_task_dataset,
@@ -793,12 +792,12 @@ def build_Xy_pooled(bundle, batch_kind: str):
     return np.stack(X_list), np.array(y_list, dtype=np.float32)
 
 
-def get_dataloader(bundle, batch_size: int = 32) -> DataLoader:
+def get_dataloader(bundle, batch_size: int = 32, collate_fn=None) -> DataLoader:
     """Build a deterministic DataLoader for one dataset bundle."""
     return DataLoader(
         bundle.dataset,
         batch_size=batch_size,
-        collate_fn=bundle.collator,
+        collate_fn=collate_fn if collate_fn is not None else bundle.collator,
         shuffle=False,
         num_workers=0,
     )
@@ -985,6 +984,7 @@ def main(
     output_dir: str,
     emb_name_filter: str | None = None,
     model_prefix_filter: str | None = None,
+    task_name_filters: set[str] | None = None,
     skip_label_kinds: set[str] | None = None,
     allowed_ids_path: str | None = None,
 ):
@@ -992,6 +992,9 @@ def main(
     log(f"[startup] Python started. emb_name={emb_name_filter}")
     if model_prefix_filter is not None:
         log(f"[startup] Filtering model names by prefix: {model_prefix_filter}")
+    task_name_filters = task_name_filters or set()
+    if task_name_filters:
+        log(f"[startup] Restricting tasks to: {sorted(task_name_filters)}")
     skip_label_kinds = skip_label_kinds or set()
     if skip_label_kinds:
         log(f"[startup] Skipping label kinds: {sorted(skip_label_kinds)}")
@@ -1023,6 +1026,10 @@ def main(
         log(f"\n=== Embedding: {emb_name} (dim={emb_info['dim']}) ===")
 
         for task_name, prop in card["properties"].items():
+            if task_name_filters and task_name not in task_name_filters:
+                log(f"  Skipping '{task_name}' (not selected by CLI task filter)")
+                continue
+
             task_type = prop.get("task_type")
             if not task_type:
                 raise ValueError(f"'{task_name}' is missing 'task_type' in card")
@@ -1362,9 +1369,30 @@ def main(
                             target_mask_val_to_save = target_mask_val if use_validation else None
                             target_mask_test_to_save = target_mask_test
                     elif residue_aware:
-                        train_loader = get_dataloader(train_bundle, batch_size=64)
-                        val_loader = get_dataloader(val_bundle, batch_size=64) if use_validation else None
-                        test_loader = get_dataloader(test_bundle, batch_size=64)
+                        residue_batch_size = int(model_info.get("loader_batch_size", 64))
+                        log(f"      Using residue-aware loader batch_size={residue_batch_size}")
+                        residue_collate_fn = None
+                        if model_info.get("concat_residue_batch", False):
+                            log("      Using concatenated residue batches (sum of per-protein lengths per batch).")
+                            residue_collate_fn = ProteinResidueConcatCollator()
+                        train_loader = get_dataloader(
+                            train_bundle,
+                            batch_size=residue_batch_size,
+                            collate_fn=residue_collate_fn,
+                        )
+                        val_loader = (
+                            get_dataloader(
+                                val_bundle,
+                                batch_size=residue_batch_size,
+                                collate_fn=residue_collate_fn,
+                            )
+                            if use_validation else None
+                        )
+                        test_loader = get_dataloader(
+                            test_bundle,
+                            batch_size=residue_batch_size,
+                            collate_fn=residue_collate_fn,
+                        )
                         log(f"      Training (residue-aware)...")
                         trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
                         log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
@@ -1429,6 +1457,12 @@ if __name__ == "__main__":
         help="Train only models whose name starts with this prefix, e.g. 'mlp_'.",
     )
     parser.add_argument(
+        "--task_name",
+        action="append",
+        default=[],
+        help="Train only this benchmark task name. Repeatable.",
+    )
+    parser.add_argument(
         "--skip_label_kind",
         action="append",
         default=[],
@@ -1446,6 +1480,7 @@ if __name__ == "__main__":
         args.output_dir,
         args.emb_name,
         model_prefix_filter=args.model_prefix,
+        task_name_filters=set(args.task_name),
         skip_label_kinds=set(args.skip_label_kind),
         allowed_ids_path=args.allowed_ids,
     )

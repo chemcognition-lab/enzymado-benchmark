@@ -5,6 +5,7 @@ env/
 
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 .pytest_cache/
 .ruff_cache/
@@ -18,7 +19,11 @@ cluster_env.sh
 
 logs/
 scripts/logs/
-results/predictions_mean_pooled_mlp/
+*.out
+results/predictions_*/
+
 
 data/embeddings
+*.h5
 data/fastas
+external/Profluent-E1/

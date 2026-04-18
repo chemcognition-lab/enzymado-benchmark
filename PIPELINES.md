@@ -74,6 +74,8 @@ There are five training routes:
 
 - Every registered property now has a training path for the repository's model families:
   `MLP`, `SGD`, and `XGBoost`.
+- For attention models, the preferred baseline name is `attention_linear_*`.
+  The older `attention_sgd_*` names are still accepted as compatibility aliases.
 - `ec_number` supports XGBoost through a flat concatenated EC target vector.
 - `active_sites` and `binding_site` do use a dedicated structured model map.
 - `fluorescence` is present in the benchmark card but is skipped because it is does not contain enzymes.

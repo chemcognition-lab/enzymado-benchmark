@@ -39,6 +39,7 @@ init_cluster_runtime_dirs
 : "${EMBEDDINGS_DATA_ROOT:=${SCRATCH_ROOT}/data}"
 : "${AUTO_RELOCATE_EMBEDDINGS_JSON:=1}"
 : "${MODEL_PREFIX:=}"
+: "${TASK_NAMES:=}"
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
 
@@ -128,6 +129,9 @@ echo "Output dir: ${OUTPUT_DIR}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
     echo "Model prefix: ${MODEL_PREFIX}"
 fi
+if [[ -n "${TASK_NAMES}" ]]; then
+    echo "Task names: ${TASK_NAMES}"
+fi
 if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
     echo "Skip label kinds: ${SKIP_LABEL_KINDS}"
 fi
@@ -144,6 +148,15 @@ TRAIN_ARGS=(
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
     TRAIN_ARGS+=(--model_prefix "${MODEL_PREFIX}")
+fi
+
+if [[ -n "${TASK_NAMES}" ]]; then
+    IFS=',' read -r -a _task_names <<< "${TASK_NAMES}"
+    for _task_name in "${_task_names[@]}"; do
+        if [[ -n "${_task_name}" ]]; then
+            TRAIN_ARGS+=(--task_name "${_task_name}")
+        fi
+    done
 fi
 
 if [[ -n "${SKIP_LABEL_KINDS}" ]]; then

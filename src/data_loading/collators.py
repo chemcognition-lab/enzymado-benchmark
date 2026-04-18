@@ -108,6 +108,15 @@ class ProteinResidueBatch:
     target_mask: np.ndarray
 
 
+@dataclass
+class ProteinResidueConcatBatch:
+    """Concatenated residue-wise batch without padding or masking."""
+    sample_id: list[str]
+    protein_emb: np.ndarray
+    target_per_residue: np.ndarray
+    lengths: np.ndarray
+
+
 class ProteinGlobalCollator:
     """Collate global protein samples into a padded batch."""
     def __call__(self, samples: list[dict[str, Any]]) -> ProteinGlobalBatch:
@@ -191,4 +200,35 @@ class ProteinResidueCollator:
             protein_mask=protein_mask,
             target_per_residue=target_per_residue,
             target_mask=target_mask,
+        )
+
+
+class ProteinResidueConcatCollator:
+    """Collate residue-level labels by concatenating residues across proteins."""
+    def __call__(self, samples: list[dict[str, Any]]) -> ProteinResidueConcatBatch:
+        _validate_residue_sample_lengths(samples)
+
+        lengths = np.asarray([sample["protein_emb"].shape[0] for sample in samples], dtype=np.int32)
+        if not np.all(lengths > 0):
+            raise ValueError("ProteinResidueConcatCollator requires non-empty residue embeddings.")
+
+        for sample in samples:
+            target_mask = np.asarray(sample["target_mask"], dtype=bool)
+            if not np.all(target_mask):
+                raise ValueError(
+                    "ProteinResidueConcatCollator does not support masked residue labels within a sample. "
+                    f"sample_id='{sample.get('sample_id', '')}'."
+                )
+
+        return ProteinResidueConcatBatch(
+            sample_id=[sample["sample_id"] for sample in samples],
+            protein_emb=np.concatenate(
+                [np.asarray(sample["protein_emb"], dtype=np.float32) for sample in samples],
+                axis=0,
+            ),
+            target_per_residue=np.concatenate(
+                [np.asarray(sample["target_per_residue"], dtype=np.float32) for sample in samples],
+                axis=0,
+            ),
+            lengths=lengths,
         )

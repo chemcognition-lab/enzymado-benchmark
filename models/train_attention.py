@@ -305,7 +305,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_prefix",
         default=None,
-        help="Train only models whose name starts with this prefix, e.g. 'attention_sgd_'.",
+        help="Train only models whose name starts with this prefix, e.g. 'attention_linear_'.",
     )
     parser.add_argument(
         "--skip_label_kind",

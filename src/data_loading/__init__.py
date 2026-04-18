@@ -15,6 +15,8 @@ from .collators import (
     ProteinLigandGlobalBatch,
     ProteinLigandGlobalCollator,
     ProteinResidueBatch,
+    ProteinResidueConcatBatch,
+    ProteinResidueConcatCollator,
     ProteinResidueCollator,
 )
 from .datasets import (
@@ -64,6 +66,8 @@ __all__ = [
     "ProteinLigandGlobalDataset",
     "ProteinResidueAdapter",
     "ProteinResidueBatch",
+    "ProteinResidueConcatBatch",
+    "ProteinResidueConcatCollator",
     "ProteinResidueCollator",
     "ProteinResidueDataset",
     "ProteinResidueEmbeddingBuilder",

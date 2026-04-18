@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+from src.data_loading.collators import ProteinResidueConcatCollator
 from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.features import ResidueEmbeddingStore
 from src.data_loading.registry import TaskConfig
@@ -346,10 +347,11 @@ class StructuredTrainingTests(unittest.TestCase):
         )
 
         bundle = build_dataset_from_config(config, store, split_name="train")
+        concat_collator = ProteinResidueConcatCollator()
         loader = DataLoader(
             bundle.dataset,
             batch_size=2,
-            collate_fn=bundle.collator,
+            collate_fn=concat_collator,
             shuffle=False,
             num_workers=0,
         )
@@ -357,6 +359,10 @@ class StructuredTrainingTests(unittest.TestCase):
             n_estimators=5,
             max_depth=2,
             learning_rate=0.3,
+            subsample=0.8,
+            colsample_bytree=0.5,
+            tree_method="hist",
+            max_bin=64,
             n_jobs=1,
             device="cpu",
         )

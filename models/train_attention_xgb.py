@@ -49,8 +49,12 @@ def get_attention_xgb_model_info(label_kind: str, task_type: str) -> dict:
             "wrap": XGBFlatECClassifier,
             "params": {
                 "n_estimators": 100,
-                "max_depth": 6,
+                "max_depth": 4,
                 "learning_rate": 0.1,
+                "subsample": 0.8,
+                "colsample_bytree": 0.2,
+                "tree_method": "hist",
+                "max_bin": 128,
                 "n_jobs": -1,
                 "device": device_name,
                 "random_state": 0,

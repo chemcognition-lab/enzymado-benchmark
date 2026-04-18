@@ -9,25 +9,65 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models.models import (
-    MLPModel,
-    SharedMLPBackbone,
-    _make_optimizer,
-    _run_training_with_early_stopping,
-)
+from models.common import _make_optimizer, _run_training_with_early_stopping
+from models.nn_blocks import MLPModel, SharedMLPBackbone
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def _masked_softmax(logits: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
-    if mask is None:
-        return torch.softmax(logits, dim=1)
-    masked_logits = logits.masked_fill(~mask, torch.finfo(logits.dtype).min)
-    weights = torch.softmax(masked_logits, dim=1)
-    weights = weights * mask.float()
-    denom = weights.sum(dim=1, keepdim=True).clamp(min=1e-12)
-    return weights / denom
+class MeanAggregation(nn.Module):
+    """Mean-pool sequence embeddings while ignoring padded positions."""
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        key_padding_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if x.ndim != 3:
+            raise ValueError(f"Expected (batch, seq_len, dim), got shape {tuple(x.shape)}")
+        if key_padding_mask is None:
+            return x.mean(dim=1)
+
+        valid_mask = (~key_padding_mask).unsqueeze(-1).float()
+        return (x * valid_mask).sum(dim=1) / valid_mask.sum(dim=1).clamp(min=1.0)
+
+
+class AttentionAggregation(nn.Module):
+    """Aggregate residue embeddings with a learned cross-attention query."""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int = 1,
+        dropout_rate: float = 0.0,
+    ):
+        super().__init__()
+        self.input_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout_rate = dropout_rate
+        self.cross_attn_layer = nn.MultiheadAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            dropout=dropout_rate,
+            batch_first=True,
+        )
+        self.mean_agg = MeanAggregation()
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        key_padding_mask: torch.Tensor | None = None,
+    ):
+        avg_emb = self.mean_agg(x, key_padding_mask).unsqueeze(1)
+        global_emb, _ = self.cross_attn_layer(
+            query=avg_emb,
+            key=x,
+            value=x,
+            key_padding_mask=key_padding_mask,
+            need_weights=False,
+        )
+        return global_emb.squeeze(1), None, None
 
 
 def batch_to_attention_tensors(batch, batch_kind: str, device: torch.device):
@@ -48,25 +88,22 @@ def batch_to_attention_tensors(batch, batch_kind: str, device: torch.device):
     return seq, mask, extra
 
 
-class ResidueAttentionPooler(nn.Module):
-    def __init__(self, input_dim: int):
-        super().__init__()
-        self.input_dim = input_dim
-        self.scorer = nn.Linear(input_dim, 1)
-
-    def forward(self, seq_emb: torch.Tensor, mask: torch.Tensor | None = None):
-        if seq_emb.ndim != 3:
-            raise ValueError(f"Expected (batch, seq_len, dim), got shape {tuple(seq_emb.shape)}")
-        logits = self.scorer(seq_emb).squeeze(-1)
-        weights = _masked_softmax(logits, mask)
-        pooled = torch.bmm(weights.unsqueeze(1), seq_emb).squeeze(1)
-        return pooled, weights.unsqueeze(-1), logits.unsqueeze(-1)
-
-
 class AttentionPredictor(nn.Module):
-    def __init__(self, input_dim: int, hidden_dims: tuple[int, ...], output_dim: int, extra_dim: int = 0):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: tuple[int, ...],
+        output_dim: int,
+        extra_dim: int = 0,
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
+    ):
         super().__init__()
-        self.pooler = ResidueAttentionPooler(input_dim)
+        self.pooler = AttentionAggregation(
+            input_dim,
+            num_heads=num_attention_heads,
+            dropout_rate=attention_dropout_rate,
+        )
         self.extra_dim = extra_dim
         self.head = MLPModel(input_dim + extra_dim, hidden_dims, output_dim)
 
@@ -76,7 +113,8 @@ class AttentionPredictor(nn.Module):
         mask: torch.Tensor | None = None,
         extra_features: torch.Tensor | None = None,
     ):
-        pooled, weights, logits = self.pooler(seq_emb, mask)
+        key_padding_mask = ~mask if mask is not None else None
+        pooled, weights, logits = self.pooler(seq_emb, key_padding_mask)
         if extra_features is not None:
             pooled = torch.cat([pooled, extra_features], dim=1)
         return pooled, weights, logits
@@ -92,9 +130,21 @@ class AttentionPredictor(nn.Module):
 
 
 class AttentionMultiHeadPredictor(nn.Module):
-    def __init__(self, input_dim: int, hidden_dims: tuple[int, ...], output_dims: dict[str, int], extra_dim: int = 0):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: tuple[int, ...],
+        output_dims: dict[str, int],
+        extra_dim: int = 0,
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
+    ):
         super().__init__()
-        self.pooler = ResidueAttentionPooler(input_dim)
+        self.pooler = AttentionAggregation(
+            input_dim,
+            num_heads=num_attention_heads,
+            dropout_rate=attention_dropout_rate,
+        )
         self.extra_dim = extra_dim
         self.backbone = SharedMLPBackbone(input_dim + extra_dim, hidden_dims)
         self.heads = nn.ModuleDict({
@@ -109,7 +159,8 @@ class AttentionMultiHeadPredictor(nn.Module):
         mask: torch.Tensor | None = None,
         extra_features: torch.Tensor | None = None,
     ):
-        pooled, weights, logits = self.pooler(seq_emb, mask)
+        key_padding_mask = ~mask if mask is not None else None
+        pooled, weights, logits = self.pooler(seq_emb, key_padding_mask)
         if extra_features is not None:
             pooled = torch.cat([pooled, extra_features], dim=1)
         features = self.backbone(pooled)
@@ -141,6 +192,8 @@ class _BaseAttentionWrapper:
         lr: float,
         epochs: int,
         optimizer_name: str,
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
         device: str | torch.device | None = None,
@@ -149,6 +202,8 @@ class _BaseAttentionWrapper:
         self.lr = lr
         self.epochs = epochs
         self.optimizer_name = optimizer_name
+        self.num_attention_heads = num_attention_heads
+        self.attention_dropout_rate = attention_dropout_rate
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
@@ -190,6 +245,8 @@ class _BaseAttentionWrapper:
             "lr": self.lr,
             "epochs": self.epochs,
             "optimizer_name": self.optimizer_name,
+            "num_attention_heads": self.num_attention_heads,
+            "attention_dropout_rate": self.attention_dropout_rate,
             "early_stopping_patience": self.early_stopping_patience,
             "early_stopping_min_delta": self.early_stopping_min_delta,
             "input_dim": self.input_dim_,
@@ -209,18 +266,37 @@ class AttentionRegressorTorch(_BaseAttentionWrapper):
         lr: float = 1e-3,
         epochs: int = 200,
         optimizer_name: str = "adam",
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
         device: str | torch.device | None = None,
     ):
-        super().__init__(hidden_dims, lr, epochs, optimizer_name, early_stopping_patience, early_stopping_min_delta, device)
+        super().__init__(
+            hidden_dims,
+            lr,
+            epochs,
+            optimizer_name,
+            num_attention_heads,
+            attention_dropout_rate,
+            early_stopping_patience,
+            early_stopping_min_delta,
+            device,
+        )
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None):
         input_dim, extra_dim = self._infer_dims(dataloader, batch_kind)
         self.input_dim_ = input_dim
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
-        self.model = AttentionPredictor(input_dim, self.hidden_dims, output_dim=1, extra_dim=extra_dim).to(self.device)
+        self.model = AttentionPredictor(
+            input_dim,
+            self.hidden_dims,
+            output_dim=1,
+            extra_dim=extra_dim,
+            num_attention_heads=self.num_attention_heads,
+            attention_dropout_rate=self.attention_dropout_rate,
+        ).to(self.device)
         optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.MSELoss()
 
@@ -273,18 +349,37 @@ class AttentionBinaryClassifierTorch(_BaseAttentionWrapper):
         lr: float = 1e-3,
         epochs: int = 200,
         optimizer_name: str = "adam",
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
         device: str | torch.device | None = None,
     ):
-        super().__init__(hidden_dims, lr, epochs, optimizer_name, early_stopping_patience, early_stopping_min_delta, device)
+        super().__init__(
+            hidden_dims,
+            lr,
+            epochs,
+            optimizer_name,
+            num_attention_heads,
+            attention_dropout_rate,
+            early_stopping_patience,
+            early_stopping_min_delta,
+            device,
+        )
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None):
         input_dim, extra_dim = self._infer_dims(dataloader, batch_kind)
         self.input_dim_ = input_dim
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
-        self.model = AttentionPredictor(input_dim, self.hidden_dims, output_dim=1, extra_dim=extra_dim).to(self.device)
+        self.model = AttentionPredictor(
+            input_dim,
+            self.hidden_dims,
+            output_dim=1,
+            extra_dim=extra_dim,
+            num_attention_heads=self.num_attention_heads,
+            attention_dropout_rate=self.attention_dropout_rate,
+        ).to(self.device)
         optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.BCEWithLogitsLoss()
 
@@ -339,11 +434,23 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
         epochs: int = 200,
         optimizer_name: str = "adam",
         batch_size: int = 1024,
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
         device: str | torch.device | None = None,
     ):
-        super().__init__(hidden_dims, lr, epochs, optimizer_name, early_stopping_patience, early_stopping_min_delta, device)
+        super().__init__(
+            hidden_dims,
+            lr,
+            epochs,
+            optimizer_name,
+            num_attention_heads,
+            attention_dropout_rate,
+            early_stopping_patience,
+            early_stopping_min_delta,
+            device,
+        )
         self.batch_size = batch_size
         self.output_dims_ = None
 
@@ -358,7 +465,14 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
         self.output_dims_ = dict(output_dims)
-        self.model = AttentionMultiHeadPredictor(input_dim, self.hidden_dims, output_dims, extra_dim=extra_dim).to(self.device)
+        self.model = AttentionMultiHeadPredictor(
+            input_dim,
+            self.hidden_dims,
+            output_dims,
+            extra_dim=extra_dim,
+            num_attention_heads=self.num_attention_heads,
+            attention_dropout_rate=self.attention_dropout_rate,
+        ).to(self.device)
         optimizer = _make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
@@ -461,14 +575,18 @@ def load_pooler_from_checkpoint(path: str | Path, device: str | torch.device | N
     map_location = torch.device(device) if device else torch.device("cpu")
     checkpoint = torch.load(path, map_location=map_location)
     input_dim = int(checkpoint["input_dim"])
-    pooler = ResidueAttentionPooler(input_dim)
+    pooler = AttentionAggregation(
+        input_dim,
+        num_heads=int(checkpoint.get("num_attention_heads", 1)),
+        dropout_rate=float(checkpoint.get("attention_dropout_rate", 0.0)),
+    )
     pooler.load_state_dict(checkpoint["pooler_state_dict"])
     pooler.to(map_location)
     pooler.eval()
     return pooler, checkpoint
 
 
-def export_features_with_pooler(pooler: ResidueAttentionPooler, dataloader, batch_kind: str, device: str | torch.device | None = None):
+def export_features_with_pooler(pooler: AttentionAggregation, dataloader, batch_kind: str, device: str | torch.device | None = None):
     torch_device = torch.device(device) if device else DEVICE
     pooler = pooler.to(torch_device)
     pooler.eval()
@@ -477,7 +595,8 @@ def export_features_with_pooler(pooler: ResidueAttentionPooler, dataloader, batc
     with torch.no_grad():
         for batch in dataloader:
             seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, torch_device)
-            pooled, _, _ = pooler(seq_t, mask_t)
+            key_padding_mask = ~mask_t if mask_t is not None else None
+            pooled, _, _ = pooler(seq_t, key_padding_mask)
             if extra_t is not None:
                 pooled = torch.cat([pooled, extra_t], dim=1)
             chunks.append(pooled.cpu().numpy().astype(np.float32, copy=False))
@@ -500,7 +619,21 @@ ATTENTION_MODEL_MAP = {
             },
             "residue_aware": True,
         },
+        # Legacy alias kept for backward compatibility with older cards and runs.
         "attention_sgd_classification": {
+            "wrap": AttentionBinaryClassifierTorch,
+            "params": {
+                "hidden_dims": (),
+                "lr": 0.01,
+                "epochs": 200,
+                "optimizer_name": "sgd",
+                "early_stopping_patience": 20,
+                "early_stopping_min_delta": 1e-4,
+            },
+            "residue_aware": True,
+        },
+        # Preferred name for the linear baseline.
+        "attention_linear_classification": {
             "wrap": AttentionBinaryClassifierTorch,
             "params": {
                 "hidden_dims": (),
@@ -526,7 +659,21 @@ ATTENTION_MODEL_MAP = {
             },
             "residue_aware": True,
         },
+        # Legacy alias kept for backward compatibility with older cards and runs.
         "attention_sgd_regressor": {
+            "wrap": AttentionRegressorTorch,
+            "params": {
+                "hidden_dims": (),
+                "lr": 0.01,
+                "epochs": 200,
+                "optimizer_name": "sgd",
+                "early_stopping_patience": 20,
+                "early_stopping_min_delta": 1e-4,
+            },
+            "residue_aware": True,
+        },
+        # Preferred name for the linear baseline.
+        "attention_linear_regressor": {
             "wrap": AttentionRegressorTorch,
             "params": {
                 "hidden_dims": (),
@@ -556,7 +703,21 @@ ATTENTION_STRUCTURED_MODEL_MAP = {
             },
             "residue_aware": True,
         },
+        # Legacy alias kept for backward compatibility with older cards and runs.
         "attention_sgd_classification": {
+            "wrap": AttentionECMultiHeadClassifierTorch,
+            "params": {
+                "hidden_dims": (),
+                "lr": 0.01,
+                "epochs": 200,
+                "optimizer_name": "sgd",
+                "early_stopping_patience": 20,
+                "early_stopping_min_delta": 1e-4,
+            },
+            "residue_aware": True,
+        },
+        # Preferred name for the linear baseline.
+        "attention_linear_classification": {
             "wrap": AttentionECMultiHeadClassifierTorch,
             "params": {
                 "hidden_dims": (),
