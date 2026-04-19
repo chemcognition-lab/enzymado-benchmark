@@ -212,15 +212,15 @@ class ProteinResidueDataset(BaseComposableDataset):
             return errors
 
         try:
-            protein_emb = self.protein_builder.build(row)
             target_per_residue, target_mask = self.label_builder.build(row)
-        except ValueError as exc:
+            protein_length = self.protein_builder.lookup_length(row)
+        except (KeyError, ValueError) as exc:
             return [str(exc)]
 
-        if protein_emb.shape[0] != target_per_residue.shape[0]:
+        if protein_length != target_per_residue.shape[0]:
             return [
                 "Protein embedding and residue target length mismatch for sample "
-                f"'{row.get('sample_id', '')}': embedding={protein_emb.shape[0]}, "
+                f"'{row.get('sample_id', '')}': embedding={protein_length}, "
                 f"target={target_per_residue.shape[0]}."
             ]
         if target_per_residue.shape != target_mask.shape:

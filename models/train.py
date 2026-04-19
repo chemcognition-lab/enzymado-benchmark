@@ -313,6 +313,23 @@ class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
         except KeyError:
             raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
 
+    def lookup_id_length(self, identifier: str) -> int:
+        """Read one identifier-keyed embedding shape without materializing its array."""
+        from data_loading.splits import clean_text
+        from data_loading.features import EmbeddingLookupError
+
+        key = clean_text(identifier)
+        if key not in self._available_ids:
+            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
+        self._open()
+        try:
+            shape = self._h5[key].shape
+        except KeyError:
+            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
+        if len(shape) != 2:
+            raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {shape}.")
+        return int(shape[0])
+
     def lookup_sequence(self, sequence: str) -> np.ndarray:
         """Read one sequence-keyed embedding directly from the H5 file."""
         from data_loading.splits import normalize_sequence as _ns
@@ -326,6 +343,24 @@ class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
             return np.asarray(self._h5[h5_key], dtype=np.float32)
         except KeyError:
             raise EmbeddingLookupError("Missing residue embedding for sequence.")
+
+    def lookup_sequence_length(self, sequence: str) -> int:
+        """Read one sequence-keyed embedding shape without materializing its array."""
+        from data_loading.splits import normalize_sequence as _ns
+        from data_loading.features import EmbeddingLookupError
+
+        norm_seq = _ns(sequence)
+        h5_key = self._seq_to_h5key.get(norm_seq)
+        if h5_key is None:
+            raise EmbeddingLookupError("Missing residue embedding for sequence.")
+        self._open()
+        try:
+            shape = self._h5[h5_key].shape
+        except KeyError:
+            raise EmbeddingLookupError("Missing residue embedding for sequence.")
+        if len(shape) != 2:
+            raise ValueError(f"Embedding for key '{h5_key}' must be 2D. Received shape {shape}.")
+        return int(shape[0])
 
     def __del__(self):
         """Close the H5 handle when the store is garbage collected."""
@@ -410,6 +445,21 @@ def load_embedding_store_subset(
         needed_sequences=needed_sequences,
         sequence_index_path=sequence_index_path,
     )
+
+
+def load_task_embedding_store(
+    config,
+    h5_path: str | Path,
+    needed_ids: set[str],
+    needed_sequences: set[str],
+):
+    """Return the embedding store strategy appropriate for one task."""
+    if config.batch_kind == "protein_residue":
+        store = load_embedding_store_subset(h5_path, needed_ids, needed_sequences)
+        return store, "materialized"
+
+    store = load_lazy_embedding_store(h5_path, needed_ids, needed_sequences)
+    return store, "lazy"
 
 
 def load_pooled_h5_subset(
@@ -1193,11 +1243,27 @@ def main(
                     X_test, y_test = build_mutation_delta_Xy_direct(test_rows, by_id, by_seq, config)
                     store = None
                 else:
-                    # Lazy loading keeps residue-level training feasible without loading every embedding first.
-                    log(f"    Scanning H5 keys for lazy store...")
+                    if config.batch_kind == "protein_residue":
+                        log("    Materializing residue embedding subset into RAM...")
+                    else:
+                        log("    Scanning H5 keys for lazy store...")
                     t0 = time.time()
-                    store = load_lazy_embedding_store(emb_info["path"], needed_ids, needed_sequences)
-                    log(f"    Lazy store ready ({time.time()-t0:.1f}s) — {len(store._available_ids)} ids, {len(store._seq_to_h5key)} seqs indexed")
+                    store, store_mode = load_task_embedding_store(
+                        config,
+                        emb_info["path"],
+                        needed_ids,
+                        needed_sequences,
+                    )
+                    if store_mode == "materialized":
+                        log(
+                            f"    Materialized store ready ({time.time()-t0:.1f}s) — "
+                            f"{len(store.by_id)} ids, {len(store.by_sequence)} seqs cached"
+                        )
+                    else:
+                        log(
+                            f"    Lazy store ready ({time.time()-t0:.1f}s) — "
+                            f"{len(store._available_ids)} ids, {len(store._seq_to_h5key)} seqs indexed"
+                        )
 
                     log(f"    Building task datasets...")
                     t0 = time.time()

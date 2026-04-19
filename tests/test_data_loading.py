@@ -684,6 +684,79 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(bundle.dataset.skipped_rows, 1)
         self.assertEqual(bundle.dataset[0]["sample_id"], "keep_me")
 
+    def test_protein_residue_dataset_build_uses_length_lookup_before_materializing(self) -> None:
+        dataset_path = self.root / "active_sites_length_lookup.csv"
+        split_path = self.root / "active_sites_length_lookup_split.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "active_site"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
+                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]"},
+            ],
+        )
+        write_csv(
+            split_path,
+            ["uniprot_id", "split"],
+            [
+                {"uniprot_id": "P1", "split": "train"},
+                {"uniprot_id": "P2", "split": "train"},
+            ],
+        )
+        config = TaskConfig(
+            name="active_sites_length_lookup",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_path=dataset_path,
+            target_column=None,
+            residue_positions_column="active_site",
+            sample_id_candidates=("uniprot_id",),
+            split_files={"random": split_path},
+            split_id_candidates=("uniprot_id",),
+        )
+
+        class TrackingResidueEmbeddingStore(ResidueEmbeddingStore):
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args, **kwargs)
+                self.lookup_row_calls = 0
+                self.lookup_row_length_calls = 0
+
+            def lookup_row(self, row, id_columns=("uniprot_id", "dataset_id"), sequence_column="protein_sequence"):
+                self.lookup_row_calls += 1
+                return super().lookup_row(
+                    row,
+                    id_columns=id_columns,
+                    sequence_column=sequence_column,
+                )
+
+            def lookup_row_length(
+                self,
+                row,
+                id_columns=("uniprot_id", "dataset_id"),
+                sequence_column="protein_sequence",
+            ):
+                self.lookup_row_length_calls += 1
+                return super().lookup_row_length(
+                    row,
+                    id_columns=id_columns,
+                    sequence_column=sequence_column,
+                )
+
+        store = TrackingResidueEmbeddingStore(
+            by_id={
+                "P1": np.ones((4, 2), dtype=np.float32),
+                "P2": np.ones((2, 2), dtype=np.float32),
+            }
+        )
+
+        bundle = build_dataset_from_config(config, store, split_name="train")
+        self.assertEqual(store.lookup_row_calls, 0)
+        self.assertEqual(store.lookup_row_length_calls, 2)
+
+        sample = bundle.dataset[0]
+        self.assertEqual(sample["sample_id"], "P1")
+        self.assertEqual(store.lookup_row_calls, 1)
+
     def test_protein_residue_collator_raises_clear_error_on_length_mismatch(self) -> None:
         collator = ProteinResidueCollator()
 

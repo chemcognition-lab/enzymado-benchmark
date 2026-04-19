@@ -171,6 +171,26 @@ class ResidueEmbeddingStore:
         """Return whether a normalized identifier key is present."""
         return clean_text(identifier) in self.by_id
 
+    def lookup_sequence_length(self, sequence: str) -> int:
+        """Fetch the residue length for a normalized sequence-keyed embedding."""
+        normalized = normalize_sequence(sequence)
+        try:
+            return int(self.by_sequence[normalized].shape[0])
+        except KeyError as exc:
+            raise EmbeddingLookupError(
+                f"Missing residue embedding for sequence '{normalized[:20]}...'"
+            ) from exc
+
+    def lookup_id_length(self, identifier: str) -> int:
+        """Fetch the residue length for a normalized identifier-keyed embedding."""
+        normalized = clean_text(identifier)
+        try:
+            return int(self.by_id[normalized].shape[0])
+        except KeyError as exc:
+            raise EmbeddingLookupError(
+                f"Missing residue embedding for id '{normalized}'."
+            ) from exc
+
     def lookup_sequence(self, sequence: str) -> np.ndarray:
         """Fetch an embedding by normalized sequence."""
         normalized = normalize_sequence(sequence)
@@ -211,6 +231,30 @@ class ResidueEmbeddingStore:
             f"Tried columns: {tried}. sample_id={row.get('sample_id', '')}"
         )
 
+    def lookup_row_length(
+        self,
+        row: dict[str, str],
+        id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id"),
+        sequence_column: str = "protein_sequence",
+    ) -> int:
+        """Resolve the residue length for the best available embedding key for a row."""
+        sequence = normalize_sequence(row.get(sequence_column))
+        if sequence and self.has_sequence(sequence):
+            return self.lookup_sequence_length(sequence)
+
+        for id_column in id_columns:
+            if id_column not in row:
+                continue
+            identifier = clean_text(row.get(id_column))
+            if identifier and self.has_id(identifier):
+                return self.lookup_id_length(identifier)
+
+        tried = [column for column in (*id_columns, sequence_column) if column in row]
+        raise EmbeddingLookupError(
+            "Missing residue embedding for row. "
+            f"Tried columns: {tried}. sample_id={row.get('sample_id', '')}"
+        )
+
 
 @dataclass
 class ProteinResidueEmbeddingBuilder:
@@ -222,6 +266,14 @@ class ProteinResidueEmbeddingBuilder:
     def build(self, row: dict[str, str]) -> np.ndarray:
         """Materialize the residue embedding for one row."""
         return self.embedding_store.lookup_row(
+            row,
+            id_columns=self.id_columns,
+            sequence_column=self.sequence_column,
+        )
+
+    def lookup_length(self, row: dict[str, str]) -> int:
+        """Resolve the residue length without materializing the full embedding array."""
+        return self.embedding_store.lookup_row_length(
             row,
             id_columns=self.id_columns,
             sequence_column=self.sequence_column,

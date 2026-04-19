@@ -5,6 +5,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 from src.data_loading.collators import ProteinResidueConcatCollator
@@ -222,6 +223,65 @@ class StructuredTrainingTests(unittest.TestCase):
             np.asarray([[2.0, 3.0, 4.0], [-0.5, 0.5, 1.5]], dtype=np.float32),
         )
         np.testing.assert_array_equal(y, np.asarray([1.5, -0.5], dtype=np.float32))
+
+    def test_load_task_embedding_store_materializes_protein_residue_tasks(self) -> None:
+        from models.train import load_task_embedding_store
+
+        config = TaskConfig(
+            name="active_sites_test",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_path=self.root / "unused.csv",
+            target_column=None,
+            residue_positions_column="active_site",
+            sample_id_candidates=("uniprot_id",),
+        )
+        materialized_store = object()
+
+        with (
+            mock.patch("models.train.load_embedding_store_subset", return_value=materialized_store) as load_subset,
+            mock.patch("models.train.load_lazy_embedding_store") as load_lazy,
+        ):
+            store, mode = load_task_embedding_store(
+                config,
+                "fake_embeddings.h5",
+                {"P1"},
+                {"AAAA"},
+            )
+
+        self.assertIs(store, materialized_store)
+        self.assertEqual(mode, "materialized")
+        load_subset.assert_called_once_with("fake_embeddings.h5", {"P1"}, {"AAAA"})
+        load_lazy.assert_not_called()
+
+    def test_load_task_embedding_store_keeps_lazy_strategy_for_non_residue_tasks(self) -> None:
+        from models.train import load_task_embedding_store
+
+        config = TaskConfig(
+            name="solubility_test",
+            batch_kind="protein_global",
+            label_kind="binary",
+            dataset_path=self.root / "unused.csv",
+            target_column="solubility",
+            sample_id_candidates=("uniprot_id",),
+        )
+        lazy_store = object()
+
+        with (
+            mock.patch("models.train.load_embedding_store_subset") as load_subset,
+            mock.patch("models.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
+        ):
+            store, mode = load_task_embedding_store(
+                config,
+                "fake_embeddings.h5",
+                {"P1"},
+                {"AAAA"},
+            )
+
+        self.assertIs(store, lazy_store)
+        self.assertEqual(mode, "lazy")
+        load_lazy.assert_called_once_with("fake_embeddings.h5", {"P1"}, {"AAAA"})
+        load_subset.assert_not_called()
 
     def test_residue_binary_training_and_prediction_serialization(self) -> None:
         from torch.utils.data import DataLoader
