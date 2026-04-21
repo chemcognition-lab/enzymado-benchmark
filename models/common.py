@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -71,6 +72,62 @@ def prepare_inputs(
     return torch.from_numpy(X).to(device), mask_t, input_dim
 
 
+def _atomic_torch_save(payload, path: str | Path) -> None:
+    """Write a torch-serialized payload atomically to avoid partial checkpoints."""
+    path_obj = Path(path)
+    path_obj.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path_obj.with_suffix(path_obj.suffix + ".tmp")
+    torch.save(payload, tmp_path)
+    tmp_path.replace(path_obj)
+
+
+def save_torch_wrapper_checkpoint(wrapper, path: str | Path) -> None:
+    """Persist a full wrapper object so interrupted runs can resume later."""
+    _atomic_torch_save(wrapper, path)
+
+
+def maybe_resume_torch_wrapper(wrapper, path: str | Path | None) -> int:
+    """Load a previously saved wrapper checkpoint into the current wrapper instance."""
+    if path is None:
+        return 0
+
+    path_obj = Path(path)
+    if not path_obj.exists():
+        return 0
+
+    loaded = torch.load(path_obj, map_location="cpu", weights_only=False)
+    if not isinstance(loaded, wrapper.__class__):
+        raise TypeError(
+            f"Checkpoint at {path_obj} contains {type(loaded).__name__}, "
+            f"expected {wrapper.__class__.__name__}."
+        )
+
+    current_device = getattr(wrapper, "device", DEVICE)
+    wrapper.__dict__.update(loaded.__dict__)
+    wrapper.device = torch.device(current_device)
+    if getattr(wrapper, "model", None) is not None:
+        wrapper.model = wrapper.model.to(wrapper.device)
+    return int(getattr(wrapper, "current_epoch_", 0))
+
+
+def make_torch_checkpoint_callback(wrapper, path: str | Path | None, checkpoint_every: int = 1):
+    """Build an epoch-end callback that updates wrapper progress and saves checkpoints."""
+    if path is None:
+        return None
+
+    checkpoint_every = max(1, int(checkpoint_every))
+
+    def _callback(epoch: int, best_epoch, best_val_loss, best_state) -> None:
+        wrapper.current_epoch_ = int(epoch)
+        wrapper.best_epoch_ = best_epoch
+        wrapper.best_val_loss_ = best_val_loss
+        wrapper.best_model_state_ = copy.deepcopy(best_state) if best_state is not None else None
+        if epoch % checkpoint_every == 0:
+            save_torch_wrapper_checkpoint(wrapper, path)
+
+    return _callback
+
+
 def run_training_with_early_stopping(
     model: nn.Module,
     epochs: int,
@@ -79,24 +136,31 @@ def run_training_with_early_stopping(
     patience: int | None = None,
     min_delta: float = 0.0,
     log_every: int = 10,
+    start_epoch: int = 0,
+    initial_best_state: dict | None = None,
+    initial_best_epoch: int | None = None,
+    initial_best_val_loss: float | None = None,
+    epoch_callback=None,
 ) -> tuple[int | None, float | None]:
     """Run a training loop and optionally restore the best validation checkpoint."""
     import time as _time
 
     if val_loss_fn is None or patience is None or patience <= 0:
-        for ep in range(epochs):
+        for ep in range(start_epoch, epochs):
             t0 = _time.time()
             train_epoch_fn()
             if (ep + 1) % log_every == 0 or ep == 0:
                 print(f"        epoch {ep+1}/{epochs}  ({_time.time()-t0:.1f}s/epoch)", flush=True)
+            if epoch_callback is not None:
+                epoch_callback(ep + 1, None, None, None)
         return None, None
 
-    best_state = copy.deepcopy(model.state_dict())
-    best_epoch: int | None = None
-    best_val_loss = float("inf")
+    best_state = copy.deepcopy(initial_best_state) if initial_best_state is not None else copy.deepcopy(model.state_dict())
+    best_epoch: int | None = initial_best_epoch
+    best_val_loss = float(initial_best_val_loss) if initial_best_val_loss is not None else float("inf")
     epochs_without_improvement = 0
 
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         t0 = _time.time()
         train_epoch_fn()
         val_loss = float(val_loss_fn())
@@ -115,9 +179,13 @@ def run_training_with_early_stopping(
             best_epoch = epoch + 1
             best_state = copy.deepcopy(model.state_dict())
             epochs_without_improvement = 0
+            if epoch_callback is not None:
+                epoch_callback(epoch + 1, best_epoch, best_val_loss, best_state)
             continue
 
         epochs_without_improvement += 1
+        if epoch_callback is not None:
+            epoch_callback(epoch + 1, best_epoch, best_val_loss, best_state)
         if epochs_without_improvement >= patience:
             print(
                 f"        early stopping at epoch {epoch+1}, "

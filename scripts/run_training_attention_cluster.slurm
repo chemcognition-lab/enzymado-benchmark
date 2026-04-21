@@ -37,9 +37,13 @@ if [[ -z "${CARD_PATH:-}" ]]; then
         CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
     fi
 fi
+if [[ -z "${RESULTS_CARD_PATH:-}" ]]; then
+    RESULTS_CARD_PATH="$(ensure_scratch_card "${REPO}/results_card.json")"
+fi
 : "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
-: "${OUTPUT_DIR:=${SCRATCH_ROOT}/results/predictions_attention}"
+: "${OUTPUT_DIR:=${SCRATCH_ROOT}/results/predictions}"
 : "${MODEL_PREFIX:=}"
+: "${TASK_NAMES:=}"
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
 : "${BATCH_SIZE:=16}"
@@ -116,10 +120,14 @@ mkdir -p "${OUTPUT_DIR}"
 echo "Job host: $(hostname)"
 echo "Embedding model: ${EMBEDDING_NAME}"
 echo "Card path: ${CARD_PATH}"
+echo "Results card path: ${RESULTS_CARD_PATH}"
 echo "Embeddings json: ${EMBEDDINGS_JSON}"
 echo "Output dir: ${OUTPUT_DIR}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
     echo "Model prefix: ${MODEL_PREFIX}"
+fi
+if [[ -n "${TASK_NAMES}" ]]; then
+    echo "Task names: ${TASK_NAMES}"
 fi
 if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
     echo "Skip label kinds: ${SKIP_LABEL_KINDS}"
@@ -135,10 +143,20 @@ TRAIN_ARGS=(
     "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
     --batch_size "${BATCH_SIZE}"
+    --results_card "${RESULTS_CARD_PATH}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
     TRAIN_ARGS+=(--model_prefix "${MODEL_PREFIX}")
+fi
+
+if [[ -n "${TASK_NAMES}" ]]; then
+    IFS=',' read -r -a _task_names <<< "${TASK_NAMES}"
+    for _task_name in "${_task_names[@]}"; do
+        if [[ -n "${_task_name}" ]]; then
+            TRAIN_ARGS+=(--task_name "${_task_name}")
+        fi
+    done
 fi
 
 if [[ -n "${SKIP_LABEL_KINDS}" ]]; then

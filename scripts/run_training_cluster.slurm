@@ -14,7 +14,7 @@ set -euo pipefail
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
 #   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_training_cluster.slurm
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMB_NAME=esm2_650M scripts/run_training_cluster.slurm
-#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions_mean_pooled_mlp,MODEL_PREFIX=mlp_,SKIP_LABEL_KINDS=residue_binary_vector scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions,RESULTS_CARD_PATH=${PWD}/results_card.json,MODEL_PREFIX=mlp_,SKIP_LABEL_KINDS=residue_binary_vector scripts/run_training_cluster.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
@@ -42,9 +42,13 @@ init_cluster_runtime_dirs
 : "${TASK_NAMES:=}"
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
+: "${RESIDUE_STORE_MODE:=auto}"
 
 if [[ -z "${CARD_PATH:-}" ]]; then
     CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
+fi
+if [[ -z "${RESULTS_CARD_PATH:-}" ]]; then
+    RESULTS_CARD_PATH="$(ensure_scratch_card "${REPO}/results_card.json")"
 fi
 
 if [[ -z "${EMBEDDINGS_JSON:-}" ]]; then
@@ -124,6 +128,7 @@ mkdir -p "${OUTPUT_DIR}"
 echo "Job host: $(hostname)"
 echo "Embedding model: ${EMBEDDING_NAME}"
 echo "Card path: ${CARD_PATH}"
+echo "Results card path: ${RESULTS_CARD_PATH}"
 echo "Embeddings json: ${EMBEDDINGS_JSON}"
 echo "Output dir: ${OUTPUT_DIR}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
@@ -138,12 +143,14 @@ fi
 if [[ -n "${COMMON_IDS_PATH}" ]]; then
     echo "Allowed IDs: ${COMMON_IDS_PATH}"
 fi
+echo "Residue store mode: ${RESIDUE_STORE_MODE}"
 
 TRAIN_ARGS=(
     "${CARD_PATH}"
     "${EMBEDDINGS_JSON}"
     "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
+    --results_card "${RESULTS_CARD_PATH}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
@@ -170,6 +177,10 @@ fi
 
 if [[ -n "${COMMON_IDS_PATH}" ]]; then
     TRAIN_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
+fi
+
+if [[ -n "${RESIDUE_STORE_MODE}" ]]; then
+    TRAIN_ARGS+=(--residue_store_mode "${RESIDUE_STORE_MODE}")
 fi
 
 python -u "${REPO}/models/train.py" "${TRAIN_ARGS[@]}"

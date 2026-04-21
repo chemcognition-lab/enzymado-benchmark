@@ -163,6 +163,7 @@ def prep_biolip(p: Paths):
 
     is_ion = biol_smiles["smiles"].apply(is_ion_smiles)
     biol_filtered = biol_smiles[~is_ion].copy()
+    biol_filtered = biol_filtered.drop_duplicates(subset=["protein_sequence", "smiles"]).reset_index(drop=True)
 
     neg_df = add_negatives(
         biol_filtered,

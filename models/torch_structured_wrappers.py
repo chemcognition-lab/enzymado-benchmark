@@ -6,7 +6,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models.common import DEVICE, make_optimizer, pad_1d_array_list, run_training_with_early_stopping
+from models.common import (
+    DEVICE,
+    make_optimizer,
+    make_torch_checkpoint_callback,
+    maybe_resume_torch_wrapper,
+    pad_1d_array_list,
+    run_training_with_early_stopping,
+)
 from models.nn_blocks import MLPModel, MultiHeadMLPModel
 
 
@@ -36,6 +43,8 @@ class ECMultiHeadClassifierTorch:
         self.output_dims = None
         self.best_epoch_ = None
         self.best_val_loss_ = None
+        self.current_epoch_ = 0
+        self.best_model_state_ = None
 
     @staticmethod
     def _targets_to_tensors(y, target_mask, device: torch.device):
@@ -68,7 +77,7 @@ class ECMultiHeadClassifierTorch:
             raise ValueError(f"ECMultiHeadClassifierTorch expects pooled 2D inputs, got shape {tuple(X_t.shape)}")
         return self.model(X_t)
 
-    def fit(self, X, y, target_mask, X_val=None, y_val=None, target_mask_val=None):
+    def fit(self, X, y, target_mask, X_val=None, y_val=None, target_mask_val=None, checkpoint_path=None):
         if target_mask is None:
             raise ValueError("ECMultiHeadClassifierTorch.fit requires target_mask.")
 
@@ -82,6 +91,7 @@ class ECMultiHeadClassifierTorch:
             for level_name, target in y.items()
         }
         self.model = MultiHeadMLPModel(input_dim, self.hidden_dims, self.output_dims).to(self.device)
+        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
         optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
@@ -134,6 +144,11 @@ class ECMultiHeadClassifierTorch:
             val_loss_fn=val_loss if val_payload is not None else None,
             patience=self.early_stopping_patience,
             min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch,
+            initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_,
+            initial_best_val_loss=self.best_val_loss_,
+            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
 
@@ -188,6 +203,8 @@ class ResidueBinaryClassifierTorch:
         self.model = None
         self.best_epoch_ = None
         self.best_val_loss_ = None
+        self.current_epoch_ = 0
+        self.best_model_state_ = None
 
     @staticmethod
     def _batch_to_input(batch, device: torch.device):
@@ -196,7 +213,7 @@ class ResidueBinaryClassifierTorch:
         target_mask_t = torch.from_numpy(np.asarray(batch.target_mask, dtype=bool)).to(device)
         return X_t, y_t, target_mask_t
 
-    def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None):
+    def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
         if batch_kind != "protein_residue":
             raise ValueError(f"ResidueBinaryClassifierTorch does not support batch_kind='{batch_kind}'")
 
@@ -204,6 +221,7 @@ class ResidueBinaryClassifierTorch:
         X_t, _, _ = self._batch_to_input(first_batch, self.device)
         input_dim = X_t.shape[2]
         self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1).to(self.device)
+        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
         optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
@@ -239,6 +257,11 @@ class ResidueBinaryClassifierTorch:
             val_loss_fn=val_loss if val_dataloader is not None else None,
             patience=self.early_stopping_patience,
             min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch,
+            initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_,
+            initial_best_val_loss=self.best_val_loss_,
+            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
 

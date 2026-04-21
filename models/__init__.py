@@ -15,22 +15,48 @@ from models.common import (
     prepare_inputs,
     run_training_with_early_stopping,
 )
-from models.nn_blocks import LinearModel, MLPModel, MultiHeadMLPModel, SGDModel, SharedMLPBackbone
-from models.registry import MODEL_MAP, STRUCTURED_MODEL_MAP
-from models.torch_wrappers import (
-    ECMultiHeadClassifierTorch,
+from models.nn_blocks import (
+    LinearModel,
+    MLPModel,
+    MultiHeadMLPModel,
+    SGDModel,
+    SharedMLPBackbone,
+)
+from models.torch_standard_wrappers import (
     LinearClassifierTorch,
     LinearRegressorTorch,
     MLPClassifierTorch,
     MLPRegressorTorch,
-    ResidueBinaryClassifierTorch,
     SGDClassifierTorch,
     SGDRegressorTorch,
 )
-from models.xgb_wrappers import XGBClassifier, XGBFlatECClassifier, XGBRegressor, XGBResidueBinaryClassifier
+from models.torch_structured_wrappers import (
+    ECMultiHeadClassifierTorch,
+    ResidueBinaryClassifierTorch,
+)
+from models.xgb_wrappers import (
+    XGBClassifier,
+    XGBFlatECBlockClassifier,
+    XGBFlatECClassifier,
+    XGBRegressor,
+    XGBResidueBinaryClassifier,
+)
+from models.registry import MODEL_MAP, STRUCTURED_MODEL_MAP
 
 __all__ = [
     "DEVICE",
+    "masked_mean_pool",
+    "make_optimizer",
+    "pad_1d_array_list",
+    "batch_to_input",
+    "prepare_inputs",
+    "run_training_with_early_stopping",
+    "_masked_mean_pool",
+    "_make_optimizer",
+    "_pad_1d_array_list",
+    "_batch_to_input",
+    "_prepare_inputs",
+    "_run_training_with_early_stopping",
     "LinearModel",
     "SGDModel",
     "MLPModel",
@@ -46,20 +72,9 @@ __all__ = [
     "ResidueBinaryClassifierTorch",
     "XGBClassifier",
     "XGBRegressor",
+    "XGBFlatECBlockClassifier",
     "XGBFlatECClassifier",
     "XGBResidueBinaryClassifier",
     "MODEL_MAP",
     "STRUCTURED_MODEL_MAP",
-    "masked_mean_pool",
-    "make_optimizer",
-    "pad_1d_array_list",
-    "batch_to_input",
-    "prepare_inputs",
-    "run_training_with_early_stopping",
-    "_masked_mean_pool",
-    "_make_optimizer",
-    "_pad_1d_array_list",
-    "_batch_to_input",
-    "_prepare_inputs",
-    "_run_training_with_early_stopping",
 ]

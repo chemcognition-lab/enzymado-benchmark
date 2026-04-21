@@ -44,4 +44,6 @@ conda run --no-capture-output -n prot5_blackwell python -u models/train.py \
     benchmark_card.json \
     embeddings_models_output.json \
     results/predictions \
-    --emb_name "$EMB_NAME"
+    --emb_name "$EMB_NAME" \
+    --results_card results_card.json \
+    --residue_store_mode "${RESIDUE_STORE_MODE:-auto}"

@@ -88,7 +88,7 @@
  - [ ] Scripts for metrics (Manuel)
 
  - [ ] Rating script (Manuel)
-   - [ ] Packett-Luce
+   - [ ] GLICKO-2
    - [ ] Percentages
 
  - [ ] Code revision check (Will)

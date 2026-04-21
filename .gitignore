@@ -20,7 +20,8 @@ cluster_env.sh
 logs/
 scripts/logs/
 *.out
-results/predictions_*/
+results/predictions/
+pytest-of-chemist/
 
 
 data/embeddings

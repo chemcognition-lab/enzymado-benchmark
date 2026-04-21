@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 import sys
 from pathlib import Path
@@ -64,14 +65,40 @@ ALIGN_PROCESSED_COLUMNS = [
     "source_split",
 ]
 ALIGN_FAMILIES = (
-    "alkaline phosphatase",
     "alpha-amylase",
     "b-glucosidase",
 )
-ALIGN_ZERO_SHOT_SUBDIRS = {
-    "alkaline phosphatase": "align_phosphatase",
-    "alpha-amylase": "align_amylase",
-    "b-glucosidase": "align_glucosidase",
+ALIGN_TASK_OUTPUTS = {
+    ("alpha-amylase", "specific_activity"): {
+        "directory": "align_amylase_activity",
+        "section_key": "align_amylase_activity",
+        "description": "ALiGN alpha-amylase real-case specific-activity measurements.",
+    },
+    ("alpha-amylase", "expression"): {
+        "directory": "align_amylase_expression",
+        "section_key": "align_amylase_expression",
+        "description": "ALiGN alpha-amylase real-case expression measurements.",
+    },
+    ("alpha-amylase", "thermostability"): {
+        "directory": "align_amylase_stability",
+        "section_key": "align_amylase_stability",
+        "description": "ALiGN alpha-amylase real-case thermostability measurements.",
+    },
+    ("b-glucosidase", "activity"): {
+        "directory": "align_glucosidase_activity",
+        "section_key": "align_glucosidase_activity",
+        "description": "ALiGN b-glucosidase real-case activity measurements.",
+    },
+    ("b-glucosidase", "expression"): {
+        "directory": "align_glucosidase_expression",
+        "section_key": "align_glucosidase_expression",
+        "description": "ALiGN b-glucosidase real-case expression measurements.",
+    },
+    ("b-glucosidase", "melting_point"): {
+        "directory": "align_glucosidase_melting",
+        "section_key": "align_glucosidase_melting",
+        "description": "ALiGN b-glucosidase real-case melting-point measurements.",
+    },
 }
 
 
@@ -448,7 +475,7 @@ def resolve_align_processed_dir(
     paths: Paths,
 ) -> Path:
     if out_processed_arg == default_erickson_processed:
-        return paths.data_processed_real_case / "align"
+        return paths.data_processed_real_case
     if out_processed_arg.suffix.lower() == ".csv":
         raise ValueError(
             "--out-processed must point to a directory for ALIGN because one CSV is written per task."
@@ -456,15 +483,133 @@ def resolve_align_processed_dir(
     return out_processed_arg
 
 
-def resolve_align_family_processed_dir(
+def resolve_align_task_processed_dir(
     processed_dir: Path,
     family: str,
+    task_name: str,
 ) -> Path:
-    if processed_dir.name != "zero_shot":
-        return processed_dir
+    task_config = ALIGN_TASK_OUTPUTS.get((family, task_name))
+    if task_config is None:
+        raise ValueError(
+            f"No output-directory mapping is configured for ALIGN family '{family}' and task '{task_name}'."
+        )
+    return processed_dir / str(task_config["directory"])
 
-    family_subdir = ALIGN_ZERO_SHOT_SUBDIRS.get(family, f"align_{slugify(family)}")
-    return processed_dir / family_subdir
+
+def path_to_card_path(path: Path, project_root: Path) -> str:
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def build_align_section_record(
+    family: str,
+    task_name: str,
+    csv_path: Path,
+    project_root: Path,
+) -> tuple[str, dict[str, object]]:
+    task_config = ALIGN_TASK_OUTPUTS[(family, task_name)]
+    section_key = str(task_config["section_key"])
+    section_description = str(task_config["description"])
+    family_slug = slugify(family)
+    dataset_filename = f"{family_slug}__{task_name}.csv"
+    if csv_path.name != dataset_filename:
+        raise ValueError(
+            f"ALIGN output file name mismatch for '{family}' / '{task_name}': expected "
+            f"'{dataset_filename}', got '{csv_path.name}'."
+        )
+
+    dataset_id = csv_path.stem
+    record = {
+        "task_type": "regression",
+        "description": section_description,
+        "datasets": [
+            {
+                "dataset_id": dataset_id,
+                "property_scope": "global",
+                "label_units": "dataset-provided value",
+                "path": path_to_card_path(csv_path, project_root),
+                "file_format": "csv",
+                "schema": {
+                    "protein_id_col": Constants.dataset_id,
+                    "sequence_col": Constants.protein_sequence,
+                    "target_col": task_name,
+                },
+                "splits": {
+                    "split_type": "predefined_or_none",
+                    "train_path": None,
+                    "val_path": None,
+                    "test_path": None,
+                },
+                "filters": {
+                    "drop_na_in": [
+                        Constants.protein_sequence,
+                        task_name,
+                    ],
+                    "deduplicate_by": [
+                        Constants.dataset_id,
+                    ],
+                },
+                "provenance": {
+                    "source_name": "ALiGN",
+                    "source_version": None,
+                    "citation": None,
+                },
+            }
+        ],
+    }
+    return section_key, record
+
+
+def collect_align_section_records(
+    processed_dir: Path,
+    project_root: Path,
+) -> list[tuple[str, dict[str, object]]]:
+    section_records: list[tuple[str, dict[str, object]]] = []
+    for (family, task_name), task_config in ALIGN_TASK_OUTPUTS.items():
+        family_slug = slugify(family)
+        csv_path = processed_dir / str(task_config["directory"]) / f"{family_slug}__{task_name}.csv"
+        if not csv_path.exists():
+            continue
+        section_records.append(
+            build_align_section_record(
+                family,
+                task_name,
+                csv_path,
+                project_root,
+            )
+        )
+    return section_records
+
+
+def sync_align_benchmark_card(
+    benchmark_card_path: Path,
+    processed_dir: Path,
+    project_root: Path,
+) -> list[str]:
+    with benchmark_card_path.open("r", encoding="utf-8") as handle:
+        benchmark_card = json.load(handle)
+
+    real_case = benchmark_card.setdefault("real_case", {})
+    preserved_real_case = {
+        key: value
+        for key, value in real_case.items()
+        if key != "align" and not key.startswith("align_")
+    }
+
+    align_records = collect_align_section_records(processed_dir, project_root)
+    updated_real_case: dict[str, object] = {}
+    for section_key, section_record in align_records:
+        updated_real_case[section_key] = section_record
+    updated_real_case.update(preserved_real_case)
+    benchmark_card["real_case"] = updated_real_case
+
+    with benchmark_card_path.open("w", encoding="utf-8", newline="\n") as handle:
+        json.dump(benchmark_card, handle, indent=4)
+        handle.write("\n")
+
+    return [section_key for section_key, _ in align_records]
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -540,7 +685,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--out-processed",
         type=Path,
         default=paths.data_processed_properties / "aromatic_products" / "erickson.csv",
-        help="Output path for the processed dataset.",
+        help="Output path for the processed dataset, or a directory root for ALIGN outputs.",
+    )
+    parser.add_argument(
+        "--benchmark-card",
+        type=Path,
+        default=paths.project_root / "benchmark_card.json",
+        help="Benchmark card to synchronize after cleaning ALIGN datasets.",
+    )
+    parser.add_argument(
+        "--skip-benchmark-card",
+        action="store_true",
+        help="Do not update benchmark_card.json after cleaning ALIGN datasets.",
     )
     return parser
 
@@ -588,6 +744,11 @@ def main() -> None:
             paths.data_processed_properties / "aromatic_products" / "erickson.csv"
         )
         align_families = ALIGN_FAMILIES if args.align_family == "all" else (args.align_family,)
+        align_out_interim_root = (
+            paths.data_interim_dir / "align"
+            if args.out_interim == default_erickson_interim
+            else args.out_interim
+        )
         processed_dir = resolve_align_processed_dir(
             args.out_processed,
             default_erickson_processed,
@@ -598,7 +759,6 @@ def main() -> None:
         total_processed_rows = 0
         for family in align_families:
             family_slug = slugify(family)
-            family_processed_dir = resolve_align_family_processed_dir(processed_dir, family)
             out_interim = resolve_align_interim_path(
                 args.out_interim,
                 default_erickson_interim,
@@ -614,15 +774,29 @@ def main() -> None:
             total_interim_rows += len(interim_rows)
 
             for _, task_name, processed_fieldnames, processed_rows in processed_outputs:
-                out_processed = family_processed_dir / f"{family_slug}__{task_name}.csv"
+                task_processed_dir = resolve_align_task_processed_dir(
+                    processed_dir,
+                    family,
+                    task_name,
+                )
+                out_processed = task_processed_dir / f"{family_slug}__{task_name}.csv"
                 write_csv(out_processed, processed_fieldnames, processed_rows)
                 print(f"Saved {len(processed_rows)} processed rows to {out_processed}")
                 total_processed_rows += len(processed_rows)
 
         interim_rows = [{}] * total_interim_rows
         processed_rows = [{}] * total_processed_rows
-        out_interim = paths.data_interim_dir / "align"
+        out_interim = align_out_interim_root
         out_processed = processed_dir
+        if not args.skip_benchmark_card:
+            updated_sections = sync_align_benchmark_card(
+                args.benchmark_card,
+                processed_dir,
+                paths.project_root,
+            )
+            print(
+                f"Updated {args.benchmark_card} with {len(updated_sections)} ALIGN real-case section(s)"
+            )
 
     print(f"Saved {len(interim_rows)} interim rows to {out_interim}")
     print(f"Saved {len(processed_rows)} processed rows to {out_processed}")

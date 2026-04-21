@@ -18,17 +18,23 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from data_loading import FlatECLabelBuilder, HierarchicalECLabelBuilder, get_task_config
-from models.train import (
-    collect_needed_lookup_keys,
+from models.train_common import (
     filter_rows_to_allowed_ids,
-    get_task_rows,
     load_allowed_ids,
-    load_pooled_h5_subset,
     load_sequence_to_id_index,
-    read_json,
     resolve_sequence_index_path,
 )
-from models.xgb_wrappers import XGBFlatECClassifier, XGBMultiOutputFlatECExperimental
+from models.train_data import (
+    build_flat_multilabel_ec_direct,
+    collect_needed_lookup_keys,
+    get_task_rows,
+    load_pooled_h5_subset,
+)
+from models.train_output import read_json
+from models.xgb_wrappers import (
+    XGBFlatECBlockClassifier,
+    XGBFlatECClassifier,
+)
 
 
 def log(msg: str) -> None:
@@ -91,8 +97,6 @@ def build_flat_ec_arrays(
         vocabulary_by_level=ec_label_builder.vocabulary_by_level,
     )
 
-    from models.train import build_flat_multilabel_ec_direct
-
     X_train, y_train, target_mask_train = build_flat_multilabel_ec_direct(
         train_rows, by_id, by_seq, config, flat_ec_label_builder
     )
@@ -114,12 +118,6 @@ def build_flat_ec_arrays(
         "y_test": y_test,
         "target_mask_test": target_mask_test,
     }
-
-
-def filter_fully_known_rows(X: np.ndarray, y: np.ndarray, target_mask: np.ndarray):
-    row_mask = np.all(target_mask, axis=1)
-    return X[row_mask], y[row_mask], row_mask
-
 
 def benchmark_current(arrays: dict, params: dict, profile_path: Path | None):
     model = XGBFlatECClassifier(**params)
@@ -159,34 +157,26 @@ def benchmark_current(arrays: dict, params: dict, profile_path: Path | None):
 
 
 def benchmark_experimental(arrays: dict, params: dict, profile_path: Path | None):
-    X_train_dense, y_train_dense, train_row_mask = filter_fully_known_rows(
-        arrays["X_train"], arrays["y_train"], arrays["target_mask_train"]
-    )
-    X_val_dense, y_val_dense, val_row_mask = filter_fully_known_rows(
-        arrays["X_val"], arrays["y_val"], arrays["target_mask_val"]
-    )
-    X_test_dense, y_test_dense, test_row_mask = filter_fully_known_rows(
-        arrays["X_test"], arrays["y_test"], arrays["target_mask_test"]
-    )
-
-    model = XGBMultiOutputFlatECExperimental(**params)
+    model = XGBFlatECBlockClassifier(**params)
     profiler = cProfile.Profile() if profile_path is not None else None
 
     t0 = time.perf_counter()
     if profiler is not None:
         profiler.enable()
     model.fit(
-        X_train_dense,
-        y_train_dense,
-        X_val=X_val_dense if len(X_val_dense) else None,
-        y_val=y_val_dense if len(y_val_dense) else None,
+        arrays["X_train"],
+        arrays["y_train"],
+        target_mask=arrays["target_mask_train"],
+        X_val=arrays["X_val"],
+        y_val=arrays["y_val"],
+        target_mask_val=arrays["target_mask_val"],
     )
     if profiler is not None:
         profiler.disable()
     fit_seconds = time.perf_counter() - t0
 
     t1 = time.perf_counter()
-    pred = model.predict(X_test_dense)
+    pred = model.predict(arrays["X_test"])
     predict_seconds = time.perf_counter() - t1
 
     if profiler is not None:
@@ -196,16 +186,9 @@ def benchmark_experimental(arrays: dict, params: dict, profile_path: Path | None
         "fit_seconds": fit_seconds,
         "predict_seconds": predict_seconds,
         "test_shape": list(pred.shape),
-        "fully_known_rows": {
-            "train": int(train_row_mask.sum()),
-            "val": int(val_row_mask.sum()),
-            "test": int(test_row_mask.sum()),
-        },
-        "dropped_incomplete_rows": {
-            "train": int((~train_row_mask).sum()),
-            "val": int((~val_row_mask).sum()),
-            "test": int((~test_row_mask).sum()),
-        },
+        "block_count": len(model.block_slices_),
+        "trained_blocks": int(sum(booster is not None for booster in model.block_boosters_)),
+        "known_rows_per_block": [int(value) for value in model.block_known_rows_],
     }
 
 
@@ -265,7 +248,9 @@ def main():
         "eval_metric": "logloss",
         "tree_method": "hist",
         "max_bin": 64,
+        "block_size": 256,
         "multi_strategy": "multi_output_tree",
+        "early_stopping_rounds": 20,
     }
 
     profile_dir = args.profile_dir
@@ -298,8 +283,9 @@ def main():
         "notes": [
             "Current benchmark uses the existing masked one-model-per-column wrapper.",
             "Train-row sampling happens before H5 loading so benchmark startup reflects the sampled training set.",
-            "Experimental benchmark filters to fully-known flat EC rows because multi-output XGBoost currently expects dense labels.",
-            "Experimental multi-output GPU XGBoost uses a lower max_bin to avoid overflowing the histogram-bin limit on wide EC outputs.",
+            "Experimental benchmark now trains multi-output XGBoost over EC blocks instead of one giant all-label booster.",
+            "Each block only requires rows that are fully known for that block, which preserves more data than the old dense-row filtering.",
+            "Experimental multi-output GPU XGBoost uses a lower max_bin and bounded block_size to avoid overflowing the histogram-bin limit on wide EC outputs.",
             "Use the cProfile outputs only as coarse Python-side diagnostics; most XGBoost work happens in native code.",
         ],
     }

@@ -59,23 +59,22 @@ There are five training routes:
 
 | Card property | Registry task | Task type | Batch kind | Label kind | Training route | Models that run |
 | --- | --- | --- | --- | --- | --- | --- |
-| `solubility` | `solubility` | classification | `protein_global` | `binary` | pooled protein-global | `mlp_classification`, `sgd_classification`, `xgb_classification` |
-| `phopt` | `ph_opt` | regression | `protein_global` | `scalar_regression` | pooled protein-global | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
-| `binding` | `binding` | classification | `protein_ligand_global` | `binary` | pooled protein + ligand | `mlp_classification`, `sgd_classification`, `xgb_classification` |
-| `kcat` | `kcat` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
-| `km` | `km` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
-| `dtm` | `dtm` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
-| `ddg` | `ddg` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `sgd_regressor`, `xgb_regression` |
-| `ec_number` | `ec_number` | classification | `protein_global` | `multilabel_ec` | pooled hierarchical EC or pooled flat EC for XGBoost | `mlp_classification`, `sgd_classification`, `xgb_classification` |
-| `active_sites` | `active_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, residue `xgb_classification` |
-| `binding_site` | `binding_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `sgd_classification`, residue `xgb_classification` |
+| `solubility` | `solubility` | classification | `protein_global` | `binary` | pooled protein-global | `mlp_classification`, `linear_classification`, `xgb_classification` |
+| `phopt` | `ph_opt` | regression | `protein_global` | `scalar_regression` | pooled protein-global | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
+| `binding` | `binding` | classification | `protein_ligand_global` | `binary` | pooled protein + ligand | `mlp_classification`, `linear_classification`, `xgb_classification` |
+| `kcat` | `kcat` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
+| `km` | `km` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
+| `dtm` | `dtm` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
+| `ddg` | `ddg` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
+| `ec_number` | `ec_number` | classification | `protein_global` | `multilabel_ec` | pooled hierarchical EC or pooled flat EC for XGBoost | `mlp_classification`, `linear_classification`, `xgb_classification` |
+| `active_sites` | `active_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `linear_classification`, residue `xgb_classification` |
+| `binding_site` | `binding_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `linear_classification`, residue `xgb_classification` |
 
 ## Important Clarifications
 
 - Every registered property now has a training path for the repository's model families:
   `MLP`, `SGD`, and `XGBoost`.
-- For attention models, the preferred baseline name is `attention_linear_*`.
-  The older `attention_sgd_*` names are still accepted as compatibility aliases.
+- For attention models, the linear baseline name is `attention_linear_*`.
 - `ec_number` supports XGBoost through a flat concatenated EC target vector.
 - `active_sites` and `binding_site` do use a dedicated structured model map.
 - `fluorescence` is present in the benchmark card but is skipped because it is does not contain enzymes.
@@ -95,7 +94,7 @@ If you want to inspect the exact code path for a task:
 
 Almost.
 
-- All registered properties have `MLP`, `XGBoost` and `SGD` coverage.
+- All registered properties have `MLP`, `XGBoost` and linear coverage.
 - `ec_number` uses a dedicated structured EC pipeline, and XGBoost follows a separate flat-label variant of that pipeline.
 - Residue-level tasks use a different structured pipeline.
 - Unregistered properties are skipped entirely, which currently means `fluorescence`.
