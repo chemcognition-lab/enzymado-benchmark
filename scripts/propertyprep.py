@@ -507,6 +507,8 @@ def parse_binding(v):
 def main():
     print("Running Propertyprep Script...")
     
+    stats = {}
+    
     # ---------------------------
     # Binding (BioLiP)
     # ---------------------------
@@ -514,9 +516,14 @@ def main():
     biol_path = _P.data_processed_datasets / 'biolip_binding' / 'biolip_cleaned_with_negatives.csv'
     if biol_path.exists():
         biol = pd.read_csv(biol_path, index_col=0)
+        len_before = len(biol)
+        st = {"datapoints_before_cleaning": len_before, "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
+
         biol["protein_sequence"] = biol["protein_sequence"].astype(str).str.strip()
         biol["uniprot_id"] = biol["uniprot_id"].replace("", pd.NA)
 
+        
+        len_b = len(biol)
         seq_to_uniprot = (
             biol.dropna(subset=["uniprot_id"])
               .drop_duplicates(subset=["protein_sequence"])
@@ -542,6 +549,10 @@ def main():
         if all(c in biol.columns for c in final_cols):
             biol_final = biol[final_cols].rename(columns={'label': 'binding'}).reset_index(drop=True)
             biol_final.to_csv(_P.data_processed_properties / 'binding' / 'biolip_binding.csv', index=False)
+            st["datapoints_after_cleaning"] = len(biol_final)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats["biolip_binding"] = {"amount_of_removed_data": st}
             print("BioLip Binding saved.")
 
 
@@ -552,6 +563,7 @@ def main():
     ddg_path = _P.data_interim_dir / 'fireprotdb' / 'fireprotdb_ddg.csv'
     if ddg_path.exists():
         ddg = pd.read_csv(ddg_path, index_col=0).reset_index()
+        st = {"datapoints_before_cleaning": len(ddg), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         fire_cols = ['EXPERIMENT_ID', 'UNIPROTKB', 'SUBSTITUTION', 'DDG']
         ddg = ddg[fire_cols]
         unique_prot = ddg['UNIPROTKB'].unique()
@@ -569,7 +581,9 @@ def main():
             'SUBSTITUTION': 'mutation',
             'DDG': 'ddg'
         })
+        len_b = len(ddg_f)
         ddg_f = ddg_f.dropna(subset=[_C.protein_sequence, 'mutation'])
+        st['removed_by_reason']['missing_values'] += len_b - len(ddg_f)
         ddg_f['mut_protein_sequence'] = ddg_f.apply(lambda row: apply_substitutions(row['protein_sequence'], row['mutation']), axis=1)
         ddg_f.rename(columns={'protein_sequence': 'wildtype_sequence', 'mut_protein_sequence': 'protein_sequence'}, inplace=True)
         ddg_f = ddg_f[["dataset_id", "uniprot_id", "wildtype_sequence", "mutation", "protein_sequence", "ddg"]]
@@ -579,6 +593,10 @@ def main():
         out_dir = _P.data_processed_properties / 'ddg_mut'
         out_dir.mkdir(parents=True, exist_ok=True)
         ddg_f.to_csv(out_dir / 'fireprotdb_ddg.csv', index=False)
+        st["datapoints_after_cleaning"] = len(ddg_f)
+        st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+        st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+        stats["fireprotdb_ddg"] = {"amount_of_removed_data": st}
         print("FireProtDB DDG saved.")
 
 
@@ -589,6 +607,7 @@ def main():
     dtm_path = _P.data_interim_dir / 'fireprotdb' / 'fireprotdb_dtm.csv'
     if dtm_path.exists():
         dtm = pd.read_csv(dtm_path, index_col=0).reset_index()
+        st = {"datapoints_before_cleaning": len(dtm), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         fire_cols = ['EXPERIMENT_ID', 'UNIPROTKB', 'SUBSTITUTION', 'DTM']
         dtm = dtm[fire_cols]
         unique_prot_dtm = dtm['UNIPROTKB'].unique()
@@ -606,7 +625,9 @@ def main():
             'SUBSTITUTION': 'mutation',
             'DTM': 'dtm'
         })
+        len_b = len(dtm_f)
         dtm_f = dtm_f.dropna(subset=['mutation', _C.protein_sequence])
+        st['removed_by_reason']['missing_values'] += len_b - len(dtm_f)
         dtm_f['mut_protein_sequence'] = dtm_f.apply(lambda row: apply_substitutions(row['protein_sequence'], row['mutation']), axis=1)
         dtm_f.rename(columns={'protein_sequence': 'wildtype_sequence', 'mut_protein_sequence': 'protein_sequence'}, inplace=True)
         dtm_f = dtm_f[["dataset_id", "uniprot_id", "wildtype_sequence", "mutation", "protein_sequence", "dtm"]]
@@ -615,6 +636,10 @@ def main():
         out_dir = _P.data_processed_properties / 'dtm'
         out_dir.mkdir(parents=True, exist_ok=True)
         dtm_f.to_csv(out_dir / 'fireprotdb_dtm.csv', index=False)
+        st["datapoints_after_cleaning"] = len(dtm_f)
+        st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+        st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+        stats["fireprotdb_dtm"] = {"amount_of_removed_data": st}
         print("FireProtDB DTM saved.")
 
 
@@ -625,6 +650,7 @@ def main():
     brenda_path = _P.data_interim_dir / 'phopt' / 'brenda_phopt.csv'
     if brenda_path.exists():
         brenda_raw = pd.read_csv(brenda_path, index_col=0)
+        st = {"datapoints_before_cleaning": len(brenda_raw), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         unique_brenda = brenda_raw['uniprot_from_brenda'].unique()
 
         done, failed = sequence_getter(
@@ -641,12 +667,20 @@ def main():
             'phopt': 'phopt'
         })
         brenda_opt = brenda_opt[[_C.uniprot_id, _C.protein_sequence, 'phopt_median', 'n_measurements', 'phopt_std']]
+        len_b = len(brenda_opt)
         brenda_opt = brenda_opt.dropna(subset=[_C.protein_sequence])
+        st['removed_by_reason']['missing_values'] += len_b - len(brenda_opt)
+        len_b = len(brenda_opt)
         brenda_opt = brenda_opt.drop_duplicates(subset=[_C.protein_sequence, 'phopt_median', 'n_measurements', 'phopt_std'])
+        st['removed_by_reason']['duplicates'] += len_b - len(brenda_opt)
         
         out_dir = _P.data_processed_properties / 'ph_opt'
         out_dir.mkdir(parents=True, exist_ok=True)
         brenda_opt.to_csv(out_dir / 'brenda_phopt.csv', index=False)
+        st["datapoints_after_cleaning"] = len(brenda_opt)
+        st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+        st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+        stats["brenda_phopt"] = {"amount_of_removed_data": st}
         print("BRENDA phopt saved.")
 
 
@@ -657,6 +691,7 @@ def main():
     kcat_path = _P.data_raw_catpred_dir / 'CatPred_kcat.csv'
     if kcat_path.exists():
         kcat_raw = pd.read_csv(kcat_path, index_col=0)
+        st = {"datapoints_before_cleaning": len(kcat_raw), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         kcat_columns = ['uniprot', 'sequence', 'reactant_smiles', 'temperature', 'ph', 'log10kcat_max']
         if all(c in kcat_raw.columns for c in kcat_columns):
             kcat = kcat_raw[kcat_columns].rename(columns={
@@ -670,6 +705,10 @@ def main():
             out_dir = _P.data_processed_properties / 'kcat'
             out_dir.mkdir(parents=True, exist_ok=True)
             kcat.to_csv(out_dir / 'catpred_kcat.csv', index=False)
+            st["datapoints_after_cleaning"] = len(kcat)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats["catpred_kcat"] = {"amount_of_removed_data": st}
             print("CatPred kcat saved.")
 
 
@@ -680,6 +719,7 @@ def main():
     km_path = _P.data_raw_catpred_dir / 'CatPred_km.csv'
     if km_path.exists():
         km_raw = pd.read_csv(km_path, index_col=0)
+        st = {"datapoints_before_cleaning": len(km_raw), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         km_columns = ['uniprot', 'sequence', 'substrate_smiles', 'temperature', 'ph', 'log10km_mean']
         if all(c in km_raw.columns for c in km_columns):
             km = km_raw[km_columns].rename(columns={
@@ -693,6 +733,10 @@ def main():
             out_dir = _P.data_processed_properties / 'km'
             out_dir.mkdir(parents=True, exist_ok=True)
             km.to_csv(out_dir / 'catpred_km.csv', index=False)
+            st["datapoints_after_cleaning"] = len(km)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats["catpred_km"] = {"amount_of_removed_data": st}
             print("CatPred KM saved.")
 
 
@@ -717,11 +761,16 @@ def main():
         if not cfg["input_path"].exists():
             continue
         df = pd.read_csv(cfg["input_path"])
+        st = {"datapoints_before_cleaning": len(df), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         df[_C.protein_sequence] = df[_C.protein_sequence].astype(str).str.strip().str.upper()
         df["split"] = df["split"].astype(str).str.strip()
         df = df.replace({"": pd.NA, "nan": pd.NA, "NaN": pd.NA})
+        len_b = len(df)
         df = df.dropna(subset=[_C.protein_sequence, cfg["target_col"], "split"]).copy()
+        st['removed_by_reason']['missing_values'] += len_b - len(df)
+        len_b = len(df)
         df = df.drop_duplicates(subset=[_C.protein_sequence, cfg["target_col"], "split"]).copy()
+        st['removed_by_reason']['duplicates'] += len_b - len(df)
 
         unique_sequences = df[_C.protein_sequence].dropna().astype(str).unique()
         done, failed = sequence_to_enzyme_metadata(
@@ -737,13 +786,19 @@ def main():
         df["ec_number"] = df[_C.protein_sequence].map(lambda seq: (metadata_by_sequence.get(seq) or {}).get("ec_number"))
         df["is_enzyme"] = df[_C.protein_sequence].map(lambda seq: bool((metadata_by_sequence.get(seq) or {}).get("is_enzyme")))
 
+        len_b = len(df)
         df = df[df["is_enzyme"]].copy()
+        st['removed_by_reason']['was_not_enzyme'] += len_b - len(df)
         cols_to_keep = ["dataset_id", _C.uniprot_id, _C.protein_sequence, "ec_number", cfg["target_col"], "split"]
         if all(c in df.columns for c in cols_to_keep):
             df = df[cols_to_keep].reset_index(drop=True)
             cfg["output_path"].parent.mkdir(parents=True, exist_ok=True)
             df.to_csv(cfg["output_path"], index=False)
             print(f"ProteinEA {cfg['property_name']} saved.")
+            st["datapoints_after_cleaning"] = len(df)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats[f"proteinea_{cfg['property_name']}"] = {"amount_of_removed_data": st}
 
 
     # ---------------------------
@@ -754,6 +809,7 @@ def main():
     if swissprot_path.exists():
         # Do not use index_col=1 to retain standard columns correctly
         ec = pd.read_csv(swissprot_path, sep='\t')
+        st = {"datapoints_before_cleaning": len(ec), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         ec_columns = ['Entry', 'Sequence', 'EC number']
         if all(c in ec.columns for c in ec_columns):
             ec = ec[ec_columns].rename(columns={
@@ -761,13 +817,21 @@ def main():
                 'Sequence': _C.protein_sequence,
                 'EC number': 'ec_number'
             })
+            len_b = len(ec)
             ec = ec.dropna(subset=['ec_number'])
+            st['removed_by_reason']['missing_values'] += len_b - len(ec)
+            len_b = len(ec)
             ec = ec.drop_duplicates(subset=[_C.protein_sequence, 'ec_number'])
+            st['removed_by_reason']['duplicates'] += len_b - len(ec)
             
             out_dir = _P.data_processed_properties / 'ec_number'
             out_dir.mkdir(parents=True, exist_ok=True)
             ec.to_csv(out_dir / 'swissprot_ec.csv', index=False)
             print("UniProt EC numbers saved.")
+            st["datapoints_after_cleaning"] = len(ec)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats["swissprot_ec"] = {"amount_of_removed_data": st}
 
 
     # ---------------------------
@@ -776,6 +840,7 @@ def main():
     print("\nProcessing UniProt Active sites...")
     if swissprot_path.exists():
         active = pd.read_csv(swissprot_path, sep='\t')
+        st = {"datapoints_before_cleaning": len(active), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         active_columns = ['Entry', 'EC number', 'Sequence', 'Active site']
         if all(c in active.columns for c in active_columns):
             active = active[active_columns].rename(columns={
@@ -784,8 +849,12 @@ def main():
                 'Sequence': _C.protein_sequence,
                 'Active site': 'active_site'
             })
+            len_b = len(active)
             active.dropna(subset=['active_site'], inplace=True)
+            st['removed_by_reason']['missing_values'] += len_b - len(active)
+            len_b = len(active)
             active.drop_duplicates(subset=[_C.protein_sequence, 'active_site'], inplace=True)
+            st['removed_by_reason']['duplicates'] += len_b - len(active)
 
             out_dir_interim = _P.data_interim_dir / 'swissprot'
             out_dir_interim.mkdir(parents=True, exist_ok=True)
@@ -797,6 +866,10 @@ def main():
             out_dir.mkdir(parents=True, exist_ok=True)
             active.to_csv(out_dir / 'swissprot_active_site.csv', index=False)
             print("UniProt Active sites saved.")
+            st["datapoints_after_cleaning"] = len(active)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats["swissprot_active_site"] = {"amount_of_removed_data": st}
 
 
     # ---------------------------
@@ -805,6 +878,7 @@ def main():
     print("\nProcessing UniProt Binding sites...")
     if swissprot_path.exists():
         binding_site = pd.read_csv(swissprot_path, sep='\t')
+        st = {"datapoints_before_cleaning": len(binding_site), "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
         binding_columns = ['Entry', 'EC number', 'Sequence', 'Binding site']
         if all(c in binding_site.columns for c in binding_columns):
             binding_site = binding_site[binding_columns].rename(columns={
@@ -813,8 +887,12 @@ def main():
                 'Sequence': _C.protein_sequence,
                 'Binding site': 'binding_site'
             })
+            len_b = len(binding_site)
             binding_site.dropna(subset=['binding_site'], inplace=True)
+            st['removed_by_reason']['missing_values'] += len_b - len(binding_site)
+            len_b = len(binding_site)
             binding_site.drop_duplicates(subset=[_C.protein_sequence, 'binding_site'], inplace=True)
+            st['removed_by_reason']['duplicates'] += len_b - len(binding_site)
             binding_site.to_csv(out_dir_interim / 'swissprot_binding_site.csv', index=False)
 
             parsed = binding_site["binding_site"].apply(parse_binding)
@@ -831,8 +909,18 @@ def main():
             out_dir.mkdir(parents=True, exist_ok=True)
             binding_site.to_csv(out_dir / 'swissprot_binding_site.csv', index=False)
             print("UniProt Binding sites saved.")
+            st["datapoints_after_cleaning"] = len(binding_site)
+            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+            stats["swissprot_binding_site"] = {"amount_of_removed_data": st}
 
     print("\nDone!")
+    
+    # Save the stats dict
+    results_dir = _P.results_dir / "dataprep_datacards" / "propertyprep_datacards"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    with open(results_dir / "propertyprep_stats.json", "w") as f:
+        json.dump(stats, f, indent=2)
 
 if __name__ == "__main__":
     main()

@@ -95,12 +95,32 @@ def prep_biolip(p: Paths):
     """
     biol_path = p.data_interim_dir / "biolip" / "BioLiP_nr.csv"
     if not biol_path.exists():
-        return
+        return None
         
     biol = pd.read_csv(biol_path, low_memory=False)
+    
+    stats = {
+        "datapoints_before_cleaning": len(biol),
+        "removed_by_reason": {
+            "missing_values": 0,
+            "duplicates": 0,
+            "invalid_sequence": 0,
+            "was_not_enzyme": 0,
+            "other": 0
+        }
+    }
+    
+    len_before = len(biol)
     biol = biol[biol['ec_number'].notna()]
+    stats["removed_by_reason"]["was_not_enzyme"] += len_before - len(biol)
+    
+    len_before = len(biol)
     biol = biol[biol['uniprot_id'].notna()]
+    stats["removed_by_reason"]["missing_values"] += len_before - len(biol)
+    
+    len_before = len(biol)
     biol = biol[biol['ligand_id'].notna()]
+    stats["removed_by_reason"]["missing_values"] += len_before - len(biol)
 
     ccd_path = p.data_interim_dir / "biolip" / "Components-smiles-cactvs.smi"
     ccd = pd.read_csv(
@@ -159,11 +179,19 @@ def prep_biolip(p: Paths):
     biol2.loc[idx_upper_success, "map_status"] = "rescued_upper"
 
     biol_smiles = biol2
+    
+    len_before = len(biol_smiles)
     biol_smiles.dropna(subset=["smiles"], inplace=True)
+    stats["removed_by_reason"]["missing_values"] += len_before - len(biol_smiles)
 
+    len_before = len(biol_smiles)
     is_ion = biol_smiles["smiles"].apply(is_ion_smiles)
     biol_filtered = biol_smiles[~is_ion].copy()
+    stats["removed_by_reason"]["other"] += len_before - len(biol_filtered)
+    
+    len_before = len(biol_filtered)
     biol_filtered = biol_filtered.drop_duplicates(subset=["protein_sequence", "smiles"]).reset_index(drop=True)
+    stats["removed_by_reason"]["duplicates"] += len_before - len(biol_filtered)
 
     neg_df = add_negatives(
         biol_filtered,
@@ -179,7 +207,12 @@ def prep_biolip(p: Paths):
     
     neg_df.to_csv(out_path, index=False)
     print(f"Saved biolip cleaned dataset to {out_path}")
+    
+    stats["datapoints_after_cleaning"] = len(biol_filtered) # use positive points for stats
+    stats["datapoints_removed_total"] = stats["datapoints_before_cleaning"] - stats["datapoints_after_cleaning"]
+    stats["removed_percentage"] = (stats["datapoints_removed_total"] / stats["datapoints_before_cleaning"] * 100) if stats["datapoints_before_cleaning"] else 0
 
+    return {"amount_of_removed_data": stats}
 
 def prep_fireprot(p: Paths):
     """
@@ -188,15 +221,29 @@ def prep_fireprot(p: Paths):
     raw_path = p.data_raw_fireprotdb_dir / "fireprotdb_ec.tsv"
     
     if not raw_path.exists():
-        return
+        return None
 
     fireprot = pd.read_csv(raw_path, sep="\t")
+
+    stats = {
+        "datapoints_before_cleaning": len(fireprot) * 2, # each row has 2 properties
+        "removed_by_reason": {
+            "missing_values": 0,
+            "duplicates": 0,
+            "invalid_sequence": 0,
+            "was_not_enzyme": 0,
+            "other": 0
+        }
+    }
 
     fireprot["DDG"] = pd.to_numeric(fireprot["DDG"], errors="coerce")
     fireprot["DTM"] = pd.to_numeric(fireprot["DTM"], errors="coerce")
 
     ddg_df = fireprot[fireprot["DDG"].notna()].copy()
     dtm_df = fireprot[fireprot["DTM"].notna()].copy()
+    
+    stats["removed_by_reason"]["missing_values"] += len(fireprot) - len(ddg_df)
+    stats["removed_by_reason"]["missing_values"] += len(fireprot) - len(dtm_df)
 
     interim_dir = p.data_interim_dir / "fireprotdb"
     interim_dir.mkdir(parents=True, exist_ok=True)
@@ -205,6 +252,11 @@ def prep_fireprot(p: Paths):
     dtm_df.to_csv(interim_dir / "fireprotdb_dtm.csv", index=False)
     print(f"Saved DDG and DTM datasets to {interim_dir}")
 
+    stats["datapoints_after_cleaning"] = len(ddg_df) + len(dtm_df)
+    stats["datapoints_removed_total"] = stats["datapoints_before_cleaning"] - stats["datapoints_after_cleaning"]
+    stats["removed_percentage"] = (stats["datapoints_removed_total"] / stats["datapoints_before_cleaning"] * 100) if stats["datapoints_before_cleaning"] else 0
+
+    return {"amount_of_removed_data": stats}
 
 def parse_ph(x):
     """
@@ -236,7 +288,7 @@ def prep_brenda(p: Paths):
     brenda_path = p.data_dir / "raw" / "brenda" / "brenda_2025_1.json"
     
     if not brenda_path.exists():
-        return
+        return None
 
     with open(brenda_path, "r") as f:
         data = json.load(f)
@@ -271,11 +323,25 @@ def prep_brenda(p: Paths):
     df_raw = pd.DataFrame(results)
     
     if df_raw.empty:
-        return
+        return None
 
+    stats = {
+        "datapoints_before_cleaning": len(df_raw),
+        "removed_by_reason": {
+            "missing_values": 0,
+            "duplicates": 0,
+            "invalid_sequence": 0,
+            "was_not_enzyme": 0,
+            "other": 0
+        }
+    }
+
+    len_before = len(df_raw)
     df_raw["phopt"] = df_raw["phopt"].apply(parse_ph)
     df_raw = df_raw.dropna(subset=["phopt"])
+    stats["removed_by_reason"]["missing_values"] += len_before - len(df_raw)
 
+    len_before = len(df_raw)
     df_one = (
         df_raw.groupby(["ec", "protein_id", "organism", "uniprot_from_brenda"], as_index=False)
           .agg(
@@ -284,6 +350,7 @@ def prep_brenda(p: Paths):
               phopt_std=("phopt", "std")
           )
     )
+    stats["removed_by_reason"]["duplicates"] += len_before - len(df_one)
     
     interim_dir = p.data_interim_dir / "phopt"
     interim_dir.mkdir(parents=True, exist_ok=True)
@@ -291,15 +358,26 @@ def prep_brenda(p: Paths):
     
     df_one.to_csv(out_path, index=False)
     print(f"Saved BRENDA phopt dataset to {out_path}")
+    
+    stats["datapoints_after_cleaning"] = len(df_one)
+    stats["datapoints_removed_total"] = stats["datapoints_before_cleaning"] - stats["datapoints_after_cleaning"]
+    stats["removed_percentage"] = (stats["datapoints_removed_total"] / stats["datapoints_before_cleaning"] * 100) if stats["datapoints_before_cleaning"] else 0
 
+    return {"amount_of_removed_data": stats}
 
 def main():
     p = Paths()
+    
+    stats = {}
 
-    prep_biolip(p)
-    prep_fireprot(p)
-    prep_brenda(p)
-
+    stats["biolip"] = prep_biolip(p)
+    stats["fireprotdb"] = prep_fireprot(p)
+    stats["brenda"] = prep_brenda(p)
+    
+    results_dir = p.results_dir / "dataprep_datacards"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    with open(results_dir / "dataprep_stats.json", "w") as f:
+        json.dump(stats, f, indent=2)
 
 if __name__ == "__main__":
     main()
