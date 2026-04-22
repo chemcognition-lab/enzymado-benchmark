@@ -307,6 +307,123 @@ class LinearClassifierTorch:
         return np.concatenate(preds)
 
 
+
+
+
+class MLPRegressorTorch:
+    """MLP regressor for pooled or residue-aware embedding inputs."""
+    def __init__(
+        self,
+        num_layers=1, 
+        expansion_ratio=4.0, 
+        activation="relu", 
+        dropout_prob=0.0, 
+        normalize=False, 
+        lr=1e-3, 
+        weight_decay=0.01, 
+        epochs=20, 
+        early_stopping_patience=None, 
+        early_stopping_min_delta=0.0, 
+        device=None
+    ):
+        # Save params so the CSV logger can access them later
+        self.params = {
+            "num_layers": num_layers, "expansion_ratio": expansion_ratio,
+            "activation": activation, "dropout_prob": dropout_prob,
+            "normalize": normalize, "lr": lr, "weight_decay": weight_decay
+        }
+        self.num_layers = num_layers
+        self.expansion_ratio = expansion_ratio
+        self.activation = activation
+        self.dropout_prob = dropout_prob
+        self.normalize = normalize
+        
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.epochs = epochs
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_min_delta = early_stopping_min_delta
+        self.device = torch.device(device) if device else DEVICE
+        
+        self.model = None
+        self.best_epoch_ = 0
+        self.best_val_loss_ = None
+        self.best_model_state_ = None
+
+    def _forward(self, X_t: torch.Tensor, mask_t: torch.Tensor | None) -> torch.Tensor:
+        out = self.model(X_t)
+        if X_t.ndim == 3: out = masked_mean_pool(out, mask_t)
+        return out
+
+    def fit(self, X, y, mask=None, X_val=None, y_val=None, mask_val=None, checkpoint_path=None):
+        # Fetch training inputs and targets
+        X_t, mask_t, input_dim = prepare_inputs(X, mask, self.device)
+        y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1).to(self.device)
+        
+        # Instantiate MLPModel
+        self.model = MLPModel(
+            input_dim=input_dim, output_dim=1, num_layers=self.num_layers,
+            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            dropout_prob=self.dropout_prob, normalize=self.normalize
+        ).to(self.device)
+        
+        # Define training circumstance
+        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        criterion = nn.MSELoss()
+
+        # Fetch validation inputs and targets
+        val_payload = None
+        if X_val is not None and y_val is not None:
+            X_val_t, mask_val_t, _ = prepare_inputs(X_val, mask_val, self.device)
+            y_val_t = torch.from_numpy(np.asarray(y_val, dtype=np.float32)).unsqueeze(1).to(self.device)
+            val_payload = (X_val_t, mask_val_t, y_val_t)
+
+        def train_epoch():
+            self.model.train()
+            optimizer.zero_grad()
+            loss = criterion(self._forward(X_t, mask_t), y_t)
+            loss.backward()
+            optimizer.step()
+
+        def val_loss():
+            self.model.eval()
+            with torch.no_grad():
+                X_val_t, mask_val_t, y_val_t = val_payload
+                return criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
+
+        # Run training
+        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
+            self.model, 
+            self.epochs, 
+            train_epoch,
+            val_loss_fn=val_loss if val_payload is not None else None,
+            patience=self.early_stopping_patience, 
+            min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch, 
+            initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_, 
+            initial_best_val_loss=self.best_val_loss_,
+            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
+        )
+        return self
+
+    def predict(self, X, mask=None):
+        # Run inference
+        X_t, mask_t, _ = prepare_inputs(X, mask, self.device)
+        self.model.eval()
+        with torch.no_grad():
+            return self._forward(X_t, mask_t).squeeze(1).cpu().numpy()
+
+
+
+
+
+
+
+
+
+
 class MLPRegressorTorch:
     """MLP regressor for pooled or residue-aware embedding inputs."""
 
