@@ -1,21 +1,112 @@
-"""Script to generate configs for MLP grid search."""
+"""Generate MLP HPO configs from the full search space.
 
-# Loop through all permuations of:
-#   activation: (Relu(), Silu(), SwiGLU())
-#   num_layers: range(1, 3)
-#   expansion_ratio: range(2.0, 8.0) in 2 step size
-#   dropout: range(0, 0.5) maybe 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.35, 0.5 (logarithmic)
-#   normalization: True/Flase (layernorm, always)
-#   lr: range(1e-3, 5e-5) do step of 5e-(+1) (obviously logarithmic)
-#   weight_decay: range() 0.3, 0.1, 0.03, 0.01, 0.0 (logarithmic)
-#   optimizer: AdamW()
-#   batch_size: range()      
-#       for batch size do a scan (?), batch_size vs inference_time plot: at what moment the plot becomes linear is optimal batch_size (not flat, but linear (x=y))
-#       test batch size independently maybe. !!! DO THIS FIRST !!!
-#   num_epochs: 20 (use non-loss metrics for early stopping: losses are super noisy. Use R^2 or kendall or AUROC. Use main eval metrics)
+Default behavior: create 400 sampled experiments.
+"""
 
-# Some of these can be cut down slightly
+from __future__ import annotations
 
-# 3*3*4*8*2*6*5 = 17,280 experiments
-# 3*3*4*3*2*6*3 = 3,888 experiments
-# 3*3*4*3*1*4*3 = 1,296 experiments
+import argparse
+import itertools
+import json
+import random
+from pathlib import Path
+
+SEARCH_SPACE = {
+    "activation": ["relu", "silu", "swiglu"],
+    "num_layers": [1, 2, 3],
+    "expansion_ratio": [2.0, 4.0, 6.0, 8.0],
+    "dropout_prob": [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.35, 0.5],
+    "normalize": [False, True],
+    "lr": [1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 5e-6],
+    "weight_decay": [0.3, 0.1, 0.03, 0.01, 0.0],
+}
+
+
+def _lhs_sample(space_values: list[list], n: int, seed: int) -> list[tuple]:
+    rng = random.Random(seed)
+    mapped_idx_per_dim: list[list[int]] = []
+    for values in space_values:
+        perm = list(range(n))
+        rng.shuffle(perm)
+        idxs: list[int] = []
+        m = len(values)
+        for cell in perm:
+            point = (cell + rng.random()) / n
+            idxs.append(min(int(point * m), m - 1))
+        mapped_idx_per_dim.append(idxs)
+
+    out: list[tuple] = []
+    for row in range(n):
+        out.append(
+            tuple(values[mapped_idx_per_dim[col][row]] for col, values in enumerate(space_values))
+        )
+    return out
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate sampled MLP HPO configs.")
+    parser.add_argument("--n-configs", type=int, default=400)
+    parser.add_argument("--sampling", choices=["random", "lhs"], default="random")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--num-epochs", type=int, default=20)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Default: scripts/mlp_hpo/configs_<n>_<sampling>.json",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if args.n_configs <= 0:
+        raise ValueError("--n-configs must be > 0")
+    if args.batch_size <= 0:
+        raise ValueError("--batch-size must be > 0")
+    if args.num_epochs <= 0:
+        raise ValueError("--num-epochs must be > 0")
+
+    keys = list(SEARCH_SPACE.keys())
+    values = [SEARCH_SPACE[k] for k in keys]
+    all_combinations = list(itertools.product(*values))
+    total = len(all_combinations)  # 17,280
+    if args.n_configs > total:
+        raise ValueError(f"--n-configs={args.n_configs} exceeds full space ({total})")
+
+    rng = random.Random(args.seed)
+    if args.sampling == "random":
+        sampled = rng.sample(all_combinations, args.n_configs)
+    else:
+        sampled = []
+        seen: set[tuple] = set()
+        for combo in _lhs_sample(values, args.n_configs, args.seed):
+            if combo in seen:
+                continue
+            seen.add(combo)
+            sampled.append(combo)
+        if len(sampled) < args.n_configs:
+            remaining = [combo for combo in all_combinations if combo not in seen]
+            sampled.extend(rng.sample(remaining, args.n_configs - len(sampled)))
+
+    configs = []
+    for idx, combo in enumerate(sampled):
+        cfg = dict(zip(keys, combo))
+        cfg["config_index"] = idx
+        cfg["optimizer"] = "adamw"
+        cfg["batch_size"] = args.batch_size
+        cfg["num_epochs"] = args.num_epochs
+        configs.append(cfg)
+
+    if args.output is None:
+        out_path = Path(__file__).resolve().parent / f"configs_{args.n_configs}_{args.sampling}.json"
+    else:
+        out_path = args.output
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(configs, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {len(configs)} configs to {out_path}")
+
+
+if __name__ == "__main__":
+    main()
