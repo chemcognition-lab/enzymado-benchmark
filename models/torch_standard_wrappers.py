@@ -467,39 +467,72 @@ class MLPRegressorTorch:
         return np.concatenate(preds)
 
 
-# TODO: Update to be compatible with MLPModel updates (MLPRegressor is already updated)
 class MLPClassifierTorch:
     """MLP classifier for pooled or residue-aware embedding inputs."""
 
-    def __init__(self, hidden_dims=(512, 256), lr=1e-3, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
-        self.hidden_dims = hidden_dims
+    def __init__(
+        self, 
+        num_layers=1, 
+        expansion_ratio=4.0, 
+        activation="relu", 
+        dropout_prob=0.0, 
+        normalize=False, 
+        lr=1e-3, 
+        weight_decay=0.01, 
+        epochs=20, 
+        early_stopping_patience=None, 
+        early_stopping_min_delta=0.0, 
+        device=None
+    ):
+        self.params = {
+            "num_layers": num_layers, "expansion_ratio": expansion_ratio,
+            "activation": activation, "dropout_prob": dropout_prob,
+            "normalize": normalize, "lr": lr, "weight_decay": weight_decay
+        }
+        self.num_layers = num_layers
+        self.expansion_ratio = expansion_ratio
+        self.activation = activation
+        self.dropout_prob = dropout_prob
+        self.normalize = normalize
+        
         self.lr = lr
+        self.weight_decay = weight_decay
         self.epochs = epochs
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
+        
         self.model = None
         self.classes_ = None
-        self.best_epoch_ = None
+        self.best_epoch_ = 0
         self.best_val_loss_ = None
-        self.current_epoch_ = 0
         self.best_model_state_ = None
 
     def _forward(self, X_t: torch.Tensor, mask_t: torch.Tensor | None) -> torch.Tensor:
         out = self.model(X_t)
-        if X_t.ndim == 3:
-            out = masked_mean_pool(out, mask_t)
+        if X_t.ndim == 3: out = masked_mean_pool(out, mask_t)
         return out
 
     def fit(self, X, y, mask=None, X_val=None, y_val=None, mask_val=None, checkpoint_path=None):
         X_t, mask_t, input_dim = prepare_inputs(X, mask, self.device)
+        
+        # Classification-specific target preparation
         y = np.asarray(y)
         self.classes_ = np.unique(y)
         n_classes = len(self.classes_)
         output_dim = 1 if n_classes == 2 else n_classes
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim).to(self.device)
+        
+        # Build Model
+        self.model = MLPModel(
+            input_dim=input_dim, output_dim=output_dim, num_layers=self.num_layers,
+            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            dropout_prob=self.dropout_prob, normalize=self.normalize
+        ).to(self.device)
+        
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        
+        # Loss function routing
         if n_classes == 2:
             criterion = nn.BCEWithLogitsLoss()
             y_t = torch.from_numpy(y.astype(np.float32)).unsqueeze(1).to(self.device)
@@ -531,16 +564,11 @@ class MLPClassifierTorch:
                 return criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
+            self.model, self.epochs, train_epoch,
             val_loss_fn=val_loss if val_payload is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
+            patience=self.early_stopping_patience, min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch, initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_, initial_best_val_loss=self.best_val_loss_,
             epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
@@ -550,6 +578,8 @@ class MLPClassifierTorch:
         self.model.eval()
         with torch.no_grad():
             logits = self._forward(X_t, mask_t)
+        
+        # Classification thresholds
         if len(self.classes_) == 2:
             preds = (torch.sigmoid(logits).squeeze(1) >= 0.5).cpu().numpy().astype(int)
         else:
@@ -561,12 +591,14 @@ class MLPClassifierTorch:
         self.model.eval()
         with torch.no_grad():
             logits = self._forward(X_t, mask_t)
+            
         if len(self.classes_) == 2:
             p = torch.sigmoid(logits).squeeze(1).cpu().numpy()
             return np.column_stack([1 - p, p])
         return torch.softmax(logits, dim=1).cpu().numpy()
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
+        # Infer classes from dataloader
         all_y = np.concatenate([np.asarray(batch.target, dtype=np.float32) for batch in dataloader])
         self.classes_ = np.unique(all_y)
         n_classes = len(self.classes_)
@@ -576,9 +608,15 @@ class MLPClassifierTorch:
         first_batch = next(iter(dataloader))
         X_t, _, _ = batch_to_input(first_batch, batch_kind, self.device)
         input_dim = X_t.shape[2]
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim).to(self.device)
+        
+        self.model = MLPModel(
+            input_dim=input_dim, output_dim=output_dim, num_layers=self.num_layers,
+            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            dropout_prob=self.dropout_prob, normalize=self.normalize
+        ).to(self.device)
+        
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         criterion = nn.BCEWithLogitsLoss() if n_classes == 2 else nn.CrossEntropyLoss()
 
         def train_epoch():
@@ -607,16 +645,11 @@ class MLPClassifierTorch:
             return sum(losses) / max(len(losses), 1)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
+            self.model, self.epochs, train_epoch,
             val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
+            patience=self.early_stopping_patience, min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch, initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_, initial_best_val_loss=self.best_val_loss_,
             epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
