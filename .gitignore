@@ -28,3 +28,7 @@ data/embeddings
 *.h5
 data/fastas
 external/Profluent-E1/
+
+dir_context.py
+context.txt
+uv.lock

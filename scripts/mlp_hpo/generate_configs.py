@@ -46,9 +46,9 @@ def _lhs_sample(space_values: list[list], n: int, seed: int) -> list[tuple]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate sampled MLP HPO configs.")
     parser.add_argument("--n-configs", type=int, default=400)
-    parser.add_argument("--sampling", choices=["random", "lhs"], default="random")
+    parser.add_argument("--sampling", choices=["random", "lhs"], default="lhs")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--batch-size", type=int, default=1024)
     parser.add_argument("--num-epochs", type=int, default=20)
     parser.add_argument(
         "--output",
