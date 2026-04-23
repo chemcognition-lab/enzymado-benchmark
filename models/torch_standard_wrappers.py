@@ -307,9 +307,6 @@ class LinearClassifierTorch:
         return np.concatenate(preds)
 
 
-
-
-
 class MLPRegressorTorch:
     """MLP regressor for pooled or residue-aware embedding inputs."""
     def __init__(
@@ -415,92 +412,20 @@ class MLPRegressorTorch:
         with torch.no_grad():
             return self._forward(X_t, mask_t).squeeze(1).cpu().numpy()
 
-
-
-
-
-
-
-
-
-
-class MLPRegressorTorch:
-    """MLP regressor for pooled or residue-aware embedding inputs."""
-
-    def __init__(self, hidden_dims=(512, 256), lr=1e-3, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
-        self.hidden_dims = hidden_dims
-        self.lr = lr
-        self.epochs = epochs
-        self.early_stopping_patience = early_stopping_patience
-        self.early_stopping_min_delta = early_stopping_min_delta
-        self.device = torch.device(device) if device else DEVICE
-        self.model = None
-        self.best_epoch_ = None
-        self.best_val_loss_ = None
-        self.current_epoch_ = 0
-        self.best_model_state_ = None
-
-    def _forward(self, X_t: torch.Tensor, mask_t: torch.Tensor | None) -> torch.Tensor:
-        out = self.model(X_t)
-        if X_t.ndim == 3:
-            out = masked_mean_pool(out, mask_t)
-        return out
-
-    def fit(self, X, y, mask=None, X_val=None, y_val=None, mask_val=None, checkpoint_path=None):
-        X_t, mask_t, input_dim = prepare_inputs(X, mask, self.device)
-        y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1).to(self.device)
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1).to(self.device)
-        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        criterion = nn.MSELoss()
-
-        val_payload = None
-        if X_val is not None and y_val is not None:
-            X_val_t, mask_val_t, _ = prepare_inputs(X_val, mask_val, self.device)
-            y_val_t = torch.from_numpy(np.asarray(y_val, dtype=np.float32)).unsqueeze(1).to(self.device)
-            val_payload = (X_val_t, mask_val_t, y_val_t)
-
-        def train_epoch():
-            self.model.train()
-            optimizer.zero_grad()
-            loss = criterion(self._forward(X_t, mask_t), y_t)
-            loss.backward()
-            optimizer.step()
-
-        def val_loss():
-            self.model.eval()
-            with torch.no_grad():
-                X_val_t, mask_val_t, y_val_t = val_payload
-                return criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
-
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_payload is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
-        )
-        return self
-
-    def predict(self, X, mask=None):
-        X_t, mask_t, _ = prepare_inputs(X, mask, self.device)
-        self.model.eval()
-        with torch.no_grad():
-            return self._forward(X_t, mask_t).squeeze(1).cpu().numpy()
-
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
         first_batch = next(iter(dataloader))
         X_t, _, _ = batch_to_input(first_batch, batch_kind, self.device)
         input_dim = X_t.shape[2]
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1).to(self.device)
+        
+        # Instantiate your new dynamic MLPModel here too!
+        self.model = MLPModel(
+            input_dim=input_dim, output_dim=1, num_layers=self.num_layers,
+            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            dropout_prob=self.dropout_prob, normalize=self.normalize
+        ).to(self.device)
+        
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         criterion = nn.MSELoss()
 
         def train_epoch():
@@ -523,16 +448,11 @@ class MLPRegressorTorch:
             return sum(losses) / max(len(losses), 1)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
+            self.model, self.epochs, train_epoch,
             val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
+            patience=self.early_stopping_patience, min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch, initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_, initial_best_val_loss=self.best_val_loss_,
             epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
@@ -547,6 +467,7 @@ class MLPRegressorTorch:
         return np.concatenate(preds)
 
 
+# TODO: Update to be compatible with MLPModel updates (MLPRegressor is already updated)
 class MLPClassifierTorch:
     """MLP classifier for pooled or residue-aware embedding inputs."""
 

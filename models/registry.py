@@ -13,6 +13,8 @@ same public registry objects used by the training pipeline.
 
 from __future__ import annotations
 
+import os
+import json
 import torch
 
 from models.torch_standard_wrappers import (
@@ -294,3 +296,16 @@ STRUCTURED_MODEL_MAP = {
 if XGBClassifier is not None:
     STRUCTURED_MODEL_MAP["multilabel_ec"]["xgb_classification"] = _ec_xgb_classifier_entry()
     STRUCTURED_MODEL_MAP["residue_binary_vector"]["xgb_classification"] = _residue_xgb_classifier_entry()
+
+
+hpo_file = os.path.join(os.path.dirname(__file__), "..", "mlp_hpo_configs.json")
+if os.path.exists(hpo_file):
+    with open(hpo_file, "r") as f:
+        hpo_configs = json.load(f)
+        
+    for run_id, params in hpo_configs.items():
+        MODEL_MAP["regression"][run_id] = {
+            "wrap": MLPRegressorTorch,
+            "params": params,
+            "residue_aware": True 
+        }
