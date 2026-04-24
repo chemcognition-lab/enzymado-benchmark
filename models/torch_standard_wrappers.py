@@ -319,9 +319,11 @@ class MLPRegressorTorch:
         lr=1e-3, 
         weight_decay=0.01, 
         epochs=20, 
+        batch_size=None,
         early_stopping_patience=None, 
         early_stopping_min_delta=0.0, 
-        device=None
+        device=None,
+        **kwargs 
     ):
         # Save params so the CSV logger can access them later
         self.params = {
@@ -338,6 +340,7 @@ class MLPRegressorTorch:
         self.lr = lr
         self.weight_decay = weight_decay
         self.epochs = epochs
+        self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
@@ -378,10 +381,20 @@ class MLPRegressorTorch:
 
         def train_epoch():
             self.model.train()
-            optimizer.zero_grad()
-            loss = criterion(self._forward(X_t, mask_t), y_t)
-            loss.backward()
-            optimizer.step()
+            if self.batch_size is None:
+                optimizer.zero_grad()
+                loss = criterion(self._forward(X_t, mask_t), y_t)
+                loss.backward()
+                optimizer.step()
+            else:
+                n = X_t.shape[0]
+                indices = torch.randperm(n, device=self.device)
+                for start in range(0, n, self.batch_size):
+                    idx = indices[start:start + self.batch_size]
+                    optimizer.zero_grad()
+                    loss = criterion(self._forward(X_t[idx], mask_t[idx] if mask_t is not None else None), y_t[idx])
+                    loss.backward()
+                    optimizer.step()
 
         def val_loss():
             self.model.eval()
@@ -552,10 +565,20 @@ class MLPClassifierTorch:
 
         def train_epoch():
             self.model.train()
-            optimizer.zero_grad()
-            loss = criterion(self._forward(X_t, mask_t), y_t)
-            loss.backward()
-            optimizer.step()
+            if self.batch_size is None:
+                optimizer.zero_grad()
+                loss = criterion(self._forward(X_t, mask_t), y_t)
+                loss.backward()
+                optimizer.step()
+            else:
+                n = X_t.shape[0]
+                indices = torch.randperm(n, device=self.device)
+                for start in range(0, n, self.batch_size):
+                    idx = indices[start:start + self.batch_size]
+                    optimizer.zero_grad()
+                    loss = criterion(self._forward(X_t[idx], mask_t[idx] if mask_t is not None else None), y_t[idx])
+                    loss.backward()
+                    optimizer.step()
 
         def val_loss():
             self.model.eval()
