@@ -5,7 +5,7 @@ For every embedding dimension used in the benchmark the script runs two
 micro-benchmarks over a grid of batch sizes:
 
   1. Per-step wall-clock latency  (including host→device transfer)
-  2. Epoch-level total wall-clock time + final MAE after `num_epochs` epochs
+  2. Epoch-level total wall-clock time after `num_epochs` epochs
 
 Results are printed as tables and saved under
 `results/mlp_hpo/batch_size_scan/`.
@@ -35,9 +35,10 @@ EMBEDDING_DIMS = {
     "esm2_650M / profluent_e1_600m":      1280,
     "esm3_open / ankh_large / ankh3_large": 1536,
     "esm2_3B / ankh3_xl":    2560,
+    "sanity_check": 1500
 }
 
-BATCH_SIZES   = [16, 32, 64, 128, 256]
+BATCH_SIZES   = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
 NUM_SAMPLES   = 10_000   # synthetic dataset size
 NUM_EPOCHS    = 20       # for the epoch-level benchmark
 LATENCY_STEPS = 50       # steps measured in the per-step latency scan
@@ -139,7 +140,7 @@ def run_latency_scan(input_dim: int, device: torch.device) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Benchmark 2: epoch-level wall-clock time + MAE (data pre-loaded on device)
+# Benchmark 2: epoch-level wall-clock time (data pre-loaded on device)
 # ---------------------------------------------------------------------------
 
 def run_epoch_scan(input_dim: int, device: torch.device) -> list[dict]:
@@ -157,32 +158,27 @@ def run_epoch_scan(input_dim: int, device: torch.device) -> list[dict]:
         crit = nn.L1Loss()
 
         epoch_times = []
-        final_mae   = 0.0
 
         for _epoch in range(NUM_EPOCHS):
             model.train()
             t_epoch_start = time.perf_counter()   # wall-clock start
 
-            epoch_loss = 0.0
             for xb, yb in loader:
                 opt.zero_grad()
                 loss = crit(model(xb), yb)
                 loss.backward()
                 opt.step()
-                epoch_loss += loss.item()
 
             sync(device)                           # flush GPU before stopping clock
             epoch_times.append(time.perf_counter() - t_epoch_start)
-            final_mae = epoch_loss / len(loader)
 
         results.append({
             "input_dim":        input_dim,
             "batch_size":       bs,
-            "final_mae":        round(final_mae, 5),
             "avg_epoch_time_s": round(np.mean(epoch_times), 4),
             "total_time_s":     round(np.sum(epoch_times), 3),
         })
-        print(f"  bs={bs:4d}  total={np.sum(epoch_times):.2f}s  mae={final_mae:.4f}")
+        print(f"  bs={bs:4d}  total={np.sum(epoch_times):.2f}s")
 
     return results
 
@@ -211,22 +207,17 @@ def save_figures(lat_df: pd.DataFrame, epoch_df: pd.DataFrame, out_dir: Path) ->
     fig.savefig(out_dir / "latency_vs_batch_size.png", dpi=150)
     plt.close(fig)
 
-    # --- epoch time + MAE figures ---
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    # --- epoch time figure ---
+    fig, ax = plt.subplots(figsize=(10, 5))
     for dim in dims:
         sub = epoch_df[epoch_df["input_dim"] == dim]
-        axes[0].plot(sub["batch_size"], sub["total_time_s"], marker="s", label=f"dim={dim}")
-        axes[1].plot(sub["batch_size"], sub["final_mae"],    marker="o", label=f"dim={dim}")
-    for ax, ylabel, title in zip(
-        axes,
-        ["Total Wall-Clock Time (s)", "Final MAE"],
-        ["Total Runtime vs Batch Size", "Final MAE vs Batch Size"],
-    ):
-        ax.set_xlabel("Batch Size")
-        ax.set_ylabel(ylabel)
-        ax.set_title(title)
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.plot(sub["batch_size"], sub["total_time_s"], marker="s", label=f"dim={dim}")
+    
+    ax.set_xlabel("Batch Size")
+    ax.set_ylabel("Total Wall-Clock Time (s)")
+    ax.set_title("Total Runtime vs Batch Size")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_dir / "epoch_metrics_vs_batch_size.png", dpi=150)
     plt.close(fig)
