@@ -96,7 +96,7 @@ def main() -> None:
         cfg["config_index"] = idx
         cfg["optimizer"] = "adamw"
         cfg["batch_size"] = args.batch_size
-        cfg["num_epochs"] = args.num_epochs
+        cfg["epochs"] = args.num_epochs
         configs.append(cfg)
 
     if args.output is None:
