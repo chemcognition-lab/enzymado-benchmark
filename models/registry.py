@@ -298,14 +298,22 @@ if XGBClassifier is not None:
     STRUCTURED_MODEL_MAP["residue_binary_vector"]["xgb_classification"] = _residue_xgb_classifier_entry()
 
 
-hpo_file = os.path.join(os.path.dirname(__file__), "..", "mlp_hpo_configs.json")
-if os.path.exists(hpo_file):
+hpo_file = os.environ.get("HPO_CONFIG_PATH")
+if hpo_file and os.path.exists(hpo_file):
+    print(f"\n[REGISTRY] Successfully found HPO configs at: {hpo_file}")
     with open(hpo_file, "r") as f:
-        hpo_configs = json.load(f)
+        hpo_list = json.load(f)
         
-    for run_id, params in hpo_configs.items():
+    for i, params in enumerate(hpo_list):
+        idx = params.get("config_index", i)
+        run_id = f"mlp_hpo_{idx:03d}" 
+        
+        # Inject directly into regression map
         MODEL_MAP["regression"][run_id] = {
             "wrap": MLPRegressorTorch,
             "params": params,
             "residue_aware": True 
         }
+else:
+    if hpo_file:
+        print(f"\n[REGISTRY ERROR] HPO_CONFIG_PATH was set but file not found: {hpo_file}")

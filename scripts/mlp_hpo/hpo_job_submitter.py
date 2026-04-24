@@ -2,59 +2,64 @@
 Batch submitter for HPO configurations.
 Reads a JSON list, submits a batch of SLURM jobs using the existing 
 run_training_cluster.slurm file, and tracks progress.
+
+run `uv run  hpo_job_submitter.py` from scripts/mlp_hpo/.
+
+Embedding options:
+ankh3_large,  ankh_base,   esm2_3B,    esm3_open,  esmc_600m,          profluent_e1_600m,  prot5_xl_half_uniref50,
+ankh3_xl,     ankh_large,  esm2_650M,  esmc_300m,  profluent_e1_300m,  prost5,             prot5_xl_uniref50
 """
 
 import json
 import subprocess
 import argparse
+import os
 from pathlib import Path
 
 INDEX_FILE = Path("last_submitted_index.txt")
 DEFAULT_CONFIG_FILE = Path("configs_400_lhs.json")
-SLURM_SCRIPT = "scripts/run_training_cluster.slurm"
+SLURM_SCRIPT = "../run_training_cluster.slurm"
+EMBEDDINGS_DATA_ROOT = "/scratch/chemist/enzymado/data"
+TASK_NAMES = "km"
 
 def load_last_index() -> int:
-    """Reads the last submitted index from the tracking file."""
     if not INDEX_FILE.exists():
         return 0
     try:
         with open(INDEX_FILE, "r") as f:
             return int(f.read().strip())
     except ValueError:
-        print(f"[WARNING] {INDEX_FILE} is corrupted. Starting from 0.")
         return 0
 
 def save_last_index(index: int):
-    """Saves the current index to the tracking file."""
     with open(INDEX_FILE, "w") as f:
         f.write(str(index))
 
-def run_local(config_idx: int, run_id: str, emb_name: str, dry_run: bool = False):
-    """Runs a single config locally, bypassing SLURM."""
+def run_local(config_idx: int, run_id: str, emb_name: str, config_file_path: Path, dry_run: bool = False):
+    """Executes the SLURM bash script locally in your terminal."""
     
-    # Constructing the local command using standard paths from the SLURM script
-    local_cmd = [
-        "uv", "run", "models/train.py",
-        "benchmark_card.json",
-        "embeddings_models_output.json",
-        "results/predictions",
-        "--emb_name", emb_name,
-        "--results_card", "results_card.json",
-        "--model_prefix", run_id
-    ]
-    cmd_str = " ".join(local_cmd)
+    # We pass the variables via the environment, exactly how --export does it
+    env = os.environ.copy()
+    env["EMB_NAME"] = emb_name
+    env["MODEL_PREFIX"] = run_id
+    env["HPO_CONFIG_PATH"] = str(config_file_path.resolve())
+    env["TASK_NAMES"] = TASK_NAMES
+    env["EMBEDDINGS_DATA_ROOT"] = EMBEDDINGS_DATA_ROOT
 
     print(f"\n{'='*60}")
-    print(f"LOCAL RUN — Config index {config_idx} (Run ID: {run_id})")
+    print(f"LOCAL BASH RUN — Config index {config_idx} (Run ID: {run_id})")
     print(f"{'='*60}")
-    print(f"Command:\n  {cmd_str}\n")
+    print(f"Simulating SLURM --export: EMB_NAME={emb_name}, MODEL_PREFIX={run_id}")
+    print(f"Executing: bash {SLURM_SCRIPT}\n")
 
     if dry_run:
-        print("[DRY RUN] Skipping execution. Command printed above.")
+        print("[DRY RUN] Skipping execution.")
         return
 
-    print("Starting local execution...")
-    result = subprocess.run(cmd_str, shell=True)
+    print("Starting local execution...\n")
+    
+    # Run the bash script directly. Output will stream directly to your terminal.
+    result = subprocess.run(["bash", SLURM_SCRIPT], env=env)
     
     if result.returncode != 0:
         print(f"\n[WARNING] Process exited with return code {result.returncode}")
@@ -68,13 +73,12 @@ def main():
     parser.add_argument("--emb-name", type=str, default="esm2_650M", help="Target embedding.")
 
     # Local testing args
-    parser.add_argument("--local", action="store_true", help="Run a single config locally instead of via sbatch.")
+    parser.add_argument("--local", action="store_true", help="Run the slurm script locally in terminal.")
     parser.add_argument("--local-index", type=int, default=None, help="Index to run locally. Implies --local.")
-    parser.add_argument("--dry-run", action="store_true", help="Print local command without executing. Implies --local.")
+    parser.add_argument("--dry-run", action="store_true", help="Print command without executing.")
 
     args = parser.parse_args()
 
-    # --dry-run and --local-index imply --local
     if args.dry_run or args.local_index is not None:
         args.local = True
 
@@ -83,63 +87,65 @@ def main():
         print(f"[ERROR] Config file '{config_path}' not found.")
         return
 
-    # Load configurations
     with open(config_path, "r") as f:
         configs = json.load(f)
 
     total_configs = len(configs)
 
-    # Run local test
+    # Local run for testing
     if args.local:
         index = args.local_index if args.local_index is not None else load_last_index()
         if index >= total_configs:
-            print(f"[ERROR] Config index {index} is out of range (0–{total_configs-1}).")
+            print(f"[ERROR] Config index {index} is out of range.")
             return
             
         config = configs[index]
         config_idx = config.get("config_index", index)
         run_id = f"mlp_hpo_{config_idx:03d}"
         
-        run_local(config_idx, run_id, args.emb_name, dry_run=args.dry_run)
+        run_local(config_idx, run_id, args.emb_name, config_path , dry_run=args.dry_run)
         return
     
-    # Determine indices
+    # Slurm batch submission
     start_index = load_last_index()
     if start_index >= total_configs:
-        print(f"[INFO] All {total_configs} configurations have already been submitted. Exiting.")
+        print(f"[INFO] All configurations submitted.")
         return
 
     end_index = min(start_index + args.batch_size, total_configs)
     jobs_to_submit = end_index - start_index
 
     print(f"--- Starting HPO Batch Submission ---")
-    print(f"Configs File : {config_path.name} ({total_configs} total)")
+    print(f"Configs File : {config_path.name}")
     print(f"Target Emb   : {args.emb_name}")
     print(f"Submitting   : Indices {start_index} to {end_index - 1} ({jobs_to_submit} jobs)")
     print("-" * 40)
 
+    # Create log directory
+    log_dir = Path("slurm_logs")
+    log_dir.mkdir(exist_ok=True)
+
     successful_submissions = 0
 
-    # Submission loop
     for i in range(start_index, end_index):
         config = configs[i]
         run_id = f"mlp_hpo_{i:03d}"
 
-        # Construct sbatch command supported by SLURM template
         sbatch_cmd = [
             "sbatch",
-            f"--export=ALL,EMB_NAME={args.emb_name},MODEL_PREFIX={run_id}",
-            f"--output=slurm_logs/%j/cv_runner-%j.out",
-            f"--error=slurm_logs/%j/cv_runner-%j.err",
+            f"--export=ALL,EMB_NAME={args.emb_name},MODEL_PREFIX={run_id},HPO_CONFIG_PATH={config_path.resolve()},TASK_NAMES={TASK_NAMES},EMBEDDINGS_DATA_ROOT={EMBEDDINGS_DATA_ROOT}",
+            f"--output=slurm_logs/run_id_{run_id}/job_id_%j.out",
+            f"--error=slurm_logs/run_id_{run_id}/job_id_%j.err",
             SLURM_SCRIPT
         ]
 
+        if args.dry_run:
+            print(f"[{i+1}/{total_configs}] [DRY RUN] {' '.join(sbatch_cmd)}")
+            continue
+
         try:
-            # Execute command
             result = subprocess.run(sbatch_cmd, capture_output=True, text=True, check=True)
             output = result.stdout.strip()
-            
-            # Parse the job_id
             job_id = output.split()[-1] if "Submitted batch job" in output else "Unknown_ID"
             
             print(f"[{i+1}/{total_configs}] {run_id} -> SLURM Job ID: {job_id}")
@@ -149,14 +155,11 @@ def main():
             print(f"[ERROR] Failed to submit {run_id}: {e.stderr.strip()}")
             break
 
-    # Update tracking file
-    new_index = start_index + successful_submissions
-    save_last_index(new_index)
-    
-    print("-" * 40)
-    print(f"[INFO] Successfully submitted {successful_submissions} jobs.")
-    if new_index >= total_configs:
-        print("[INFO] You have submitted all available configurations!")
+    if not args.dry_run:
+        new_index = start_index + successful_submissions
+        save_last_index(new_index)
+        print("-" * 40)
+        print(f"[INFO] Successfully submitted {successful_submissions} jobs.")
 
 if __name__ == "__main__":
     main()

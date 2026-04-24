@@ -850,6 +850,49 @@ def _run_task(
                     use_validation,
                     run_dir,
                 )
+
+                # Save metrics for HPO runs
+                if model_name.startswith("mlp_hpo_"):
+                    try:
+                        import json
+                        from sklearn.metrics import mean_absolute_error, r2_score
+                        from scipy.stats import kendalltau
+                        
+                        val_mae = val_r2 = val_kendall = None
+                        
+                        if outputs.y_val is not None and outputs.pred_val is not None:
+                            val_mae = float(mean_absolute_error(outputs.y_val, outputs.pred_val))
+                            val_r2 = float(r2_score(outputs.y_val, outputs.pred_val))
+                            k_corr, _ = kendalltau(outputs.y_val, outputs.pred_val)
+                            val_kendall = float(k_corr) if k_corr is not None else None
+
+                        params = model_info.get("params", {})
+                        
+                        result_data = {
+                            "run_id": model_name,
+                            "task_name": task_name,
+                            "embedding": emb_name,
+                            "val_MAE": val_mae,
+                            "val_R2": val_r2,
+                            "val_Kendall": val_kendall,
+                            "best_epoch": getattr(outputs.trained, "best_epoch_", ""),
+                            **params
+                        }
+                        
+                        hpo_dir = output_dir / "hpo_metrics"
+                        hpo_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        isolated_file = hpo_dir / f"{model_name}.json"
+                        with open(isolated_file, "w") as f:
+                            json.dump(result_data, f, indent=4)
+                            
+                        log(f"      [HPO] Saved metrics to {isolated_file.name}. Bypassing file saves.")
+                    except Exception as e:
+                        log(f"      [HPO ERROR] Failed to log metrics: {e}")
+                    
+                    # Skips saving predictions, model.pt, and results_card.json for HPO runs
+                    continue
+
                 saved_prediction_paths = {
                     "train": make_predictions_file(
                         outputs.y_train,
@@ -933,6 +976,7 @@ def _run_task(
                 test_pred_file=saved_prediction_paths["test"],
                 val_pred_file=saved_prediction_paths.get("val"),
             )
+
             update_results_card_locked(
                 results_card_path,
                 task_scope="properties",
