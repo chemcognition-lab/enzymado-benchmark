@@ -21,6 +21,7 @@ DEFAULT_CONFIG_FILE = Path("configs_400_lhs.json")
 SLURM_SCRIPT = "../run_training_cluster.slurm"
 EMBEDDINGS_DATA_ROOT = "/scratch/chemist/enzymado/data"
 TASK_NAMES = "km"
+CARD_PATH = "../../benchmark_card.json"
 
 def load_last_index() -> int:
     if not INDEX_FILE.exists():
@@ -45,6 +46,7 @@ def run_local(config_idx: int, run_id: str, emb_name: str, config_file_path: Pat
     env["HPO_CONFIG_PATH"] = str(config_file_path.resolve())
     env["TASK_NAMES"] = TASK_NAMES
     env["EMBEDDINGS_DATA_ROOT"] = EMBEDDINGS_DATA_ROOT
+    env["CARD_PATH"] = CARD_PATH
 
     print(f"\n{'='*60}")
     print(f"LOCAL BASH RUN — Config index {config_idx} (Run ID: {run_id})")
@@ -133,7 +135,7 @@ def main():
 
         sbatch_cmd = [
             "sbatch",
-            f"--export=ALL,EMB_NAME={args.emb_name},MODEL_PREFIX={run_id},HPO_CONFIG_PATH={config_path.resolve()},TASK_NAMES={TASK_NAMES},EMBEDDINGS_DATA_ROOT={EMBEDDINGS_DATA_ROOT}",
+            f"--export=ALL,EMB_NAME={args.emb_name},MODEL_PREFIX={run_id},HPO_CONFIG_PATH={config_path.resolve()},TASK_NAMES={TASK_NAMES},EMBEDDINGS_DATA_ROOT={EMBEDDINGS_DATA_ROOT},CARD_PATH={CARD_PATH}",
             f"--output=slurm_logs/run_id_{run_id}/job_id_%j.out",
             f"--error=slurm_logs/run_id_{run_id}/job_id_%j.err",
             SLURM_SCRIPT
