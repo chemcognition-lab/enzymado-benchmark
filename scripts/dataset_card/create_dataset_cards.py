@@ -32,7 +32,7 @@ if __name__ == "__main__":
         "--seq_identity", type=float, default=0.3,
         help=(
             "MMSeqs2 min-seq-id threshold for whole-dataset diversity clustering. "
-            "Default: 0.5 (50%%). Clustering is skipped if mmseqs is not in PATH."
+            "Default: 0.3 (30%%). Clustering is skipped if mmseqs is not in PATH."
         )
     )
     parser.add_argument(
