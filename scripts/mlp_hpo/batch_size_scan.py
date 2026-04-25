@@ -36,7 +36,7 @@ EMBEDDING_DIMS = {
     "sanity_check": 1500
 }
 
-BATCH_SIZES   = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+BATCH_SIZES   = [16, 32, 64, 128, 256, 512, 1024, 2048]
 NUM_SAMPLES   = 10000    # synthetic dataset size
 NUM_EPOCHS    = 20       # for the epoch-level benchmark
 WARMUP_STEPS  = 5        # warm-up steps (not measured)
