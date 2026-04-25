@@ -1,11 +1,10 @@
 """
 Batch-size scan for the ConfigMLP head.
 
-For every embedding dimension used in the benchmark the script runs two
-micro-benchmarks over a grid of batch sizes:
-
-  1. Per-step wall-clock latency  (including host→device transfer)
-  2. Epoch-level total wall-clock time after `num_epochs` epochs
+For every embedding dimension used in the benchmark the script runs a
+unified benchmark over a grid of batch sizes. It measures both the 
+per-step wall-clock latency and the total epoch-level time (including 
+host→device transfer).
 
 Results are printed as tables and saved under
 `results/mlp_hpo/batch_size_scan/`.
@@ -26,7 +25,6 @@ from torch.utils.data import TensorDataset, DataLoader
 # ---------------------------------------------------------------------------
 
 # Unique embedding dimensions that appear in the benchmark
-# (derived from notebooks/from_h5_to_json.py MODEL_DIMS)
 EMBEDDING_DIMS = {
     "ankh_base":              768,
     "esmc_300m":              960,
@@ -39,9 +37,8 @@ EMBEDDING_DIMS = {
 }
 
 BATCH_SIZES   = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-NUM_SAMPLES   = 10_000   # synthetic dataset size
+NUM_SAMPLES   = 10000    # synthetic dataset size
 NUM_EPOCHS    = 20       # for the epoch-level benchmark
-LATENCY_STEPS = 50       # steps measured in the per-step latency scan
 WARMUP_STEPS  = 5        # warm-up steps (not measured)
 
 # ---------------------------------------------------------------------------
@@ -90,19 +87,24 @@ def sync(device: torch.device):
 
 
 # ---------------------------------------------------------------------------
-# Benchmark 1: per-step wall-clock latency (data starts on CPU)
+# Unified Benchmark (data starts on CPU to measure complete pipeline including transfer)
 # ---------------------------------------------------------------------------
 
-def run_latency_scan(input_dim: int, device: torch.device) -> list[dict]:
+def run_benchmark_scan(input_dim: int, device: torch.device) -> list[dict]:
     dataset = make_dataset(NUM_SAMPLES, input_dim, on_device=False, device=device)
     results = []
 
     for bs in BATCH_SIZES:
         loader = DataLoader(dataset, batch_size=bs, shuffle=True)
+        num_batches = len(loader)
+        
         model  = ConfigMLP(input_dim).to(device)
-        opt    = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.03)
-        crit   = nn.L1Loss()
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
+        opt  = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.03)
+        crit = nn.L1Loss()
 
+        # Warm-up 
         model.train()
         for i, (xb, yb) in enumerate(loader):
             if i >= WARMUP_STEPS:
@@ -110,52 +112,8 @@ def run_latency_scan(input_dim: int, device: torch.device) -> list[dict]:
             opt.zero_grad()
             crit(model(xb.to(device)), yb.to(device)).backward()
             opt.step()
-
-        latencies = []
-        for i, (xb_cpu, yb_cpu) in enumerate(loader):
-            if i >= LATENCY_STEPS:
-                break
-            sync(device)
-            t0 = time.perf_counter()
-
-            xb, yb = xb_cpu.to(device), yb_cpu.to(device)
-            opt.zero_grad()
-            loss = crit(model(xb), yb)
-            loss.backward()
-            opt.step()
-
-            sync(device)
-            latencies.append(time.perf_counter() - t0)
-
-        avg_ms = np.mean(latencies) * 1000
-        results.append({
-            "input_dim":       input_dim,
-            "batch_size":      bs,
-            "latency_ms":      round(avg_ms, 3),
-            "throughput_s/it": round(bs / (avg_ms / 1000), 1),
-        })
-        print(f"  bs={bs:4d}  latency={avg_ms:8.2f} ms")
-
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Benchmark 2: epoch-level wall-clock time (data pre-loaded on device)
-# ---------------------------------------------------------------------------
-
-def run_epoch_scan(input_dim: int, device: torch.device) -> list[dict]:
-    # Data lives on the device to isolate compute cost; total wall-clock time
-    # still captures the full pipeline (zero_grad, forward, backward, step).
-    dataset = make_dataset(NUM_SAMPLES, input_dim, on_device=True, device=device)
-    results = []
-
-    for bs in BATCH_SIZES:
-        loader = DataLoader(dataset, batch_size=bs, shuffle=True)
-        model  = ConfigMLP(input_dim).to(device)
-        if torch.cuda.device_count() > 1:
-            model = nn.DataParallel(model)
-        opt  = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.03)
-        crit = nn.L1Loss()
+        
+        sync(device)
 
         epoch_times = []
 
@@ -163,7 +121,8 @@ def run_epoch_scan(input_dim: int, device: torch.device) -> list[dict]:
             model.train()
             t_epoch_start = time.perf_counter()   # wall-clock start
 
-            for xb, yb in loader:
+            for dict_xb, dict_yb in loader:
+                xb, yb = dict_xb.to(device), dict_yb.to(device)
                 opt.zero_grad()
                 loss = crit(model(xb), yb)
                 loss.backward()
@@ -172,13 +131,24 @@ def run_epoch_scan(input_dim: int, device: torch.device) -> list[dict]:
             sync(device)                           # flush GPU before stopping clock
             epoch_times.append(time.perf_counter() - t_epoch_start)
 
+        avg_epoch_s = np.mean(epoch_times)
+        total_time_s = np.sum(epoch_times)
+        
+        # Calculate step latency and throughput from the epoch times
+        # (avg_epoch_s / num_batches) gives average time per batch in seconds
+        avg_step_ms = (avg_epoch_s / num_batches) * 1000
+        throughput = bs / (avg_step_ms / 1000)
+
         results.append({
             "input_dim":        input_dim,
             "batch_size":       bs,
-            "avg_epoch_time_s": round(np.mean(epoch_times), 4),
-            "total_time_s":     round(np.sum(epoch_times), 3),
+            "latency_ms":       round(avg_step_ms, 3),
+            "throughput_s/it":  round(throughput, 1),
+            "avg_epoch_time_s": round(avg_epoch_s, 4),
+            "total_time_s":     round(total_time_s, 3),
         })
-        print(f"  bs={bs:4d}  total={np.sum(epoch_times):.2f}s")
+        
+        print(f"  bs={bs:4d} | step={avg_step_ms:6.2f}ms | epoch={avg_epoch_s:5.2f}s | total={total_time_s:5.2f}s")
 
     return results
 
@@ -190,13 +160,13 @@ def run_epoch_scan(input_dim: int, device: torch.device) -> list[dict]:
 OUTPUT_DIR = Path(__file__).resolve().parents[2] / "results" / "mlp_hpo" / "batch_size_scan"
 
 
-def save_figures(lat_df: pd.DataFrame, epoch_df: pd.DataFrame, out_dir: Path) -> None:
-    dims = sorted(lat_df["input_dim"].unique())
+def save_figures(df: pd.DataFrame, out_dir: Path) -> None:
+    dims = sorted(df["input_dim"].unique())
 
     # --- latency figure ---
     fig, ax = plt.subplots(figsize=(10, 5))
     for dim in dims:
-        sub = lat_df[lat_df["input_dim"] == dim]
+        sub = df[df["input_dim"] == dim]
         ax.plot(sub["batch_size"], sub["latency_ms"], marker="o", label=f"dim={dim}")
     ax.set_xlabel("Batch Size")
     ax.set_ylabel("Latency per Step (ms)")
@@ -210,7 +180,7 @@ def save_figures(lat_df: pd.DataFrame, epoch_df: pd.DataFrame, out_dir: Path) ->
     # --- epoch time figure ---
     fig, ax = plt.subplots(figsize=(10, 5))
     for dim in dims:
-        sub = epoch_df[epoch_df["input_dim"] == dim]
+        sub = df[df["input_dim"] == dim]
         ax.plot(sub["batch_size"], sub["total_time_s"], marker="s", label=f"dim={dim}")
     
     ax.set_xlabel("Batch Size")
@@ -230,35 +200,25 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    all_latency = []
-    all_epoch   = []
+    all_results = []
 
     for model_label, input_dim in EMBEDDING_DIMS.items():
         print(f"\n{'='*60}")
         print(f"Embedding dim {input_dim}  ({model_label})")
         print(f"{'='*60}")
 
-        print("\n-- Per-step latency scan (data on CPU, incl. H2D transfer) --")
-        all_latency.extend(run_latency_scan(input_dim, device))
+        all_results.extend(run_benchmark_scan(input_dim, device))
 
-        print(f"\n-- Epoch-level scan ({NUM_EPOCHS} epochs, total wall-clock) --")
-        all_epoch.extend(run_epoch_scan(input_dim, device))
+    df = pd.DataFrame(all_results)
+    
+    print("\n\n===== Benchmark Results =====")
+    print(df.to_string(index=False))
 
-    lat_df   = pd.DataFrame(all_latency)
-    epoch_df = pd.DataFrame(all_epoch)
-
-    print("\n\n===== Per-step latency results =====")
-    print(lat_df.to_string(index=False))
-
-    print("\n\n===== Epoch-level results =====")
-    print(epoch_df.to_string(index=False))
-
-    combined = lat_df.merge(epoch_df, on=["input_dim", "batch_size"])
     csv_path = OUTPUT_DIR / "batch_size_scan_results.csv"
-    combined.to_csv(csv_path, index=False)
+    df.to_csv(csv_path, index=False)
     print(f"\nSaved CSV to {csv_path}")
 
-    save_figures(lat_df, epoch_df, OUTPUT_DIR)
+    save_figures(df, OUTPUT_DIR)
     print(f"Saved figures to {OUTPUT_DIR}")
 
 
