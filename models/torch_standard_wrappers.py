@@ -312,7 +312,7 @@ class MLPRegressorTorch:
     def __init__(
         self,
         num_layers=1, 
-        expansion_ratio=4.0, 
+        hidden_dim=512, 
         activation="relu", 
         dropout_prob=0.0, 
         normalize=False, 
@@ -327,12 +327,12 @@ class MLPRegressorTorch:
     ):
         # Save params so the CSV logger can access them later
         self.params = {
-            "num_layers": num_layers, "expansion_ratio": expansion_ratio,
+            "num_layers": num_layers, "hidden_dim": hidden_dim,
             "activation": activation, "dropout_prob": dropout_prob,
             "normalize": normalize, "lr": lr, "weight_decay": weight_decay
         }
         self.num_layers = num_layers
-        self.expansion_ratio = expansion_ratio
+        self.hidden_dim = hidden_dim
         self.activation = activation
         self.dropout_prob = dropout_prob
         self.normalize = normalize
@@ -363,7 +363,7 @@ class MLPRegressorTorch:
         # Instantiate MLPModel
         self.model = MLPModel(
             input_dim=input_dim, output_dim=1, num_layers=self.num_layers,
-            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            hidden_dim=self.hidden_dim, activation=self.activation,
             dropout_prob=self.dropout_prob, normalize=self.normalize
         ).to(self.device)
         
@@ -433,7 +433,7 @@ class MLPRegressorTorch:
         # Instantiate your new dynamic MLPModel here too!
         self.model = MLPModel(
             input_dim=input_dim, output_dim=1, num_layers=self.num_layers,
-            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            hidden_dim=self.hidden_dim, activation=self.activation,
             dropout_prob=self.dropout_prob, normalize=self.normalize
         ).to(self.device)
         
@@ -486,7 +486,7 @@ class MLPClassifierTorch:
     def __init__(
         self, 
         num_layers=1, 
-        expansion_ratio=4.0, 
+        hidden_dim=512, 
         activation="relu", 
         dropout_prob=0.0, 
         normalize=False, 
@@ -498,12 +498,12 @@ class MLPClassifierTorch:
         device=None
     ):
         self.params = {
-            "num_layers": num_layers, "expansion_ratio": expansion_ratio,
+            "num_layers": num_layers, "hidden_dim": hidden_dim,
             "activation": activation, "dropout_prob": dropout_prob,
             "normalize": normalize, "lr": lr, "weight_decay": weight_decay
         }
         self.num_layers = num_layers
-        self.expansion_ratio = expansion_ratio
+        self.hidden_dim = hidden_dim
         self.activation = activation
         self.dropout_prob = dropout_prob
         self.normalize = normalize
@@ -538,7 +538,7 @@ class MLPClassifierTorch:
         # Build Model
         self.model = MLPModel(
             input_dim=input_dim, output_dim=output_dim, num_layers=self.num_layers,
-            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            hidden_dim=self.hidden_dim, activation=self.activation,
             dropout_prob=self.dropout_prob, normalize=self.normalize
         ).to(self.device)
         
@@ -634,7 +634,7 @@ class MLPClassifierTorch:
         
         self.model = MLPModel(
             input_dim=input_dim, output_dim=output_dim, num_layers=self.num_layers,
-            expansion_ratio=self.expansion_ratio, activation=self.activation,
+            hidden_dim=self.hidden_dim, activation=self.activation,
             dropout_prob=self.dropout_prob, normalize=self.normalize
         ).to(self.device)
         

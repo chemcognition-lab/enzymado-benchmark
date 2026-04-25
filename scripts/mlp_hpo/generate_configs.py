@@ -14,7 +14,7 @@ from pathlib import Path
 SEARCH_SPACE = {
     "activation": ["relu", "silu", "swiglu"],
     "num_layers": [1, 2, 3],
-    "expansion_ratio": [2.0, 4.0, 6.0, 8.0],
+    "hidden_dim": [512, 1024, 2048, 4096],
     "dropout_prob": [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.35, 0.5],
     "normalize": [False, True],
     "lr": [1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 5e-6],

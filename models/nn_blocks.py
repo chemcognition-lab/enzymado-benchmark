@@ -23,9 +23,9 @@ class SwiGLU(nn.Module):
         x1, x2 = x.chunk(2, dim=-1)
         return F.silu(x1) * x2
 
-def width_correction_fn(expansion_ratio: float, input_dim: int, multiple_of: int) -> int:
-    target_dim = int(expansion_ratio * input_dim)
-    return ((target_dim + multiple_of - 1) // multiple_of) * multiple_of
+def make_multiple_of(val: int, multiple_of: int = 32) -> int:
+    """Rounds a dimension up to the nearest multiple for hardware efficiency."""
+    return ((val + multiple_of - 1) // multiple_of) * multiple_of
 
 class MLPModel(nn.Module):
     """Feed-forward MLP used for pooled or residue-wise embedding inputs."""
@@ -34,7 +34,7 @@ class MLPModel(nn.Module):
         input_dim: int, 
         output_dim: int, 
         num_layers: int = 1,
-        expansion_ratio: float = 4.0, 
+        hidden_dim: int = 512, 
         activation: str = "relu", 
         dropout_prob: float = 0.0, 
         normalize: bool = False,
@@ -45,18 +45,17 @@ class MLPModel(nn.Module):
         # Adjust param count for GLU activations
         activation = activation.lower()
         if activation in ["relu", "silu"]:
-            gated = False
-            hidden_dim = width_correction_fn(expansion_ratio, input_dim, multiple_of)
+            hidden_dim = hidden_dim
+            proj_dim_out = hidden_dim
         elif activation == "swiglu":
-            gated = True
-            # 2/3 factor to normalize GLU parameter count
-            gated_expansion_ratio = expansion_ratio * (2.0 / 3.0)
-            hidden_dim = width_correction_fn(gated_expansion_ratio, input_dim, multiple_of)
+            # 2/3 factor to normalize GLU parameter count against ReLU
+            hidden_dim = int(hidden_dim * (2.0 / 3.0))
+            proj_dim_out = hidden_dim * 2
         else:
             raise ValueError(f"Unsupported activation: {activation}")
-            
-        # Hidden dimension
-        proj_dim_out = hidden_dim * 2 if gated else hidden_dim
+
+        hidden_dim = make_multiple_of(hidden_dim, multiple_of)
+        proj_dim_out = make_multiple_of(proj_dim_out, multiple_of)
         
         layers = []
         in_features = input_dim
