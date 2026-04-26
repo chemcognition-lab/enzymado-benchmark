@@ -32,3 +32,6 @@ external/Profluent-E1/
 dir_context.py
 context.txt
 uv.lock
+
+slurm_logs/
+last_submitted_index.txt
