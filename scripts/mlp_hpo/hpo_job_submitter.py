@@ -3,7 +3,7 @@ Batch submitter for HPO configurations.
 Reads a JSON list, submits a batch of SLURM jobs using the existing 
 run_training_cluster.slurm file, and tracks progress.
 
-run `uv run  hpo_job_submitter.py` from scripts/mlp_hpo/.
+run `uv run  hpo_job_submitter.py --account [cluster account]` from scripts/mlp_hpo/.
 
 Embedding options:
 ankh3_large,  ankh_base,   esm2_3B,    esm3_open,  esmc_600m,          profluent_e1_600m,  prot5_xl_half_uniref50,
@@ -16,12 +16,13 @@ import argparse
 import os
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 INDEX_FILE = Path("last_submitted_index.txt")
 DEFAULT_CONFIG_FILE = Path("configs_400_lhs.json")
-SLURM_SCRIPT = "../run_training_cluster.slurm"
+SLURM_SCRIPT = REPO_ROOT / "scripts/run_training_cluster.slurm"
 EMBEDDINGS_DATA_ROOT = "/scratch/chemist/enzymado/data"
 TASK_NAMES = "km"
-CARD_PATH = "../../benchmark_card.json"
+CARD_PATH = REPO_ROOT / "benchmark_card.json"
 
 def load_last_index() -> int:
     if not INDEX_FILE.exists():
@@ -72,7 +73,8 @@ def main():
     parser = argparse.ArgumentParser(description="Batch submit HPO configurations to SLURM.")
     parser.add_argument("--batch-size", type=int, default=1, help="Number of jobs to submit.")
     parser.add_argument("--config-file", type=str, default=str(DEFAULT_CONFIG_FILE))
-    parser.add_argument("--emb-name", type=str, default="esm2_650M", help="Target embedding.")
+    parser.add_argument("--emb-name", type=str, default="esmc_300m", help="Target embedding.")
+    parser.add_argument("--account", type=str, help="SLURM account to bill")
 
     # Local testing args
     parser.add_argument("--local", action="store_true", help="Run the slurm script locally in terminal.")
@@ -133,12 +135,27 @@ def main():
         config = configs[i]
         run_id = f"mlp_hpo_{i:03d}"
 
+        run_log_dir = REPO_ROOT / "slurm_logs" / f"{run_id}"
+        run_log_dir.mkdir(parents=True, exist_ok=True)
+
         sbatch_cmd = [
             "sbatch",
+            f"--account={args.account}",
+
+            f"--chdir={REPO_ROOT}",
+
+            "--job-name=enzymado_hpo",
+            "--gres=none",
+            "--gpus=h100_1g.10gb:1",
+            "--cpus-per-task=1",
+            "--mem=8G",
+            "--time=00:10:00",
+
+            f"--output={run_log_dir}/%j/job_id_%j.out",
+            f"--error={run_log_dir}/%j/job_id_%j.err",
+
             f"--export=ALL,EMB_NAME={args.emb_name},MODEL_PREFIX={run_id},HPO_CONFIG_PATH={config_path.resolve()},TASK_NAMES={TASK_NAMES},EMBEDDINGS_DATA_ROOT={EMBEDDINGS_DATA_ROOT},CARD_PATH={CARD_PATH}",
-            f"--output=slurm_logs/run_id_{run_id}/job_id_%j.out",
-            f"--error=slurm_logs/run_id_{run_id}/job_id_%j.err",
-            SLURM_SCRIPT
+            str(SLURM_SCRIPT)
         ]
 
         if args.dry_run:
@@ -146,7 +163,7 @@ def main():
             continue
 
         try:
-            result = subprocess.run(sbatch_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(sbatch_cmd, capture_output=True, text=True, check=True, cwd=REPO_ROOT)
             output = result.stdout.strip()
             job_id = output.split()[-1] if "Submitted batch job" in output else "Unknown_ID"
             
