@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-configs", type=int, default=400)
     parser.add_argument("--sampling", choices=["random", "lhs"], default="lhs")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch-size", type=int, default=1024)
+    parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-epochs", type=int, default=20)
     parser.add_argument(
         "--output",
