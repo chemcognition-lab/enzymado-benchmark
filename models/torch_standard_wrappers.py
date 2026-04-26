@@ -323,6 +323,7 @@ class MLPRegressorTorch:
         early_stopping_patience=None, 
         early_stopping_min_delta=0.0, 
         device=None,
+        is_hpo=False,
         **kwargs 
     ):
         # Save params so the CSV logger can access them later
@@ -344,6 +345,7 @@ class MLPRegressorTorch:
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
+        self.is_hpo = is_hpo
         
         self.model = None
         self.best_epoch_ = 0
@@ -368,7 +370,7 @@ class MLPRegressorTorch:
         ).to(self.device)
         
         # Define training circumstance
-        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
+        start_epoch = 0 if self.is_hpo else maybe_resume_torch_wrapper(self, checkpoint_path)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         criterion = nn.MSELoss()
 
@@ -381,6 +383,7 @@ class MLPRegressorTorch:
 
         def train_epoch():
             self.model.train()
+            print(f"    [DEBUG] Epoch start. X_t mean: {X_t.float().mean().item():.4f}, y_t mean: {y_t.float().mean().item():.4f}")
             if self.batch_size is None:
                 optimizer.zero_grad()
                 loss = criterion(self._forward(X_t, mask_t), y_t)
@@ -400,7 +403,9 @@ class MLPRegressorTorch:
             self.model.eval()
             with torch.no_grad():
                 X_val_t, mask_val_t, y_val_t = val_payload
-                return criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
+                loss = criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
+                print(f"    [DEBUG] Val Loss: {loss:.4f}")
+                return loss
 
         # Run training
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
@@ -414,7 +419,7 @@ class MLPRegressorTorch:
             initial_best_state=self.best_model_state_,
             initial_best_epoch=self.best_epoch_, 
             initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
+            epoch_callback=None if self.is_hpo else make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
 
@@ -495,7 +500,9 @@ class MLPClassifierTorch:
         epochs=20, 
         early_stopping_patience=None, 
         early_stopping_min_delta=0.0, 
-        device=None
+        device=None,
+        is_hpo=False,
+        **kwargs
     ):
         self.params = {
             "num_layers": num_layers, "hidden_dim": hidden_dim,
@@ -514,6 +521,7 @@ class MLPClassifierTorch:
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
+        self.is_hpo = is_hpo
         
         self.model = None
         self.classes_ = None
@@ -542,7 +550,7 @@ class MLPClassifierTorch:
             dropout_prob=self.dropout_prob, normalize=self.normalize
         ).to(self.device)
         
-        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
+        start_epoch = 0 if self.is_hpo else maybe_resume_torch_wrapper(self, checkpoint_path)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         
         # Loss function routing
@@ -592,7 +600,7 @@ class MLPClassifierTorch:
             patience=self.early_stopping_patience, min_delta=self.early_stopping_min_delta,
             start_epoch=start_epoch, initial_best_state=self.best_model_state_,
             initial_best_epoch=self.best_epoch_, initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
+            epoch_callback=None if self.is_hpo else make_torch_checkpoint_callback(self, checkpoint_path),
         )
         return self
 

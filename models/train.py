@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -286,10 +288,56 @@ def _prepare_task_data(
     *,
     residue_store_mode: str = "auto",
     embedding_dim: int | None = None,
+    output_dir: Path = None,
+    task_name: str = None,
+    emb_name: str = None,
 ) -> PreparedTaskData:
     """Prepare arrays or bundles for the training route chosen by the task config."""
     route = _resolve_task_route(config)
     prepared = PreparedTaskData(route=route)
+
+    # Setup Cache Path
+    cache_file = None
+    if route.is_ligand_task or route.is_pooled_protein_global_task or route.is_pooled_mutation_task:
+        if output_dir and task_name and emb_name:
+            cache_dir = output_dir.parent / ".data_cache" / task_name / emb_name
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_file = cache_dir / f"{split_variant}_arrays.npz"
+
+            # Check for Cache
+            if cache_file.exists():
+                try:
+                    log(f"    [CACHE] Found pre-built arrays at {cache_file}!")
+                    t0 = time.time()
+                    with np.load(cache_file) as data:
+                        prepared.X_train = data['X_train'].copy()
+                        prepared.y_train = data['y_train'].copy()
+                        prepared.X_test = data['X_test'].copy()
+                        prepared.y_test = data['y_test'].copy()
+                        if 'X_val' in data:
+                            prepared.X_val = data['X_val'].copy()
+                            prepared.y_val = data['y_val'].copy()
+                    log(f"    [CACHE] Fast-loaded dataset in {time.time()-t0:.1f}s")
+                    return prepared
+                except Exception as e:
+                    log(f"    [CACHE ERROR] Failed to load cache (corrupted?): {e}. Rebuilding...")
+
+    # Helper function for safe, atomic saving
+    def _save_cache_safely():
+        if cache_file and not cache_file.exists():
+            log(f"    [CACHE] Saving arrays to disk using atomic write...")
+            save_dict = {
+                'X_train': prepared.X_train, 'y_train': prepared.y_train,
+                'X_test': prepared.X_test, 'y_test': prepared.y_test
+            }
+            if prepared.X_val is not None:
+                save_dict['X_val'] = prepared.X_val
+                save_dict['y_val'] = prepared.y_val
+            
+            # Save to .tmp first to prevent corruptions
+            temp_file = cache_file.with_name(cache_file.stem + "_tmp.npz")
+            np.savez_compressed(temp_file, **save_dict)
+            temp_file.replace(cache_file)
 
     if route.is_ligand_task:
         log("    Loading pooled embeddings from H5 (ligand task)...")
@@ -311,6 +359,9 @@ def _prepare_task_data(
         prepared.X_test, prepared.y_test = build_Xy_ligand_direct(
             task_rows.test_rows, by_id, by_seq, config
         )
+
+        _save_cache_safely()
+
         return prepared
 
     if route.is_pooled_ec_task:
@@ -389,6 +440,9 @@ def _prepare_task_data(
         prepared.X_test, prepared.y_test = build_protein_global_Xy_direct(
             task_rows.test_rows, by_id, by_seq, config
         )
+
+        _save_cache_safely()
+
         return prepared
 
     if route.is_pooled_mutation_task:
@@ -411,6 +465,9 @@ def _prepare_task_data(
         prepared.X_test, prepared.y_test = build_mutation_delta_Xy_direct(
             task_rows.test_rows, by_id, by_seq, config
         )
+
+        _save_cache_safely()
+
         return prepared
 
     if config.batch_kind == "protein_residue":
@@ -783,6 +840,9 @@ def _run_task(
             task_rows,
             residue_store_mode=residue_store_mode,
             embedding_dim=int(emb_info["dim"]) if emb_info.get("dim") is not None else None,
+            output_dir=output_dir,
+            task_name=task_name,
+            emb_name=emb_name,
         )
         n_train, n_val, n_test = _dataset_sizes(prepared)
         log_loaded_data_summary(task_rows, n_train, n_val, n_test)

@@ -307,6 +307,7 @@ if hpo_file and os.path.exists(hpo_file):
     for i, params in enumerate(hpo_list):
         idx = params.get("config_index", i)
         run_id = f"mlp_hpo_{idx:03d}" 
+        params["is_hpo"] = True
         
         # Inject directly into regression map
         MODEL_MAP["regression"][run_id] = {
