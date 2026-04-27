@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import sys
 import time
 import traceback
@@ -41,6 +43,7 @@ from models.train_data import (
     get_dataloader,
     get_target_payload,
     load_lazy_embedding_store,
+    load_lazy_safetensors_embedding_store,
 )
 from models.train_output import (
     make_result_entry,
@@ -130,12 +133,22 @@ def _build_attention_task_bundles(
     split_variant: str,
     emb_path: str | Path,
     task_rows: LoadedTaskRows,
+    *,
+    embedding_storage_format: str = "safetensors",
 ) -> AttentionTaskBundles:
     """Load the lazy store and build train/val/test bundles for one attention task."""
     t0 = time.time()
-    store = load_lazy_embedding_store(emb_path, task_rows.needed_ids, task_rows.needed_sequences)
+    if embedding_storage_format == "h5":
+        store = load_lazy_embedding_store(emb_path, task_rows.needed_ids, task_rows.needed_sequences)
+    else:
+        store = load_lazy_safetensors_embedding_store(
+            emb_path,
+            task_rows.needed_ids,
+            task_rows.needed_sequences,
+            storage_format=embedding_storage_format,
+        )
     log(
-        f"    Lazy store ready ({time.time()-t0:.1f}s) — "
+        f"    Lazy {embedding_storage_format} store ready ({time.time()-t0:.1f}s) — "
         f"{len(store._available_ids)} ids, {len(store._seq_to_h5key)} seqs indexed"
     )
 
@@ -232,6 +245,8 @@ def _run_attention_task(
     sequence_to_id: dict[str, str],
     batch_size: int,
     split_variant_filter: str | None,
+    embedding_storage_format: str,
+    overwrite_results: bool,
     benchmark_card: dict[str, Any] | None = None,
     results_card: dict[str, Any] | None = None,
 ) -> None:
@@ -273,19 +288,22 @@ def _run_attention_task(
             log("    No attention models selected after filters — skipping task.")
             return
 
-        already_done = _completed_attention_models(
-            model_map,
-            output_dir,
-            split_variant,
-            task_name,
-            emb_name,
-            results_card=results_card,
-        )
-        if len(already_done) == len(model_map):
-            log(f"    All {len(already_done)} attention models already trained — skipping task.")
-            return
-        if already_done:
-            log(f"    {len(already_done)}/{len(model_map)} attention models already done: {already_done}")
+        if not overwrite_results:
+            already_done = _completed_attention_models(
+                model_map,
+                output_dir,
+                split_variant,
+                task_name,
+                emb_name,
+                results_card=results_card,
+            )
+            if len(already_done) == len(model_map):
+                log(f"    All {len(already_done)} attention models already trained — skipping task.")
+                return
+            if already_done:
+                log(f"    {len(already_done)}/{len(model_map)} attention models already done: {already_done}")
+        else:
+            log("    Overwrite enabled: existing attention artifacts for selected models will be replaced.")
 
         task_rows = load_task_rows_bundle(
             config,
@@ -304,6 +322,7 @@ def _run_attention_task(
             split_variant,
             emb_info["path"],
             task_rows,
+            embedding_storage_format=embedding_storage_format,
         )
         n_train = len(bundles.train_bundle.dataset)
         n_val = len(bundles.val_bundle.dataset)
@@ -322,9 +341,11 @@ def _run_attention_task(
 
         for model_name, model_info in model_map.items():
             run_dir = build_result_run_dir(output_dir, split_variant, task_name, emb_name, model_name)
-            if is_run_complete(run_dir):
+            if not overwrite_results and is_run_complete(run_dir):
                 log(f"    [{model_name}] Already trained — skipping.")
                 continue
+            if overwrite_results and run_dir.exists():
+                shutil.rmtree(run_dir)
 
             log(f"    [{model_name}] n_train={n_train}, n_test={n_test} | attention pooled")
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -485,6 +506,8 @@ def main(
     allowed_ids_path: str | None = None,
     batch_size: int = 16,
     split_variant_filter: str | None = None,
+    embedding_storage_format: str = "safetensors",
+    overwrite_results: bool = False,
     *,
     results_card_path: str,
 ):
@@ -501,6 +524,8 @@ def main(
         log(f"[startup] Skipping label kinds: {sorted(skip_label_kinds)}")
     if split_variant_filter is not None:
         log(f"[startup] Restricting split variant to: {split_variant_filter}")
+    log(f"[startup] Embedding storage format: {embedding_storage_format}")
+    log(f"[startup] Overwrite results: {overwrite_results}")
 
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
@@ -551,6 +576,8 @@ def main(
                 sequence_to_id=sequence_to_id,
                 batch_size=batch_size,
                 split_variant_filter=split_variant_filter,
+                embedding_storage_format=embedding_storage_format,
+                overwrite_results=overwrite_results,
                 benchmark_card=card,
                 results_card=results_card,
             )
@@ -600,6 +627,17 @@ if __name__ == "__main__":
         help="Train only this split variant. Defaults to each task's card default_split.",
     )
     parser.add_argument(
+        "--embedding_storage_format",
+        choices=("safetensors", "h5", "auto"),
+        default=os.getenv("ENZYMADO_EMBEDDING_STORAGE_FORMAT", "safetensors"),
+        help="Embedding storage backend to use. Defaults to safetensors.",
+    )
+    parser.add_argument(
+        "--overwrite_results",
+        action="store_true",
+        help="Replace existing artifacts for selected attention runs instead of skipping completed runs.",
+    )
+    parser.add_argument(
         "--results_card",
         required=True,
         help="Path to results_card.json.",
@@ -616,5 +654,7 @@ if __name__ == "__main__":
         allowed_ids_path=args.allowed_ids,
         batch_size=args.batch_size,
         split_variant_filter=args.split_variant,
+        embedding_storage_format=args.embedding_storage_format,
+        overwrite_results=args.overwrite_results,
         results_card_path=args.results_card,
     )

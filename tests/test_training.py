@@ -243,6 +243,7 @@ class StructuredTrainingTests(unittest.TestCase):
                 {"AAAA"},
                 residue_store_mode="auto",
                 embedding_dim=128,
+                embedding_storage_format="h5",
             )
 
         self.assertIs(store, materialized_store)
@@ -275,6 +276,7 @@ class StructuredTrainingTests(unittest.TestCase):
                 {"A" * 10_000},
                 residue_store_mode="auto",
                 embedding_dim=2_000_000,
+                embedding_storage_format="h5",
             )
 
         self.assertIs(store, lazy_store)
@@ -304,6 +306,7 @@ class StructuredTrainingTests(unittest.TestCase):
                 "fake_embeddings.h5",
                 {"P1"},
                 {"AAAA"},
+                embedding_storage_format="h5",
             )
 
         self.assertIs(store, lazy_store)

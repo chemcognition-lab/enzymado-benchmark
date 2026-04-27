@@ -47,6 +47,8 @@ fi
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
 : "${BATCH_SIZE:=16}"
+: "${EMBEDDING_STORAGE_FORMAT:=safetensors}"
+: "${OVERWRITE_RESULTS:=0}"
 
 if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
     EMBEDDINGS_JSON="$(relocate_manifest_to_scratch "${REPO}" "${EMBEDDINGS_JSON}" "${EMBEDDINGS_DATA_ROOT}")"
@@ -136,6 +138,8 @@ if [[ -n "${COMMON_IDS_PATH}" ]]; then
     echo "Allowed IDs: ${COMMON_IDS_PATH}"
 fi
 echo "Batch size: ${BATCH_SIZE}"
+echo "Embedding storage format: ${EMBEDDING_STORAGE_FORMAT}"
+echo "Overwrite results: ${OVERWRITE_RESULTS}"
 
 TRAIN_ARGS=(
     "${CARD_PATH}"
@@ -144,6 +148,7 @@ TRAIN_ARGS=(
     --emb_name "${EMBEDDING_NAME}"
     --batch_size "${BATCH_SIZE}"
     --results_card "${RESULTS_CARD_PATH}"
+    --embedding_storage_format "${EMBEDDING_STORAGE_FORMAT}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
@@ -170,6 +175,10 @@ fi
 
 if [[ -n "${COMMON_IDS_PATH}" ]]; then
     TRAIN_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
+fi
+
+if [[ "${OVERWRITE_RESULTS}" == "1" || "${OVERWRITE_RESULTS}" == "true" || "${OVERWRITE_RESULTS}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(--overwrite_results)
 fi
 
 python -u "${REPO}/models/train_attention.py" "${TRAIN_ARGS[@]}"

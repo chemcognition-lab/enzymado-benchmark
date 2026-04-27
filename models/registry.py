@@ -67,7 +67,7 @@ def _standard_linear_classifier_entry() -> dict:
     return _make_model_entry(
         LinearClassifierTorch,
         {
-            "lr": 0.01,
+            "lr": 0.001,
             "epochs": 200,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
@@ -80,7 +80,7 @@ def _standard_linear_regressor_entry() -> dict:
     return _make_model_entry(
         LinearRegressorTorch,
         {
-            "lr": 0.01,
+            "lr": 0.001,
             "epochs": 200,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,

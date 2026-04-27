@@ -40,10 +40,27 @@ EMB_MODELS=(
 EMB_NAME="${EMB_MODELS[$SLURM_ARRAY_TASK_ID]}"
 echo "Array task $SLURM_ARRAY_TASK_ID → embedding: $EMB_NAME"
 
-conda run --no-capture-output -n prot5_blackwell python -u models/train.py \
-    benchmark_card.json \
-    embeddings_models_output.json \
-    results/predictions \
-    --emb_name "$EMB_NAME" \
-    --results_card results_card.json \
+TRAIN_ARGS=(
+    benchmark_card.json
+    embeddings_models_output.json
+    results/predictions
+    --emb_name "$EMB_NAME"
+    --results_card results_card.json
+    --embedding_storage_format "${EMBEDDING_STORAGE_FORMAT:-safetensors}"
     --residue_store_mode "${RESIDUE_STORE_MODE:-auto}"
+)
+
+if [[ -n "${EMBEDDING_MODES:-}" ]]; then
+    IFS=',' read -r -a _embedding_modes <<< "${EMBEDDING_MODES}"
+    for _embedding_mode in "${_embedding_modes[@]}"; do
+        if [[ -n "${_embedding_mode}" ]]; then
+            TRAIN_ARGS+=(--embedding_mode "${_embedding_mode}")
+        fi
+    done
+fi
+
+if [[ "${OVERWRITE_RESULTS:-0}" == "1" || "${OVERWRITE_RESULTS:-0}" == "true" || "${OVERWRITE_RESULTS:-0}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(--overwrite_results)
+fi
+
+conda run --no-capture-output -n prot5_blackwell python -u models/train.py "${TRAIN_ARGS[@]}"

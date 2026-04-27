@@ -8,6 +8,7 @@ from typing import Any
 
 from data_loading import ProteinResidueConcatCollator
 
+from models.train_common import log
 from models.train_data import get_dataloader, get_target_payload
 from models.train_runtime import train_model_loader
 

@@ -14,7 +14,8 @@ set -euo pipefail
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
 #   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_training_cluster.slurm
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMB_NAME=esm2_650M scripts/run_training_cluster.slurm
-#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions,RESULTS_CARD_PATH=${PWD}/results_card.json,MODEL_PREFIX=mlp_,SKIP_LABEL_KINDS=residue_binary_vector scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions,RESULTS_CARD_PATH=${PWD}/results_card.json,MODEL_PREFIX=mlp_,EMBEDDING_MODES=mean scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,MODEL_PREFIX=xgb_,EMBEDDING_MODES=mean,OVERWRITE_RESULTS=1 scripts/run_training_cluster.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
@@ -44,6 +45,9 @@ init_cluster_runtime_dirs
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
 : "${RESIDUE_STORE_MODE:=auto}"
+: "${EMBEDDING_STORAGE_FORMAT:=safetensors}"
+: "${EMBEDDING_MODES:=}"
+: "${OVERWRITE_RESULTS:=0}"
 
 if [[ -z "${CARD_PATH:-}" ]]; then
     CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
@@ -148,6 +152,11 @@ if [[ -n "${COMMON_IDS_PATH}" ]]; then
     echo "Allowed IDs: ${COMMON_IDS_PATH}"
 fi
 echo "Residue store mode: ${RESIDUE_STORE_MODE}"
+echo "Embedding storage format: ${EMBEDDING_STORAGE_FORMAT}"
+if [[ -n "${EMBEDDING_MODES}" ]]; then
+    echo "Embedding modes: ${EMBEDDING_MODES}"
+fi
+echo "Overwrite results: ${OVERWRITE_RESULTS}"
 
 TRAIN_ARGS=(
     "${CARD_PATH}"
@@ -155,6 +164,7 @@ TRAIN_ARGS=(
     "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
     --results_card "${RESULTS_CARD_PATH}"
+    --embedding_storage_format "${EMBEDDING_STORAGE_FORMAT}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
@@ -189,6 +199,19 @@ fi
 
 if [[ -n "${RESIDUE_STORE_MODE}" ]]; then
     TRAIN_ARGS+=(--residue_store_mode "${RESIDUE_STORE_MODE}")
+fi
+
+if [[ -n "${EMBEDDING_MODES}" ]]; then
+    IFS=',' read -r -a _embedding_modes <<< "${EMBEDDING_MODES}"
+    for _embedding_mode in "${_embedding_modes[@]}"; do
+        if [[ -n "${_embedding_mode}" ]]; then
+            TRAIN_ARGS+=(--embedding_mode "${_embedding_mode}")
+        fi
+    done
+fi
+
+if [[ "${OVERWRITE_RESULTS}" == "1" || "${OVERWRITE_RESULTS}" == "true" || "${OVERWRITE_RESULTS}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(--overwrite_results)
 fi
 
 python -u "${REPO}/models/train.py" "${TRAIN_ARGS[@]}"

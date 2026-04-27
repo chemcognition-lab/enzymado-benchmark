@@ -50,7 +50,8 @@ relocate_manifest_to_scratch() {
     python "${repo_root}/scripts/enzyme_utils/relocate_embeddings_json.py" \
         "${source_manifest}" \
         "${target_manifest}" \
-        --output-root "${data_root}" >/dev/null
+        --output-root "${data_root}" \
+        --storage-format "${EMBEDDING_STORAGE_FORMAT:-as-is}" >/dev/null
 
     printf '%s\n' "${target_manifest}"
 }

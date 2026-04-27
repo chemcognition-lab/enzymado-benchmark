@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from pathlib import Path
 
 import numpy as np
@@ -173,6 +174,8 @@ def run_training_with_early_stopping(
         t0 = _time.time()
         train_epoch_fn()
         val_loss = float(val_loss_fn())
+        if not math.isfinite(val_loss):
+            raise RuntimeError(f"Training produced a non-finite validation loss: {val_loss}.")
         epoch_time = _time.time() - t0
 
         if (epoch + 1) % log_every == 0 or epoch == 0:

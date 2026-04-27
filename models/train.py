@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -52,7 +53,9 @@ from models.train_data import (
     get_target_payload,
     load_embedding_store_subset,
     load_lazy_embedding_store,
-    load_pooled_h5_subset,
+    load_lazy_safetensors_embedding_store,
+    load_pooled_embedding_subset,
+    load_safetensors_embedding_store_subset,
 )
 from models.train_output import (
     make_result_entry,
@@ -87,12 +90,11 @@ def load_task_embedding_store(
     *,
     residue_store_mode: str = "auto",
     embedding_dim: int | None = None,
+    embedding_storage_format: str = "safetensors",
 ):
     """Return the embedding store strategy appropriate for one task.
 
-    This wrapper intentionally lives in ``models.train`` so test monkeypatches
-    against ``models.train.load_embedding_store_subset`` and
-    ``models.train.load_lazy_embedding_store`` keep working.
+    H5 remains available through ``embedding_storage_format='h5'`` for legacy runs.
     """
     if config.batch_kind == "protein_residue":
         resolved_mode = residue_store_mode
@@ -119,17 +121,41 @@ def load_task_embedding_store(
                 )
 
         if resolved_mode == "materialized":
-            store = load_embedding_store_subset(h5_path, needed_ids, needed_sequences)
+            if embedding_storage_format == "h5":
+                store = load_embedding_store_subset(h5_path, needed_ids, needed_sequences)
+            else:
+                store = load_safetensors_embedding_store_subset(
+                    h5_path,
+                    needed_ids,
+                    needed_sequences,
+                    storage_format=embedding_storage_format,
+                )
             return store, resolved_mode
         if resolved_mode == "lazy":
-            store = load_lazy_embedding_store(h5_path, needed_ids, needed_sequences)
+            if embedding_storage_format == "h5":
+                store = load_lazy_embedding_store(h5_path, needed_ids, needed_sequences)
+            else:
+                store = load_lazy_safetensors_embedding_store(
+                    h5_path,
+                    needed_ids,
+                    needed_sequences,
+                    storage_format=embedding_storage_format,
+                )
             return store, resolved_mode
         raise ValueError(
             "residue_store_mode must be one of 'auto', 'materialized', or 'lazy'. "
             f"Received '{residue_store_mode}'."
         )
 
-    store = load_lazy_embedding_store(h5_path, needed_ids, needed_sequences)
+    if embedding_storage_format == "h5":
+        store = load_lazy_embedding_store(h5_path, needed_ids, needed_sequences)
+    else:
+        store = load_lazy_safetensors_embedding_store(
+            h5_path,
+            needed_ids,
+            needed_sequences,
+            storage_format=embedding_storage_format,
+        )
     return store, "lazy"
 
 
@@ -419,17 +445,19 @@ class DirectArrayTrainingRoute(TrainingRoute):
         *,
         residue_store_mode: str = "auto",
         embedding_dim: int | None = None,
+        embedding_storage_format: str = "safetensors",
     ) -> PreparedTaskData:
         del registry_name, split_variant, residue_store_mode, embedding_dim
         route = _resolve_task_route(config)
         prepared = PreparedTaskData(route=route)
 
-        log(f"    Loading pooled embeddings from H5 ({self.load_label})...")
+        log(f"    Loading pooled embeddings from {embedding_storage_format} ({self.load_label})...")
         t0 = time.time()
-        by_id, by_seq = load_pooled_h5_subset(
+        by_id, by_seq = load_pooled_embedding_subset(
             emb_path,
             task_rows.needed_ids,
             task_rows.needed_sequences,
+            storage_format=embedding_storage_format,
         )
         log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
 
@@ -488,16 +516,18 @@ class PooledECTrainingRoute(TrainingRoute):
         *,
         residue_store_mode: str = "auto",
         embedding_dim: int | None = None,
+        embedding_storage_format: str = "safetensors",
     ) -> PreparedTaskData:
         del registry_name, split_variant, residue_store_mode, embedding_dim
         prepared = PreparedTaskData(route=_resolve_task_route(config))
 
-        log("    Loading pooled embeddings from H5 (EC task)...")
+        log(f"    Loading pooled embeddings from {embedding_storage_format} (EC task)...")
         t0 = time.time()
-        by_id, by_seq = load_pooled_h5_subset(
+        by_id, by_seq = load_pooled_embedding_subset(
             emb_path,
             task_rows.needed_ids,
             task_rows.needed_sequences,
+            storage_format=embedding_storage_format,
         )
         log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
 
@@ -622,6 +652,7 @@ class DatasetBundleTrainingRoute(TrainingRoute):
         *,
         residue_store_mode: str = "auto",
         embedding_dim: int | None = None,
+        embedding_storage_format: str = "safetensors",
     ) -> PreparedTaskData:
         prepared = PreparedTaskData(route=_resolve_task_route(config))
         if config.batch_kind == "protein_residue":
@@ -632,7 +663,7 @@ class DatasetBundleTrainingRoute(TrainingRoute):
             else:
                 log("    Choosing residue embedding store strategy...")
         else:
-            log("    Scanning H5 keys for lazy store...")
+            log(f"    Scanning {embedding_storage_format} keys for lazy store...")
 
         t0 = time.time()
         prepared.store, store_mode = load_task_embedding_store(
@@ -642,6 +673,7 @@ class DatasetBundleTrainingRoute(TrainingRoute):
             task_rows.needed_sequences,
             residue_store_mode=residue_store_mode,
             embedding_dim=embedding_dim,
+            embedding_storage_format=embedding_storage_format,
         )
         if store_mode == "materialized":
             log(
@@ -904,6 +936,21 @@ def _select_model_map(
     }
 
 
+def _filter_model_map_by_embedding_modes(
+    model_map: dict[str, dict],
+    task_name: str,
+    embedding_mode_filters: set[str],
+) -> dict[str, dict]:
+    """Keep only models whose artifact embedding mode matches requested modes."""
+    if not embedding_mode_filters:
+        return model_map
+    return {
+        name: info
+        for name, info in model_map.items()
+        if canonical_embedding_mode(task_name, name) in embedding_mode_filters
+    }
+
+
 def _completed_models(
     model_map: dict[str, dict],
     output_dir: Path,
@@ -967,6 +1014,9 @@ def _run_task(
     skip_label_kinds: set[str],
     residue_store_mode: str,
     split_variant_filter: str | None,
+    embedding_mode_filters: set[str],
+    embedding_storage_format: str,
+    overwrite_results: bool,
     benchmark_card: dict[str, Any] | None = None,
     results_card: dict[str, Any] | None = None,
 ) -> None:
@@ -1006,23 +1056,31 @@ def _run_task(
     prepared: PreparedTaskData | None = None
     try:
         model_map = _select_model_map(task_type, config.label_kind, model_prefix_filter)
+        model_map = _filter_model_map_by_embedding_modes(
+            model_map,
+            task_name,
+            embedding_mode_filters,
+        )
         if not model_map:
             log("    No models selected after filters — skipping task.")
             return
 
-        already_done = _completed_models(
-            model_map,
-            output_dir,
-            split_variant,
-            task_name,
-            emb_name,
-            results_card=results_card,
-        )
-        if len(already_done) == len(model_map):
-            log(f"    All {len(already_done)} models already trained — skipping task.")
-            return
-        if already_done:
-            log(f"    {len(already_done)}/{len(model_map)} models already done: {already_done}")
+        if not overwrite_results:
+            already_done = _completed_models(
+                model_map,
+                output_dir,
+                split_variant,
+                task_name,
+                emb_name,
+                results_card=results_card,
+            )
+            if len(already_done) == len(model_map):
+                log(f"    All {len(already_done)} models already trained — skipping task.")
+                return
+            if already_done:
+                log(f"    {len(already_done)}/{len(model_map)} models already done: {already_done}")
+        else:
+            log("    Overwrite enabled: existing artifacts for selected models will be replaced.")
 
         task_rows = load_task_rows_bundle(config, split_variant, allowed_ids, sequence_to_id)
         if not task_rows.train_rows and not task_rows.val_rows and not task_rows.test_rows:
@@ -1038,6 +1096,7 @@ def _run_task(
             task_rows,
             residue_store_mode=residue_store_mode,
             embedding_dim=int(emb_info["dim"]) if emb_info.get("dim") is not None else None,
+            embedding_storage_format=embedding_storage_format,
         )
         n_train, n_val, n_test = _dataset_sizes(prepared)
         log_loaded_data_summary(task_rows, n_train, n_val, n_test)
@@ -1054,9 +1113,11 @@ def _run_task(
 
         for model_name, model_info in model_map.items():
             run_dir = build_result_run_dir(output_dir, split_variant, task_name, emb_name, model_name)
-            if is_run_complete(run_dir):
+            if not overwrite_results and is_run_complete(run_dir):
                 log(f"    [{model_name}] Already trained — skipping.")
                 continue
+            if overwrite_results and run_dir.exists():
+                shutil.rmtree(run_dir)
 
             residue_aware = _is_residue_aware_training(model_info, prepared)
             log(
@@ -1172,6 +1233,9 @@ def main(
     allowed_ids_path: str | None = None,
     residue_store_mode: str = "auto",
     split_variant_filter: str | None = None,
+    embedding_mode_filters: set[str] | None = None,
+    embedding_storage_format: str = "safetensors",
+    overwrite_results: bool = False,
     *,
     results_card_path: str,
 ):
@@ -1190,6 +1254,11 @@ def main(
     log(f"[startup] Residue store mode: {residue_store_mode}")
     if split_variant_filter is not None:
         log(f"[startup] Restricting split variant to: {split_variant_filter}")
+    embedding_mode_filters = embedding_mode_filters or set()
+    if embedding_mode_filters:
+        log(f"[startup] Restricting embedding modes to: {sorted(embedding_mode_filters)}")
+    log(f"[startup] Embedding storage format: {embedding_storage_format}")
+    log(f"[startup] Overwrite results: {overwrite_results}")
 
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
@@ -1241,6 +1310,9 @@ def main(
                 skip_label_kinds=skip_label_kinds,
                 residue_store_mode=residue_store_mode,
                 split_variant_filter=split_variant_filter,
+                embedding_mode_filters=embedding_mode_filters,
+                embedding_storage_format=embedding_storage_format,
+                overwrite_results=overwrite_results,
                 benchmark_card=card,
                 results_card=results_card,
             )
@@ -1293,6 +1365,27 @@ if __name__ == "__main__":
         help="Train only this split variant. Defaults to each task's card default_split.",
     )
     parser.add_argument(
+        "--embedding_mode",
+        action="append",
+        choices=("mean", "per_residue", "attention"),
+        default=[],
+        help=(
+            "Train only model/task combinations in this results embedding mode. "
+            "Use --embedding_mode mean for mean-pooled baselines."
+        ),
+    )
+    parser.add_argument(
+        "--embedding_storage_format",
+        choices=("safetensors", "h5", "auto"),
+        default=os.getenv("ENZYMADO_EMBEDDING_STORAGE_FORMAT", "safetensors"),
+        help="Embedding storage backend to use. Defaults to safetensors.",
+    )
+    parser.add_argument(
+        "--overwrite_results",
+        action="store_true",
+        help="Replace existing artifacts for selected runs instead of skipping completed runs.",
+    )
+    parser.add_argument(
         "--results_card",
         required=True,
         help="Path to results_card.json.",
@@ -1309,5 +1402,8 @@ if __name__ == "__main__":
         allowed_ids_path=args.allowed_ids,
         residue_store_mode=args.residue_store_mode,
         split_variant_filter=args.split_variant,
+        embedding_mode_filters=set(args.embedding_mode),
+        embedding_storage_format=args.embedding_storage_format,
+        overwrite_results=args.overwrite_results,
         results_card_path=args.results_card,
     )
