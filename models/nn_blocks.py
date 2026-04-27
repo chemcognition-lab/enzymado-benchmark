@@ -45,17 +45,17 @@ class MLPModel(nn.Module):
         # Adjust param count for GLU activations
         activation = activation.lower()
         if activation in ["relu", "silu"]:
-            hidden_dim = hidden_dim
-            proj_dim_out = hidden_dim
+            target_hidden_dim = hidden_dim
+            final_hidden_dim = make_multiple_of(target_hidden_dim, multiple_of)
+            final_proj_dim_out = final_hidden_dim
+            
         elif activation == "swiglu":
-            # 2/3 factor to normalize GLU parameter count against ReLU
-            hidden_dim = int(hidden_dim * (2.0 / 3.0))
-            proj_dim_out = hidden_dim * 2
+            # Scale hidden dim by 2/3
+            target_hidden_dim = int(hidden_dim * (2.0 / 3.0))
+            final_hidden_dim = make_multiple_of(target_hidden_dim, multiple_of)
+            final_proj_dim_out = final_hidden_dim * 2
         else:
             raise ValueError(f"Unsupported activation: {activation}")
-
-        hidden_dim = make_multiple_of(hidden_dim, multiple_of)
-        proj_dim_out = make_multiple_of(proj_dim_out, multiple_of)
         
         layers = []
         in_features = input_dim
@@ -65,7 +65,7 @@ class MLPModel(nn.Module):
             if normalize:
                 layers.append(nn.LayerNorm(in_features))
 
-            layers.append(nn.Linear(in_features, proj_dim_out))
+            layers.append(nn.Linear(in_features, final_proj_dim_out))
             
             # Activation
             if activation == "relu":
@@ -79,7 +79,7 @@ class MLPModel(nn.Module):
             if dropout_prob > 0.0:
                 layers.append(nn.Dropout(dropout_prob))
 
-            in_features = hidden_dim
+            in_features = final_hidden_dim
             
         layers.append(nn.Linear(in_features, output_dim))
 
