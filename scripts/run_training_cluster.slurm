@@ -40,6 +40,7 @@ init_cluster_runtime_dirs
 : "${AUTO_RELOCATE_EMBEDDINGS_JSON:=1}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
+: "${SPLIT_VARIANT:=}"
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
 : "${RESIDUE_STORE_MODE:=auto}"
@@ -137,6 +138,9 @@ fi
 if [[ -n "${TASK_NAMES}" ]]; then
     echo "Task names: ${TASK_NAMES}"
 fi
+if [[ -n "${SPLIT_VARIANT}" ]]; then
+    echo "Split variant: ${SPLIT_VARIANT}"
+fi
 if [[ -n "${SKIP_LABEL_KINDS}" ]]; then
     echo "Skip label kinds: ${SKIP_LABEL_KINDS}"
 fi
@@ -155,6 +159,10 @@ TRAIN_ARGS=(
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
     TRAIN_ARGS+=(--model_prefix "${MODEL_PREFIX}")
+fi
+
+if [[ -n "${SPLIT_VARIANT}" ]]; then
+    TRAIN_ARGS+=(--split_variant "${SPLIT_VARIANT}")
 fi
 
 if [[ -n "${TASK_NAMES}" ]]; then

@@ -1,17 +1,17 @@
-from __future__ import annotations
 """Utilities for generating random or similarity-aware dataset split CSV files."""
 
+from __future__ import annotations
+
 import argparse
+from collections import defaultdict
 import csv
 import json
 import math
+from pathlib import Path
 import random
 import shutil
 import subprocess
 import tempfile
-from collections import defaultdict
-from pathlib import Path
-
 
 SPLIT_NAMES = ("train", "val", "test")
 SEQUENCE_COLUMN_ALIASES = (
@@ -30,6 +30,43 @@ ID_COLUMN_ALIASES = (
     "id",
     "ID",
 )
+STANDARDIZATION_EXCLUDED_COLUMNS = {
+    "active_site",
+    "binding_positions",
+    "ec_number",
+    "id",
+    "ligand_id",
+    "ligand_name",
+    "mutation",
+    "n_measurements",
+    "ph",
+    "resolved_split",
+    "smiles",
+    "source_split",
+    "split",
+    "substrate_concentration",
+    "temperature",
+}
+STANDARDIZATION_EXCLUDED_SUFFIXES = (
+    "_count",
+    "_id",
+    "_sem",
+    "_std",
+)
+KNOWN_REGRESSION_TARGET_COLUMNS = {
+    "activity",
+    "ddg",
+    "dtm",
+    "expression",
+    "kcat",
+    "km",
+    "melting_point",
+    "phopt_median",
+    "specific_activity",
+    "sum_aromatic_products",
+    "target",
+    "thermostability",
+}
 
 
 def sanitize_output_tag(output_tag: str | None) -> str | None:
@@ -106,54 +143,6 @@ def detect_id_column(fieldnames: list[str]) -> str | None:
         if alias in fieldnames:
             return alias
     return None
-
-
-def can_use_id_column(
-    rows: list[dict[str, str]],
-    id_col: str,
-) -> bool:
-    """Check whether an identifier column yields a one-split-per-id mapping."""
-    assignment_by_id: dict[str, str] = {}
-    saw_value = False
-
-    for row in rows:
-        protein_id = str(row.get(id_col, "")).strip()
-        split_name = str(row.get("split", "")).strip()
-        if not protein_id:
-            return False
-
-        saw_value = True
-        previous_split = assignment_by_id.get(protein_id)
-        if previous_split is not None and previous_split != split_name:
-            return False
-        assignment_by_id[protein_id] = split_name
-
-    return saw_value
-
-
-def select_output_id_column(
-    rows: list[dict[str, str]],
-    fieldnames: list[str],
-    preferred_id_col: str | None = None,
-) -> str:
-    """Choose the safest identifier column for writing split assignment files."""
-    candidates: list[str] = []
-    if preferred_id_col:
-        candidates.append(preferred_id_col)
-
-    for alias in ID_COLUMN_ALIASES:
-        if alias in fieldnames and alias not in candidates:
-            candidates.append(alias)
-
-    for fieldname in fieldnames:
-        if fieldname not in candidates:
-            candidates.append(fieldname)
-
-    for candidate in candidates:
-        if can_use_id_column(rows, candidate):
-            return candidate
-
-    raise ValueError("Unable to find a valid identifier column for the split output.")
 
 
 def read_csv_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -306,45 +295,208 @@ def summarize_split_rows(
     return summary
 
 
-def build_split_assignment_rows(
+def parse_finite_float(value: str | None) -> float | None:
+    """Parse a finite float from CSV text, returning ``None`` for blanks or invalid values."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def is_numeric_column(rows: list[dict[str, str]], column: str) -> bool:
+    """Return whether all present values in a column are finite numbers."""
+    saw_value = False
+    for row in rows:
+        raw_value = row.get(column)
+        if raw_value is None or not str(raw_value).strip():
+            continue
+        if parse_finite_float(raw_value) is None:
+            return False
+        saw_value = True
+    return saw_value
+
+
+def is_binary_numeric_column(rows: list[dict[str, str]], column: str) -> bool:
+    """Return whether a numeric column contains only binary 0/1 values."""
+    values: set[float] = set()
+    for row in rows:
+        parsed = parse_finite_float(row.get(column))
+        if parsed is None:
+            continue
+        if parsed not in {0.0, 1.0}:
+            return False
+        values.add(parsed)
+    return bool(values)
+
+
+def should_exclude_standardization_column(column: str) -> bool:
+    """Return whether a column is clearly an id, feature, label metadata, or split marker."""
+    normalized = column.lower()
+    if normalized in STANDARDIZATION_EXCLUDED_COLUMNS:
+        return True
+    if "sequence" in normalized:
+        return True
+    return normalized.endswith(STANDARDIZATION_EXCLUDED_SUFFIXES)
+
+
+def resolve_standardization_columns(
+    fieldnames: list[str],
+    rows: list[dict[str, str]],
+    standardization_cols: tuple[str, ...] | None = None,
+) -> tuple[list[str], dict[str, str], str]:
+    """Choose scalar columns to standardize, preferring explicit user input."""
+    if standardization_cols is not None:
+        resolved_cols = list(dict.fromkeys(standardization_cols))
+        missing = [column for column in resolved_cols if column not in fieldnames]
+        if missing:
+            raise ValueError(f"Standardization columns are missing from the dataset: {missing}.")
+        non_numeric = [
+            column
+            for column in resolved_cols
+            if not is_numeric_column(rows, column)
+        ]
+        if non_numeric:
+            raise ValueError(
+                "Standardization columns must contain only finite numeric values "
+                f"or blanks. Non-numeric columns: {non_numeric}."
+            )
+        return resolved_cols, {}, "explicit"
+
+    numeric_candidates: list[str] = []
+    skipped_columns: dict[str, str] = {}
+    for column in fieldnames:
+        if not is_numeric_column(rows, column):
+            continue
+        if is_binary_numeric_column(rows, column):
+            skipped_columns[column] = "binary_numeric_column"
+            continue
+        if should_exclude_standardization_column(column):
+            skipped_columns[column] = "excluded_id_feature_or_metadata_column"
+            continue
+        numeric_candidates.append(column)
+
+    known_targets = [
+        column
+        for column in numeric_candidates
+        if column.lower() in KNOWN_REGRESSION_TARGET_COLUMNS
+    ]
+    if known_targets:
+        return known_targets, skipped_columns, "auto_known_target"
+    if len(numeric_candidates) == 1:
+        return numeric_candidates, skipped_columns, "auto_single_numeric_column"
+
+    for column in numeric_candidates:
+        skipped_columns[column] = "ambiguous_numeric_column_use_standardize_col"
+    return [], skipped_columns, "auto"
+
+
+def make_standardized_column_name(
+    column: str,
+    used_fieldnames: set[str],
+) -> str:
+    """Return a non-conflicting standardized target column name."""
+    base_name = f"{column}_standardized"
+    candidate = base_name
+    suffix = 2
+    while candidate in used_fieldnames:
+        candidate = f"{base_name}_{suffix}"
+        suffix += 1
+    used_fieldnames.add(candidate)
+    return candidate
+
+
+def format_standardized_value(value: float) -> str:
+    """Format standardized values compactly while keeping round-trip precision useful."""
+    return format(value, ".12g")
+
+
+def build_standardized_dataset_rows(
     rows: list[dict[str, str]],
     fieldnames: list[str],
-    id_col: str | None = None,
-) -> tuple[list[str], list[dict[str, str]]]:
-    """Build the compact `id,split` table consumed by the training pipeline."""
-    resolved_id_col = select_output_id_column(
-        rows,
-        fieldnames,
-        preferred_id_col=id_col,
-    )
+    target_columns: list[str],
+) -> tuple[list[str], list[dict[str, str]], dict[str, object]]:
+    """Append z-scored target columns fit only on train rows."""
+    output_fieldnames = list(fieldnames)
+    used_fieldnames = set(output_fieldnames)
+    standardized_column_by_target = {
+        column: make_standardized_column_name(column, used_fieldnames)
+        for column in target_columns
+    }
+    output_fieldnames.extend(standardized_column_by_target.values())
 
-    assignment_by_id: dict[str, str] = {}
-    for row_index, row in enumerate(rows):
-        protein_id = str(row.get(resolved_id_col, "")).strip()
-        split_name = str(row.get("split", "")).strip()
-        if not protein_id:
+    standardized_rows = [dict(row) for row in rows]
+    columns_metadata: dict[str, object] = {}
+    for column in target_columns:
+        train_values = [
+            parsed
+            for row in rows
+            if row.get("split") == "train"
+            for parsed in [parse_finite_float(row.get(column))]
+            if parsed is not None
+        ]
+        if not train_values:
             raise ValueError(
-                f"Row {row_index} is missing a valid protein identifier in column "
-                f"'{resolved_id_col}'."
-            )
-        if split_name not in SPLIT_NAMES:
-            raise ValueError(
-                f"Row {row_index} has an invalid split value '{split_name}'."
+                f"Cannot standardize column '{column}' because train has no numeric values."
             )
 
-        previous_split = assignment_by_id.get(protein_id)
-        if previous_split is not None and previous_split != split_name:
-            raise ValueError(
-                f"Protein id '{protein_id}' was assigned to multiple splits: "
-                f"'{previous_split}' and '{split_name}'."
-            )
-        assignment_by_id[protein_id] = split_name
+        train_mean = sum(train_values) / len(train_values)
+        train_variance = sum((value - train_mean) ** 2 for value in train_values)
+        train_variance /= len(train_values)
+        train_std = math.sqrt(train_variance)
+        scale = 1.0 if train_std == 0.0 else train_std
+        standardized_column = standardized_column_by_target[column]
 
-    assignment_rows = [
-        {resolved_id_col: protein_id, "split": split_name}
-        for protein_id, split_name in assignment_by_id.items()
-    ]
-    return [resolved_id_col, "split"], assignment_rows
+        value_counts_by_split = {split_name: 0 for split_name in SPLIT_NAMES}
+        missing_counts_by_split = {split_name: 0 for split_name in SPLIT_NAMES}
+        for row in standardized_rows:
+            split_name = row.get("split")
+            parsed = parse_finite_float(row.get(column))
+            if split_name in value_counts_by_split:
+                if parsed is None:
+                    missing_counts_by_split[split_name] += 1
+                else:
+                    value_counts_by_split[split_name] += 1
+            row[standardized_column] = (
+                ""
+                if parsed is None
+                else format_standardized_value((parsed - train_mean) / scale)
+            )
+
+        columns_metadata[column] = {
+            "standardized_column": standardized_column,
+            "fit_split": "train",
+            "fit_statistics": {
+                "mean": train_mean,
+                "std": train_std,
+                "uncertainty": train_std,
+                "scale": scale,
+                "ddof": 0,
+                "n": len(train_values),
+                "zero_std_replaced_with_one": train_std == 0.0,
+            },
+            "applied_to_splits": list(SPLIT_NAMES),
+            "numeric_values_by_split": value_counts_by_split,
+            "missing_or_invalid_by_split": missing_counts_by_split,
+        }
+
+    metadata = {
+        "method": "z_score",
+        "fit_split": "train",
+        "leakage_guard": (
+            "Mean and uncertainty/std are fit on train rows only; the same "
+            "train-derived values are applied to val and test."
+        ),
+        "columns": columns_metadata,
+    }
+    return output_fieldnames, standardized_rows, metadata
 
 
 def generate_random_split_rows(
@@ -694,34 +846,47 @@ def generate_similarity_split_rows(
     )
 
 
-def write_split_outputs(
+def write_split_dataset(
     output_csv_path: Path,
     rows: list[dict[str, str]],
     fieldnames: list[str],
-    id_col: str | None = None,
 ) -> None:
-    """Write the compact split assignment CSV for one dataset."""
+    """Write the full split-labeled dataset (with optional standardized columns)."""
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
-
-    output_fieldnames, assignment_rows = build_split_assignment_rows(
-        rows,
-        fieldnames,
-        id_col=id_col,
-    )
     with output_csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=output_fieldnames, lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
-        writer.writerows(assignment_rows)
+        writer.writerows(rows)
 
 
 def write_split_metadata(
-    output_csv_path: Path,
-    metadata: dict[str, object],
+    metadata_path: Path,
+    *,
+    mode: str,
+    shared_fields: dict[str, object],
+    mode_payload: dict[str, object],
 ) -> Path:
-    """Persist a sidecar JSON describing how a split file was generated."""
-    metadata_path = output_csv_path.parent / f"{output_csv_path.stem}.metadata.json"
+    """Merge mode-specific metadata into the unified per-dataset JSON."""
+    if metadata_path.exists():
+        with metadata_path.open("r", encoding="utf-8") as handle:
+            existing = json.load(handle)
+        if not isinstance(existing, dict):
+            existing = {}
+    else:
+        existing = {}
+
+    for key, value in shared_fields.items():
+        existing[key] = value
+
+    modes = existing.setdefault("modes", {})
+    if not isinstance(modes, dict):
+        modes = {}
+        existing["modes"] = modes
+    modes[mode] = mode_payload
+
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
     with metadata_path.open("w", encoding="utf-8") as handle:
-        json.dump(metadata, handle, indent=2, sort_keys=True)
+        json.dump(existing, handle, indent=2, sort_keys=True)
         handle.write("\n")
     return metadata_path
 
@@ -729,7 +894,11 @@ def write_split_metadata(
 def resolve_csv_inputs(input_path: Path) -> list[Path]:
     """Expand a file or directory argument into source CSV datasets."""
     def is_source_dataset(path: Path) -> bool:
-        return path.suffix == ".csv" and not path.name.endswith("_splits.csv")
+        return (
+            path.suffix == ".csv"
+            and not path.name.endswith("_splits.csv")
+            and not path.name.endswith("_standardized.csv")
+        )
 
     if input_path.is_file():
         return [input_path] if is_source_dataset(input_path) else []
@@ -761,16 +930,16 @@ def build_output_csv_path(
     output_root: Path | None = None,
     output_tag: str | None = None,
 ) -> Path:
-    """Build the output path for a generated split CSV."""
+    """Build the output path for the wide split-labeled CSV."""
     fraction_label = format_fraction_label(train_fraction, val_fraction, test_fraction)
     resolved_output_tag = sanitize_output_tag(output_tag)
     tag_suffix = f"_{resolved_output_tag}" if resolved_output_tag else ""
     if mode == "random":
-        filename = f"{input_csv_path.stem}_random_{fraction_label}{tag_suffix}_splits.csv"
+        filename = f"{input_csv_path.stem}_random_{fraction_label}{tag_suffix}_standardized.csv"
     elif mode == "similarity":
         filename = (
             f"{input_csv_path.stem}_similarity_mmseqs2_"
-            f"{fraction_label}{tag_suffix}_splits.csv"
+            f"{fraction_label}{tag_suffix}_standardized.csv"
         )
     else:
         raise ValueError(f"Unsupported split mode: {mode}.")
@@ -778,6 +947,25 @@ def build_output_csv_path(
     if output_root is None:
         return input_csv_path.parent / filename
 
+    return output_root / filename
+
+
+def build_metadata_path(
+    input_csv_path: Path,
+    *,
+    train_fraction: float,
+    val_fraction: float,
+    test_fraction: float,
+    output_root: Path | None = None,
+    output_tag: str | None = None,
+) -> Path:
+    """Build the unified metadata path shared across split modes for one dataset."""
+    fraction_label = format_fraction_label(train_fraction, val_fraction, test_fraction)
+    resolved_output_tag = sanitize_output_tag(output_tag)
+    tag_suffix = f"_{resolved_output_tag}" if resolved_output_tag else ""
+    filename = f"{input_csv_path.stem}_{fraction_label}{tag_suffix}.splits.metadata.json"
+    if output_root is None:
+        return input_csv_path.parent / filename
     return output_root / filename
 
 
@@ -804,8 +992,11 @@ def split_dataset_csv(
     single_step_clustering: bool = False,
     cluster_reassign: bool = False,
     seed: int = 42,
+    standardize: bool = True,
+    standardization_cols: tuple[str, ...] | None = None,
+    metadata_path: Path | None = None,
 ) -> dict[str, dict[str, int]]:
-    """Generate one split file and return a small split summary."""
+    """Generate the wide split CSV for one dataset and merge metadata into the shared JSON."""
     fieldnames, rows = read_csv_rows(input_csv_path)
     if not rows:
         raise ValueError(f"{input_csv_path} does not contain any data rows.")
@@ -851,46 +1042,87 @@ def split_dataset_csv(
     else:
         raise ValueError(f"Unsupported split mode: {mode}.")
 
-    # Training jobs consume the compact `id,split` artifact written here.
-    write_split_outputs(
-        output_csv_path,
-        split_rows,
-        output_fieldnames,
-        id_col=resolved_id_col,
-    )
+    if standardize:
+        (
+            resolved_standardization_cols,
+            skipped_standardization_cols,
+            standardization_source,
+        ) = resolve_standardization_columns(
+            output_fieldnames,
+            split_rows,
+            standardization_cols=standardization_cols,
+        )
+        standardization_metadata: dict[str, object] = {
+            "enabled": bool(resolved_standardization_cols),
+            "source": standardization_source,
+            "target_columns": resolved_standardization_cols,
+            "skipped_columns": skipped_standardization_cols,
+        }
+        if resolved_standardization_cols:
+            output_fieldnames, split_rows, standardized_metadata = build_standardized_dataset_rows(
+                split_rows,
+                output_fieldnames,
+                resolved_standardization_cols,
+            )
+            standardization_metadata.update(standardized_metadata)
+        else:
+            standardization_metadata["skipped_reason"] = (
+                "No scalar numeric target columns were inferred. Use --standardize-col "
+                "to opt in explicitly."
+            )
+    else:
+        standardization_metadata = {
+            "enabled": False,
+            "skipped_reason": "Standardization was disabled for this run.",
+        }
+
+    write_split_dataset(output_csv_path, split_rows, output_fieldnames)
+
+    if metadata_path is None:
+        metadata_path = build_metadata_path(
+            input_csv_path,
+            train_fraction=train_fraction,
+            val_fraction=val_fraction,
+            test_fraction=test_fraction,
+            output_root=output_csv_path.parent,
+        )
+
+    shared_fields: dict[str, object] = {
+        "input_csv_path": str(input_csv_path),
+        "sequence_col": resolved_sequence_col,
+        "group_col": resolved_group_col,
+        "id_col": resolved_id_col,
+        "train_fraction": train_fraction,
+        "val_fraction": val_fraction,
+        "test_fraction": test_fraction,
+        "seed": seed,
+    }
+    mode_payload: dict[str, object] = {
+        "output_csv_path": str(output_csv_path),
+        "summary": summary,
+        "standardization": standardization_metadata,
+    }
+    if mode == "similarity":
+        mode_payload["mmseqs"] = {
+            "min_seq_id": identity_threshold,
+            "coverage_threshold": coverage_threshold,
+            "coverage_mode": coverage_mode,
+            "cluster_mode": cluster_mode,
+            "similarity_type": similarity_type,
+            "sensitivity": sensitivity,
+            "e_value": e_value,
+            "alignment_mode": alignment_mode,
+            "seq_id_mode": seq_id_mode,
+            "max_seqs": max_seqs,
+            "single_step_clustering": single_step_clustering,
+            "cluster_reassign": cluster_reassign,
+        }
+
     write_split_metadata(
-        output_csv_path,
-        metadata={
-            "input_csv_path": str(input_csv_path),
-            "output_csv_path": str(output_csv_path),
-            "mode": mode,
-            "sequence_col": resolved_sequence_col,
-            "group_col": resolved_group_col,
-            "id_col": resolved_id_col,
-            "train_fraction": train_fraction,
-            "val_fraction": val_fraction,
-            "test_fraction": test_fraction,
-            "seed": seed,
-            "summary": summary,
-            "mmseqs": (
-                {
-                    "min_seq_id": identity_threshold,
-                    "coverage_threshold": coverage_threshold,
-                    "coverage_mode": coverage_mode,
-                    "cluster_mode": cluster_mode,
-                    "similarity_type": similarity_type,
-                    "sensitivity": sensitivity,
-                    "e_value": e_value,
-                    "alignment_mode": alignment_mode,
-                    "seq_id_mode": seq_id_mode,
-                    "max_seqs": max_seqs,
-                    "single_step_clustering": single_step_clustering,
-                    "cluster_reassign": cluster_reassign,
-                }
-                if mode == "similarity"
-                else None
-            ),
-        },
+        metadata_path,
+        mode=mode,
+        shared_fields=shared_fields,
+        mode_payload=mode_payload,
     )
     return summary
 
@@ -1034,6 +1266,21 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Optional filename tag so exploratory split variants do not overwrite each other.",
     )
     parser.add_argument(
+        "--standardize-col",
+        action="append",
+        default=None,
+        help=(
+            "Numeric target column to z-score after splitting. Repeat for multiple "
+            "columns. If omitted, common scalar regression target columns are "
+            "detected automatically."
+        ),
+    )
+    parser.add_argument(
+        "--no-standardization",
+        action="store_true",
+        help="Disable writing the standardized full-data sidecar CSV and scaler metadata.",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=42,
@@ -1068,6 +1315,14 @@ def main() -> None:
             output_root=args.output_root,
             output_tag=args.output_tag,
         )
+        metadata_path = build_metadata_path(
+            csv_input,
+            train_fraction=args.train_fraction,
+            val_fraction=args.val_fraction,
+            test_fraction=args.test_fraction,
+            output_root=args.output_root,
+            output_tag=args.output_tag,
+        )
         try:
             summary = split_dataset_csv(
                 csv_input,
@@ -1091,8 +1346,15 @@ def main() -> None:
                 single_step_clustering=args.mmseqs_single_step_clustering,
                 cluster_reassign=args.mmseqs_cluster_reassign,
                 seed=args.seed,
+                standardize=not args.no_standardization,
+                standardization_cols=(
+                    tuple(args.standardize_col)
+                    if args.standardize_col is not None
+                    else None
+                ),
+                metadata_path=metadata_path,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep batch directory runs best-effort.
             skipped.append((str(csv_input), str(exc)))
             print(f"SKIPPED {csv_input}: {exc}")
             continue

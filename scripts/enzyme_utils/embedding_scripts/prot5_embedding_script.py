@@ -6,6 +6,7 @@ Generate ProtT5 embeddings from a FASTA file and save them to an H5 store.
 
 import argparse
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 import torch
@@ -55,7 +56,7 @@ def read_fasta( fasta_path ):
     return sequences
 
 
-def get_embeddings(seq_path, emb_path, model_dir, per_protein,
+def get_embeddings(seq_path, emb_path, model_dir, per_protein, mean_pooled_path=None,
                    max_residues=4000, max_seq_len=1000, max_batch=100):
 
     seq_dict = read_fasta(seq_path)
@@ -76,7 +77,10 @@ def get_embeddings(seq_path, emb_path, model_dir, per_protein,
     start = time.time()
     batch = list()
 
-    with h5py.File(str(emb_path), "a") as hf:
+    with ExitStack() as stack:
+        hf = stack.enter_context(h5py.File(str(emb_path), "w"))
+        hf_pooled = stack.enter_context(h5py.File(str(mean_pooled_path), "w")) if mean_pooled_path is not None else None
+
         n_embeddings = sum(1 for pid, _ in seq_dict if pid in hf)
         seq_dict = [(pid, seq) for pid, seq in seq_dict if pid not in hf]
         if not seq_dict:
@@ -109,10 +113,19 @@ def get_embeddings(seq_path, emb_path, model_dir, per_protein,
                     s_len = seq_lens[batch_idx]
                     emb = embedding_repr.last_hidden_state[batch_idx, :s_len]
 
-                    if per_protein:
-                        emb = emb.mean(dim=0)
-
-                    hf.create_dataset(identifier, data=emb.detach().cpu().numpy().squeeze(), compression="lzf")
+                    if mean_pooled_path is not None:
+                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
+                        ds = hf.create_dataset(identifier, data=emb_np, compression="lzf")
+                        ds.attrs['dtype'] = 'bfloat16'
+                        pooled_np = emb.mean(dim=0).detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
+                        ds_p = hf_pooled.create_dataset(identifier, data=pooled_np, compression="lzf")
+                        ds_p.attrs['dtype'] = 'bfloat16'
+                    else:
+                        if per_protein:
+                            emb = emb.mean(dim=0)
+                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
+                        ds = hf.create_dataset(identifier, data=emb_np, compression="lzf")
+                        ds.attrs['dtype'] = 'bfloat16'
                     n_embeddings += 1
 
                     if n_embeddings == 1:
@@ -153,9 +166,12 @@ def create_arg_parser():
                          'Default: Rostlab/prot_t5_xl_half_uniref50-enc')
 
     # Optional argument
-    parser.add_argument('--per_protein', type=int, 
+    parser.add_argument('--per_protein', type=int,
                     default=0,
                     help="Whether to return per-residue embeddings (0: default) or the mean-pooled per-protein representation (1).")
+    parser.add_argument('--mean_pooled_output', type=str, default=None,
+                    help='Optional path to also save mean-pooled (D,) BF16 embeddings. '
+                         'When set, the main --output always stores per-residue (L, D).')
     return parser
 
 def main():
@@ -165,8 +181,10 @@ def main():
     seq_path = Path(args.input)
     emb_path = Path(args.output)
     per_protein = False if int(args.per_protein) == 0 else True
+    mean_pooled_path = Path(args.mean_pooled_output) if args.mean_pooled_output else None
 
-    get_embeddings(seq_path, emb_path, args.model, per_protein=per_protein)
+    get_embeddings(seq_path, emb_path, args.model, per_protein=per_protein,
+                   mean_pooled_path=mean_pooled_path)
 
 if __name__ == '__main__':
     main()

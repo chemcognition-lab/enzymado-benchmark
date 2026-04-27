@@ -40,8 +40,10 @@ init_cluster_runtime_dirs
 : "${PER_PROTEIN:=0}"
 : "${ALLOW_PARTIAL:=1}"
 : "${EMBED_OUTPUT_ROOT:=${SCRATCH_ROOT}/data}"
+: "${SAVE_MEAN_POOLED:=0}"
+MEAN_POOLED_ROOT="/home/chemist/projects/aip-bensl/chemist/enzymado/enzymado-benchmark/data/embeddings_mean_pooled"
 
-export PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT
+export PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT SAVE_MEAN_POOLED
 
 MODELS=(
     prot5_xl_half_uniref50
@@ -234,12 +236,22 @@ echo "Virtualenv: ${VENV_PATH}"
 echo "Script: ${SCRIPT_PATH}"
 echo "Per-protein: ${PER_PROTEIN}"
 echo "Output: ${OUT_PATH}"
+echo "Save mean-pooled: ${SAVE_MEAN_POOLED}"
+
+EXTRA_ARGS=()
+if [[ "${SAVE_MEAN_POOLED}" == "1" ]]; then
+    MEAN_POOLED_OUT="${MEAN_POOLED_ROOT}/protein_sequences_unique/${MODEL_NAME}.h5"
+    mkdir -p "$(dirname "${MEAN_POOLED_OUT}")"
+    EXTRA_ARGS+=(--mean_pooled_output "${MEAN_POOLED_OUT}")
+    echo "Mean-pooled output: ${MEAN_POOLED_OUT}"
+fi
 
 python "${REPO}/${SCRIPT_PATH}" \
     --input "${FASTA_PATH}" \
     --output "${OUT_PATH}" \
     --model "${MODEL_REF}" \
-    --per_protein "${PER_PROTEIN}"
+    --per_protein "${PER_PROTEIN}" \
+    "${EXTRA_ARGS[@]}"
 
 EXPECTED_COUNT="$(grep -c '^>' "${FASTA_PATH}")"
 if [[ "${PER_PROTEIN}" == "1" ]]; then

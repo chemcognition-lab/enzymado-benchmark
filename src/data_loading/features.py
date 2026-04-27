@@ -17,9 +17,28 @@ class EmbeddingLookupError(KeyError):
     pass
 
 
+def _h5_dataset_to_array(ds) -> np.ndarray:
+    """Load an H5 dataset, preserving int16 storage for BF16-tagged datasets.
+
+    BF16-tagged datasets stay as int16 raw bit-patterns so the collator can
+    produce torch.bfloat16 tensors with zero extra copies.  Legacy float32
+    datasets are returned as float32 unchanged.
+    """
+    arr = np.asarray(ds)
+    attrs = getattr(ds, "attrs", {})
+    if attrs.get("dtype", "") == "bfloat16":
+        return arr  # int16 raw BF16 bits — collator will view as torch.bfloat16
+    return np.asarray(arr, dtype=np.float32)
+
+
+def _bf16_int16_to_float32(arr: np.ndarray) -> np.ndarray:
+    """Decode BF16-as-int16 to float32 (needed only for arithmetic between embeddings)."""
+    return (arr.view(np.uint16).astype(np.uint32) << 16).view(np.float32)
+
+
 def _ensure_2d_array(value: np.ndarray, key: str) -> np.ndarray:
     """Validate that residue embeddings keep the expected `(length, dim)` shape."""
-    array = np.asarray(value, dtype=np.float32)
+    array = np.asarray(value)  # preserve dtype (int16 for BF16, float32 for legacy)
     if array.ndim != 2:
         raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {array.shape}.")
     return array
@@ -71,7 +90,7 @@ class ResidueEmbeddingStore:
         mapping: dict[str, np.ndarray] = {}
         with h5py.File(str(file_path), "r") as handle:
             for key in handle.keys():
-                mapping[str(key)] = np.asarray(handle[key], dtype=np.float32)
+                mapping[str(key)] = _h5_dataset_to_array(handle[key])
         return mapping
 
     @classmethod
@@ -152,13 +171,13 @@ class ResidueEmbeddingStore:
                 array: np.ndarray | None = None
 
                 if key in normalized_ids:
-                    array = np.asarray(handle[raw_key], dtype=np.float32)
+                    array = _h5_dataset_to_array(handle[raw_key])
                     by_id[key] = array
 
                 sequence = sequence_key_to_sequence.get(key)
                 if sequence is not None:
                     if array is None:
-                        array = np.asarray(handle[raw_key], dtype=np.float32)
+                        array = _h5_dataset_to_array(handle[raw_key])
                     by_sequence[sequence] = array
 
         return cls(by_id=by_id, by_sequence=by_sequence)
@@ -402,6 +421,11 @@ class MutationDeltaEmbeddingBuilder:
                 f"Delta embedding requires equal shapes. Mutant={mutant_embedding.shape}, "
                 f"wildtype={wildtype_embedding.shape} for sample '{row.get('sample_id', '')}'."
             )
+        # Arithmetic requires float32; decode BF16-as-int16 if necessary.
+        if mutant_embedding.dtype == np.int16:
+            mutant_embedding = _bf16_int16_to_float32(mutant_embedding)
+        if wildtype_embedding.dtype == np.int16:
+            wildtype_embedding = _bf16_int16_to_float32(wildtype_embedding)
         return (mutant_embedding - wildtype_embedding).astype(np.float32, copy=False)
 
     def validate_row(self, row: dict[str, str]) -> str | None:

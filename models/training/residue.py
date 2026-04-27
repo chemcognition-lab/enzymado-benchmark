@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from data_loading import ProteinResidueConcatCollator
 
-from models.results_card import build_prediction_artifact_path
-from models.train_common import log
 from models.train_data import get_dataloader, get_target_payload
-from models.train_output import make_predictions_file
 from models.train_runtime import train_model_loader
 
 
@@ -134,59 +130,10 @@ def collect_residue_aware_outputs(
     )
 
 
-def save_residue_aware_predictions(
-    trained,
-    *,
-    loaders: ResidueAwareLoaders,
-    train_bundle,
-    val_bundle,
-    test_bundle,
-    batch_kind: str,
-    use_validation: bool,
-    run_dir: Path,
-    task_name: str,
-    emb_name: str,
-    model_name: str,
-    split_variant: str,
-) -> dict[str, Path]:
-    """Save residue-aware predictions one split at a time to limit peak RAM."""
-    split_jobs: list[tuple[str, Any, Any]] = [
-        ("train", train_bundle, loaders.train_loader),
-        ("test", test_bundle, loaders.test_loader),
-    ]
-    if use_validation:
-        split_jobs.insert(1, ("val", val_bundle, loaders.val_loader))
-
-    saved_paths: dict[str, Path] = {}
-    for split_name, bundle, loader in split_jobs:
-        log(f"      Predicting/saving split='{split_name}'...")
-        y_true, target_mask = get_target_payload(bundle)
-        pred = trained.predict_loader(loader, batch_kind=batch_kind)
-        saved_paths[split_name] = make_predictions_file(
-            y_true,
-            pred,
-            run_dir,
-            split_name,
-            target_mask,
-            artifact_path=build_prediction_artifact_path(
-                run_dir,
-                task_name=task_name,
-                emb_name=emb_name,
-                model_name=model_name,
-                split_variant=split_variant,
-                split_name=split_name,
-            ),
-        )
-        del y_true, target_mask, pred
-        gc.collect()
-    return saved_paths
-
-
 __all__ = [
     "ResidueAwareLoaders",
     "ResidueAwareOutputs",
     "build_residue_aware_loaders",
     "collect_residue_aware_outputs",
-    "save_residue_aware_predictions",
     "train_residue_aware_model",
 ]

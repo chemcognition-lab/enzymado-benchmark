@@ -122,6 +122,15 @@ def make_torch_checkpoint_callback(wrapper, path: str | Path | None, checkpoint_
         wrapper.best_epoch_ = best_epoch
         wrapper.best_val_loss_ = best_val_loss
         wrapper.best_model_state_ = copy.deepcopy(best_state) if best_state is not None else None
+        if not hasattr(wrapper, "training_log_") or wrapper.training_log_ is None:
+            wrapper.training_log_ = []
+        wrapper.training_log_.append(
+            {
+                "epoch": int(epoch),
+                "best_epoch": best_epoch,
+                "best_val_loss": best_val_loss,
+            }
+        )
         if epoch % checkpoint_every == 0:
             save_torch_wrapper_checkpoint(wrapper, path)
 

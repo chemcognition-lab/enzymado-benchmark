@@ -119,7 +119,7 @@ def build_prediction_artifact_path(
 ) -> Path:
     """Return the canonical prediction filename for one split."""
     stem = build_artifact_stem(task_name, emb_name, model_name, split_variant)
-    return run_dir / f"{stem}_{_path_token(split_name)}_predictions.npz"
+    return run_dir / f"{stem}_{_path_token(split_name)}_predictions.safetensors.xz"
 
 
 def build_model_artifact_path(
@@ -137,11 +137,18 @@ def build_model_artifact_path(
 
 
 def find_prediction_artifact(run_dir: Path, split_name: str) -> Path | None:
-    """Find a prediction artifact, supporting both legacy and canonical filenames."""
-    legacy_path = run_dir / f"{split_name}_predictions.npz"
-    if legacy_path.exists():
-        return legacy_path
-    matches = [path for path in run_dir.glob(f"*_{_path_token(split_name)}_predictions.npz") if path.is_file()]
+    """Find a safetensors prediction artifact."""
+    for legacy_name in (
+        f"{split_name}_predictions.safetensors.xz",
+    ):
+        legacy_path = run_dir / legacy_name
+        if legacy_path.exists():
+            return legacy_path
+    matches = [
+        path
+        for path in run_dir.glob(f"*_{_path_token(split_name)}_predictions.safetensors.xz")
+        if path.is_file()
+    ]
     if not matches:
         return None
     return max(matches, key=lambda path: (path.stat().st_mtime, path.name))

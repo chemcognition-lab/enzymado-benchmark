@@ -5,21 +5,34 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import torch
 
 
-def _pad_residue_embeddings(embeddings: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-    """Pad variable-length residue embeddings and return a boolean residue mask."""
+def _pad_residue_embeddings(
+    embeddings: list[np.ndarray],
+) -> tuple[np.ndarray | torch.Tensor, np.ndarray]:
+    """Pad variable-length residue embeddings and return a boolean residue mask.
+
+    When embeddings are stored as int16 (BF16 raw bits), the padded array is
+    viewed as torch.bfloat16 so the model receives true BF16 inputs.  int16
+    zeros are 0x0000 = +0.0 in BF16, so zero-padding is correct in both paths.
+    """
     if not embeddings:
         raise ValueError("Cannot collate an empty batch.")
     max_length = max(embedding.shape[0] for embedding in embeddings)
     embedding_dim = embeddings[0].shape[1]
+    is_bf16 = embeddings[0].dtype == np.int16
 
-    batch = np.zeros((len(embeddings), max_length, embedding_dim), dtype=np.float32)
+    dtype = np.int16 if is_bf16 else np.float32
+    batch = np.zeros((len(embeddings), max_length, embedding_dim), dtype=dtype)
     mask = np.zeros((len(embeddings), max_length), dtype=bool)
     for index, embedding in enumerate(embeddings):
         length = embedding.shape[0]
         batch[index, :length, :] = embedding
         mask[index, :length] = True
+
+    if is_bf16:
+        return torch.from_numpy(batch).view(torch.bfloat16), mask
     return batch, mask
 
 
@@ -220,12 +233,16 @@ class ProteinResidueConcatCollator:
                     f"sample_id='{sample.get('sample_id', '')}'."
                 )
 
+        embs = [sample["protein_emb"] for sample in samples]
+        if embs[0].dtype == np.int16:  # BF16 raw bits
+            protein_emb = torch.from_numpy(np.concatenate(embs, axis=0)).view(torch.bfloat16)
+        else:
+            protein_emb = np.concatenate(
+                [np.asarray(emb, dtype=np.float32) for emb in embs], axis=0
+            )
         return ProteinResidueConcatBatch(
             sample_id=[sample["sample_id"] for sample in samples],
-            protein_emb=np.concatenate(
-                [np.asarray(sample["protein_emb"], dtype=np.float32) for sample in samples],
-                axis=0,
-            ),
+            protein_emb=protein_emb,
             target_per_residue=np.concatenate(
                 [np.asarray(sample["target_per_residue"], dtype=np.float32) for sample in samples],
                 axis=0,

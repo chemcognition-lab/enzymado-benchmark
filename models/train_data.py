@@ -26,9 +26,12 @@ from models.train_common import PROJECT_ROOT, log, resolve_sequence_index_path
 
 def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
     """Load CSV rows for a task split without touching any embeddings."""
-    split_path = None
-    if split_name is not None and config.split_column is None:
-        split_path = config.split_files[split_variant]
+    if split_variant not in config.dataset_paths:
+        available = ", ".join(sorted(config.dataset_paths)) or "<none>"
+        raise KeyError(
+            f"Unknown split variant '{split_variant}' for task '{config.name}'. "
+            f"Available variants: {available}"
+        )
 
     adapter_cls = {
         "protein_global": ProteinGlobalAdapter,
@@ -38,11 +41,11 @@ def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
     }[config.batch_kind]
 
     return adapter_cls(
-        dataset_path=config.dataset_path,
+        dataset_path=config.dataset_paths[split_variant],
         sample_id_candidates=config.sample_id_candidates,
         split_name=split_name,
         split_column=config.split_column,
-        split_path=split_path,
+        split_path=None,
         split_id_candidates=config.split_id_candidates,
     ).load_rows()
 

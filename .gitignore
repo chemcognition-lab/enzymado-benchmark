@@ -24,7 +24,7 @@ results/predictions/
 pytest-of-chemist/
 
 
-data/embeddings
+data/embeddings_mean_pooled/
 *.h5
 data/fastas
 external/Profluent-E1/

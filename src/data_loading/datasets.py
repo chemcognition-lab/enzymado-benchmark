@@ -271,15 +271,12 @@ def _build_adapter(
     split_variant: str = "random",
 ) -> DatasetAdapter:
     """Instantiate the adapter configured for the task's batch type."""
-    split_path = None
-    if split_name is not None and config.split_column is None:
-        if split_variant not in config.split_files:
-            available = ", ".join(sorted(config.split_files))
-            raise KeyError(
-                f"Unknown split variant '{split_variant}' for task '{config.name}'. "
-                f"Available variants: {available}"
-            )
-        split_path = config.split_files[split_variant]
+    if split_variant not in config.dataset_paths:
+        available = ", ".join(sorted(config.dataset_paths)) or "<none>"
+        raise KeyError(
+            f"Unknown split variant '{split_variant}' for task '{config.name}'. "
+            f"Available variants: {available}"
+        )
 
     adapter_cls: type[DatasetAdapter]
     if config.batch_kind == "protein_global":
@@ -294,11 +291,11 @@ def _build_adapter(
         raise ValueError(f"Unsupported batch_kind '{config.batch_kind}'.")
 
     return adapter_cls(
-        dataset_path=config.dataset_path,
+        dataset_path=config.dataset_paths[split_variant],
         sample_id_candidates=config.sample_id_candidates,
         split_name=split_name,
         split_column=config.split_column,
-        split_path=split_path,
+        split_path=None,
         split_id_candidates=config.split_id_candidates,
     )
 

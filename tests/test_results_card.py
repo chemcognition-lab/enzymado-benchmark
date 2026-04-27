@@ -135,7 +135,8 @@ class ResultsCardTests(unittest.TestCase):
                 split_variant="random",
                 split_name="test",
             ),
-            run_dir / "mlp_classification_ankh_base_binding_random_mean_test_predictions.npz",
+            run_dir
+            / "mlp_classification_ankh_base_binding_random_mean_test_predictions.safetensors.xz",
         )
         self.assertEqual(
             module.build_model_artifact_path(

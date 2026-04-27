@@ -1,12 +1,18 @@
+import csv
+import json
+from pathlib import Path
+
 from src.dataset_splitting import (
+    build_metadata_path,
     build_mmseqs_cluster_command,
     build_output_csv_path,
-    build_split_assignment_rows,
+    build_standardized_dataset_rows,
     generate_random_split_rows,
     generate_similarity_split_from_clusters,
+    resolve_standardization_columns,
+    split_dataset_csv,
     validate_split_fractions,
 )
-from pathlib import Path
 
 
 def build_rows() -> tuple[list[str], list[dict[str, str]]]:
@@ -113,30 +119,6 @@ def test_similarity_split_assigns_whole_clusters_to_one_split():
     assert split_by_protein["P1"] == split_by_protein["P2"]
 
 
-def test_build_split_assignment_rows_keeps_only_id_and_split():
-    fieldnames, rows = build_rows()
-    _, split_rows, _ = generate_random_split_rows(
-        rows,
-        fieldnames,
-        0.6,
-        0.2,
-        0.2,
-        sequence_col="protein_sequence",
-        group_col="uniprot_id",
-        seed=7,
-    )
-
-    output_fieldnames, output_rows = build_split_assignment_rows(
-        split_rows,
-        fieldnames,
-        id_col="uniprot_id",
-    )
-
-    assert output_fieldnames == ["uniprot_id", "split"]
-    assert len(output_rows) == 5
-    assert all(set(row) == {"uniprot_id", "split"} for row in output_rows)
-
-
 def test_build_output_csv_path_appends_output_tag():
     output_path = build_output_csv_path(
         Path("data/example.csv"),
@@ -149,7 +131,7 @@ def test_build_output_csv_path_appends_output_tag():
 
     assert (
         output_path.name
-        == "example_similarity_mmseqs2_80_10_10_id030_cov080_mode1_splits.csv"
+        == "example_similarity_mmseqs2_80_10_10_id030_cov080_mode1_standardized.csv"
     )
 
 
@@ -203,3 +185,186 @@ def test_build_mmseqs_cluster_command_includes_optional_flags():
         "--cluster-reassign",
         "1",
     ]
+
+
+def test_standardization_fits_train_only_and_applies_to_all_splits():
+    fieldnames = ["dataset_id", "protein_sequence", "target", "split"]
+    rows = [
+        {"dataset_id": "train_1", "protein_sequence": "AAAA", "target": "2", "split": "train"},
+        {"dataset_id": "train_2", "protein_sequence": "CCCC", "target": "4", "split": "train"},
+        {"dataset_id": "val_1", "protein_sequence": "DDDD", "target": "6", "split": "val"},
+        {"dataset_id": "test_1", "protein_sequence": "EEEE", "target": "0", "split": "test"},
+    ]
+
+    output_fieldnames, standardized_rows, metadata = build_standardized_dataset_rows(
+        rows,
+        fieldnames,
+        ["target"],
+    )
+
+    assert output_fieldnames[-1] == "target_standardized"
+    fit_stats = metadata["columns"]["target"]["fit_statistics"]
+    assert fit_stats["mean"] == 3.0
+    assert fit_stats["std"] == 1.0
+    values_by_id = {
+        row["dataset_id"]: float(row["target_standardized"])
+        for row in standardized_rows
+    }
+    assert values_by_id == {
+        "train_1": -1.0,
+        "train_2": 1.0,
+        "val_1": 3.0,
+        "test_1": -3.0,
+    }
+
+
+def test_standardization_autodetect_skips_binary_targets():
+    fieldnames = ["dataset_id", "protein_sequence", "binding"]
+    rows = [
+        {"dataset_id": "row_1", "protein_sequence": "AAAA", "binding": "1"},
+        {"dataset_id": "row_2", "protein_sequence": "CCCC", "binding": "0"},
+    ]
+
+    columns, skipped_columns, source = resolve_standardization_columns(fieldnames, rows)
+
+    assert source == "auto"
+    assert columns == []
+    assert skipped_columns == {"binding": "binary_numeric_column"}
+
+
+def test_split_dataset_csv_writes_wide_csv_and_unified_metadata(tmp_path):
+    input_path = tmp_path / "toy.csv"
+    fieldnames, rows = build_rows()
+    with input_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    random_path = build_output_csv_path(
+        input_path,
+        mode="random",
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+    )
+    metadata_path = build_metadata_path(
+        input_path,
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+    )
+
+    split_dataset_csv(
+        input_path,
+        random_path,
+        mode="random",
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+        sequence_col="protein_sequence",
+        group_col="uniprot_id",
+        seed=7,
+        standardization_cols=("target",),
+        metadata_path=metadata_path,
+    )
+
+    assert random_path.exists()
+    assert random_path.name == "toy_random_50_25_25_standardized.csv"
+    with random_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames_out = reader.fieldnames or []
+        rows_out = list(reader)
+    assert "split" in fieldnames_out
+    assert "target_standardized" in fieldnames_out
+    assert {row["split"] for row in rows_out} == {"train", "val", "test"}
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert set(metadata["modes"]) == {"random"}
+    random_meta = metadata["modes"]["random"]
+    assert random_meta["output_csv_path"] == str(random_path)
+    assert random_meta["standardization"]["enabled"] is True
+    assert random_meta["standardization"]["source"] == "explicit"
+    assert random_meta["standardization"]["columns"]["target"]["fit_split"] == "train"
+
+
+def test_split_dataset_csv_merges_modes_into_single_metadata(tmp_path):
+    input_path = tmp_path / "toy.csv"
+    fieldnames, rows = build_rows()
+    with input_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    metadata_path = build_metadata_path(
+        input_path,
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+    )
+    random_path = build_output_csv_path(
+        input_path,
+        mode="random",
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+    )
+    similarity_path = build_output_csv_path(
+        input_path,
+        mode="similarity",
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+    )
+
+    split_dataset_csv(
+        input_path,
+        random_path,
+        mode="random",
+        train_fraction=0.5,
+        val_fraction=0.25,
+        test_fraction=0.25,
+        sequence_col="protein_sequence",
+        group_col="uniprot_id",
+        seed=7,
+        standardization_cols=("target",),
+        metadata_path=metadata_path,
+    )
+
+    group_clusters = {f"P{i}": f"cluster_{i}" for i in range(1, 6)}
+    from src.dataset_splitting import (
+        build_standardized_dataset_rows as _build_std_rows,
+        generate_similarity_split_from_clusters as _sim_from_clusters,
+        write_split_dataset,
+        write_split_metadata,
+    )
+
+    _, split_rows, summary = _sim_from_clusters(
+        rows,
+        fieldnames,
+        0.5,
+        0.25,
+        0.25,
+        sequence_col="protein_sequence",
+        group_clusters=group_clusters,
+        group_col="uniprot_id",
+        seed=3,
+    )
+    output_fieldnames, std_rows, std_meta = _build_std_rows(
+        split_rows, [*fieldnames, "split"], ["target"]
+    )
+    write_split_dataset(similarity_path, std_rows, output_fieldnames)
+    write_split_metadata(
+        metadata_path,
+        mode="similarity",
+        shared_fields={"input_csv_path": str(input_path)},
+        mode_payload={
+            "output_csv_path": str(similarity_path),
+            "summary": summary,
+            "standardization": {"enabled": True, **std_meta},
+        },
+    )
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert set(metadata["modes"]) == {"random", "similarity"}
+    assert metadata["modes"]["random"]["output_csv_path"] == str(random_path)
+    assert metadata["modes"]["similarity"]["output_csv_path"] == str(similarity_path)

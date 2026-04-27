@@ -45,6 +45,7 @@ train = [
     "rdkit",
     "requests",
     "biopython",
+    "safetensors",
 ]
 embeddings = [
     "h5py",

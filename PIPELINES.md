@@ -9,7 +9,7 @@ The training flow is split across four places:
 1. `benchmark_card.json`
    Defines the benchmark properties and their high-level `task_type` (`classification` or `regression`).
 2. `models/train.py`
-   Orchestrates the end-to-end training loop, maps card names to registry names, and selects the training route.
+   Orchestrates the end-to-end training loop, maps card names to registry names, and delegates each task to a training route with `prepare`, `train`, and `save_predictions` steps.
 3. `src/data_loading/registry.py`
    Defines the dataset-level configuration for each task, especially `batch_kind` and `label_kind`.
 4. `models/models.py`
@@ -24,9 +24,33 @@ For each property in `benchmark_card.json`, training follows this order:
 2. The task config is loaded from `TASK_REGISTRY`.
 3. The task's `batch_kind` and `label_kind` determine which data-building path is used.
 4. The task's `label_kind` and card `task_type` determine which model map is used.
-5. The selected model is trained through either:
+5. The selected route trains the model through either:
    - direct pooled arrays with `fit(...)`, or
    - residue-aware `DataLoader` batches with `fit_loader(...)`.
+6. Each run writes prediction files plus experiment-style artifacts:
+   compressed `*.safetensors.xz` predictions, `hparams.json`,
+   `metrics.json`, `training_log.csv`, and the saved model. Torch models
+   also emit `model.safetensors` weights.
+
+## CLI Filters For SLURM
+
+`models/train.py` accepts three positional arguments followed by filters:
+
+```bash
+python models/train.py benchmark_card.json embeddings_models_output.json results/predictions \
+  --results_card results/results_card.json \
+  --emb_name ankh_base \
+  --model_prefix mlp_ \
+  --task_name phopt \
+  --split_variant random
+```
+
+- `--emb_name` selects one foundation model / embedding entry.
+- `--model_prefix` selects a model family: `mlp_`, `linear_`, or `xgb_`.
+- `--task_name` selects a property. Repeat it to train multiple properties.
+- `--split_variant` selects `random`, `similarity`, or `loco`. If omitted,
+  each task uses the card's `default_split`.
+- `--allowed_ids` optionally restricts rows to embeddings present in an ID allowlist.
 
 ## Main Training Routes
 

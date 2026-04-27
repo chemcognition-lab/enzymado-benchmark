@@ -85,9 +85,8 @@ class DataLoadingTests(unittest.TestCase):
             name="solubility_test",
             batch_kind="protein_global",
             label_kind="binary",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="solubility",
-            split_column="split",
             sample_id_candidates=("dataset_id",),
         )
         store = ResidueEmbeddingStore(
@@ -152,34 +151,23 @@ class DataLoadingTests(unittest.TestCase):
         )
 
     def test_regression_scaler_fits_only_on_train_rows(self) -> None:
-        dataset_path = self.root / "phopt.csv"
-        split_path = self.root / "phopt_split.csv"
+        dataset_path = self.root / "phopt_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "phopt_median"],
+            ["uniprot_id", "protein_sequence", "phopt_median", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "phopt_median": "4.0"},
-                {"uniprot_id": "P2", "protein_sequence": "AAAAA", "phopt_median": "8.0"},
-                {"uniprot_id": "P3", "protein_sequence": "AAA", "phopt_median": "10.0"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
-                {"uniprot_id": "P3", "split": "val"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "phopt_median": "4.0", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AAAAA", "phopt_median": "8.0", "split": "train"},
+                {"uniprot_id": "P3", "protein_sequence": "AAA", "phopt_median": "10.0", "split": "val"},
             ],
         )
         config = TaskConfig(
             name="phopt_test",
             batch_kind="protein_global",
             label_kind="scalar_regression",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="phopt_median",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -257,7 +245,7 @@ class DataLoadingTests(unittest.TestCase):
             name="ddg_test",
             batch_kind="mutation_delta_global",
             label_kind="scalar_regression",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="ddg",
             sample_id_candidates=("uniprot_id",),
             wildtype_sequence_column="wildtype_sequence",
@@ -274,40 +262,32 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(sample["sample_id"], "row_specific_id")
 
     def test_hierarchical_ec_uses_train_vocabulary_and_masks_incomplete_levels(self) -> None:
-        dataset_path = self.root / "ec.csv"
-        split_path = self.root / "ec_split.csv"
+        dataset_path = self.root / "ec_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "ec_number"],
+            ["uniprot_id", "protein_sequence", "ec_number", "split"],
             [
                 {
                     "uniprot_id": "P1",
                     "protein_sequence": "AAAA",
                     "ec_number": "1.1.1.1; 2.2.-.-",
+                    "split": "train",
                 },
                 {
                     "uniprot_id": "P2",
                     "protein_sequence": "AAA",
                     "ec_number": "3.-.-.-; 9.9.9.9",
+                    "split": "val",
                 },
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "val"},
             ],
         )
         config = TaskConfig(
             name="ec_test",
             batch_kind="protein_global",
             label_kind="multilabel_ec",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="ec_number",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -379,33 +359,23 @@ class DataLoadingTests(unittest.TestCase):
         )
 
     def test_protein_ligand_dataset_builds_ligand_features(self) -> None:
-        dataset_path = self.root / "binding.csv"
-        split_path = self.root / "binding_split.csv"
+        dataset_path = self.root / "binding_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "smiles", "binding"],
+            ["uniprot_id", "protein_sequence", "smiles", "binding", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "smiles": "CCO", "binding": "1"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "smiles": "N", "binding": "0"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "smiles": "CCO", "binding": "1", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AA", "smiles": "N", "binding": "0", "split": "train"},
             ],
         )
         config = TaskConfig(
             name="binding_test",
             batch_kind="protein_ligand_global",
             label_kind="binary",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="binding",
             ligand_column="smiles",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -477,30 +447,28 @@ class DataLoadingTests(unittest.TestCase):
         )
 
     def test_mutation_delta_dataset_builds_mut_minus_wt(self) -> None:
-        dataset_path = self.root / "ddg.csv"
-        split_path = self.root / "ddg_split.csv"
+        dataset_path = self.root / "ddg_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["dataset_id", "protein_sequence", "wildtype_sequence", "ddg"],
+            ["dataset_id", "protein_sequence", "wildtype_sequence", "ddg", "split"],
             [
                 {
                     "dataset_id": "row1",
                     "protein_sequence": "ABCD",
                     "wildtype_sequence": "ABCE",
                     "ddg": "-1.5",
+                    "split": "train",
                 }
             ],
         )
-        write_csv(split_path, ["dataset_id", "split"], [{"dataset_id": "row1", "split": "train"}])
         config = TaskConfig(
             name="ddg_test",
             batch_kind="mutation_delta_global",
             label_kind="scalar_regression",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="ddg",
             wildtype_sequence_column="wildtype_sequence",
             sample_id_candidates=("dataset_id",),
-            split_files={"random": split_path},
             split_id_candidates=("dataset_id",),
         )
         store = ResidueEmbeddingStore(
@@ -519,33 +487,23 @@ class DataLoadingTests(unittest.TestCase):
         self.assertAlmostEqual(float(sample["target"]), -1.5)
 
     def test_residue_dataset_creates_binary_vectors_and_masks(self) -> None:
-        dataset_path = self.root / "active_sites.csv"
-        split_path = self.root / "active_sites_split.csv"
+        dataset_path = self.root / "active_sites_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "active_site"],
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]", "split": "train"},
             ],
         )
         config = TaskConfig(
             name="active_sites_test",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -621,9 +579,8 @@ class DataLoadingTests(unittest.TestCase):
             name="solubility_skip",
             batch_kind="protein_global",
             label_kind="binary",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="solubility",
-            split_column="split",
             sample_id_candidates=("dataset_id",),
         )
         store = ResidueEmbeddingStore(by_sequence={"AAAA": np.ones((4, 2), dtype=np.float32)})
@@ -638,33 +595,23 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(bundle.dataset.skipped_rows, 1)
 
     def test_missing_policy_skip_filters_residue_rows_with_length_mismatch(self) -> None:
-        dataset_path = self.root / "active_sites_skip.csv"
-        split_path = self.root / "active_sites_skip_split.csv"
+        dataset_path = self.root / "active_sites_skip_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "active_site"],
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "keep_me", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
-                {"uniprot_id": "drop_me", "protein_sequence": "AAAAA", "active_site": "[2]"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "keep_me", "split": "train"},
-                {"uniprot_id": "drop_me", "split": "train"},
+                {"uniprot_id": "keep_me", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
+                {"uniprot_id": "drop_me", "protein_sequence": "AAAAA", "active_site": "[2]", "split": "train"},
             ],
         )
         config = TaskConfig(
             name="active_sites_skip",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -685,33 +632,23 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(bundle.dataset[0]["sample_id"], "keep_me")
 
     def test_protein_residue_dataset_build_uses_length_lookup_before_materializing(self) -> None:
-        dataset_path = self.root / "active_sites_length_lookup.csv"
-        split_path = self.root / "active_sites_length_lookup_split.csv"
+        dataset_path = self.root / "active_sites_length_lookup_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "active_site"],
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]", "split": "train"},
             ],
         )
         config = TaskConfig(
             name="active_sites_length_lookup",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
 

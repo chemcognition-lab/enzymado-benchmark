@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import lzma
 import tempfile
 import types
 import unittest
@@ -37,24 +38,17 @@ class StructuredTrainingTests(unittest.TestCase):
 
     def test_ec_multihead_training_and_prediction_serialization(self) -> None:
         from models.models import ECMultiHeadClassifierTorch
-        from models.train import get_target_payload, make_predictions_file
+        from models.train import get_target_payload
+        from models.train_output import make_safetensors_predictions_file
+        from safetensors.torch import load as load_tensors
 
-        dataset_path = self.root / "ec.csv"
-        split_path = self.root / "ec_split.csv"
+        dataset_path = self.root / "ec_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "ec_number"],
+            ["uniprot_id", "protein_sequence", "ec_number", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "ec_number": "1.1.1.1"},
-                {"uniprot_id": "P2", "protein_sequence": "AAA", "ec_number": "2.2.-.-"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "ec_number": "1.1.1.1", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AAA", "ec_number": "2.2.-.-", "split": "train"},
             ],
         )
 
@@ -62,10 +56,9 @@ class StructuredTrainingTests(unittest.TestCase):
             name="ec_test",
             batch_kind="protein_global",
             label_kind="multilabel_ec",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column="ec_number",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -100,11 +93,11 @@ class StructuredTrainingTests(unittest.TestCase):
 
         run_dir = self.root / "ec_outputs"
         run_dir.mkdir()
-        make_predictions_file(y_true, preds, run_dir, "train", target_mask)
-        payload = np.load(run_dir / "train_predictions.npz")
-        self.assertIn("y_true_level_1", payload.files)
-        self.assertIn("predictions_level_4", payload.files)
-        self.assertIn("target_mask_level_3", payload.files)
+        pred_path = make_safetensors_predictions_file(y_true, preds, run_dir, "train", target_mask)
+        payload = load_tensors(lzma.open(pred_path, "rb").read())
+        self.assertIn("y_true_level_1", payload)
+        self.assertIn("predictions_level_4", payload)
+        self.assertIn("target_mask_level_3", payload)
 
     def test_ec_multihead_pooled_training_and_prediction(self) -> None:
         from models.models import ECMultiHeadClassifierTorch
@@ -160,7 +153,7 @@ class StructuredTrainingTests(unittest.TestCase):
             name="solubility_test",
             batch_kind="protein_global",
             label_kind="binary",
-            dataset_path=self.root / "unused.csv",
+            dataset_paths={"random": self.root / "unused.csv"},
             target_column="solubility",
             sample_id_candidates=("uniprot_id",),
         )
@@ -189,7 +182,7 @@ class StructuredTrainingTests(unittest.TestCase):
             name="dtm_test",
             batch_kind="mutation_delta_global",
             label_kind="scalar_regression",
-            dataset_path=self.root / "unused.csv",
+            dataset_paths={"random": self.root / "unused.csv"},
             target_column="dtm",
             wildtype_sequence_column="wildtype_sequence",
             sample_id_candidates=("uniprot_id",),
@@ -232,7 +225,7 @@ class StructuredTrainingTests(unittest.TestCase):
             name="active_sites_test",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=self.root / "unused.csv",
+            dataset_paths={"random": self.root / "unused.csv"},
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
@@ -264,7 +257,7 @@ class StructuredTrainingTests(unittest.TestCase):
             name="binding_sites_test",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=self.root / "unused.csv",
+            dataset_paths={"random": self.root / "unused.csv"},
             target_column=None,
             residue_positions_column="binding_positions",
             sample_id_candidates=("uniprot_id",),
@@ -296,7 +289,7 @@ class StructuredTrainingTests(unittest.TestCase):
             name="solubility_test",
             batch_kind="protein_global",
             label_kind="binary",
-            dataset_path=self.root / "unused.csv",
+            dataset_paths={"random": self.root / "unused.csv"},
             target_column="solubility",
             sample_id_candidates=("uniprot_id",),
         )
@@ -322,24 +315,17 @@ class StructuredTrainingTests(unittest.TestCase):
         from torch.utils.data import DataLoader
 
         from models.models import ResidueBinaryClassifierTorch
-        from models.train import get_target_payload, make_predictions_file
+        from models.train import get_target_payload
+        from models.train_output import make_safetensors_predictions_file
+        from safetensors.torch import load as load_tensors
 
-        dataset_path = self.root / "active_sites.csv"
-        split_path = self.root / "active_sites_split.csv"
+        dataset_path = self.root / "active_sites_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "active_site"],
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]", "split": "train"},
             ],
         )
 
@@ -347,11 +333,10 @@ class StructuredTrainingTests(unittest.TestCase):
             name="active_sites_test",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -386,31 +371,22 @@ class StructuredTrainingTests(unittest.TestCase):
 
         run_dir = self.root / "residue_outputs"
         run_dir.mkdir()
-        make_predictions_file(y_true, preds, run_dir, "train", target_mask)
-        payload = np.load(run_dir / "train_predictions.npz")
-        self.assertIn("y_true", payload.files)
-        self.assertIn("predictions", payload.files)
-        self.assertIn("target_mask", payload.files)
+        pred_path = make_safetensors_predictions_file(y_true, preds, run_dir, "train", target_mask)
+        payload = load_tensors(lzma.open(pred_path, "rb").read())
+        self.assertIn("y_true", payload)
+        self.assertIn("predictions", payload)
+        self.assertIn("target_mask", payload)
 
     def test_get_target_payload_for_residue_tasks_does_not_reload_embeddings(self) -> None:
         from models.train import get_target_payload
 
-        dataset_path = self.root / "active_sites.csv"
-        split_path = self.root / "active_sites_split.csv"
+        dataset_path = self.root / "active_sites_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "active_site"],
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]", "split": "train"},
             ],
         )
 
@@ -418,11 +394,10 @@ class StructuredTrainingTests(unittest.TestCase):
             name="active_sites_test",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -448,22 +423,13 @@ class StructuredTrainingTests(unittest.TestCase):
         from models.models import XGBResidueBinaryClassifier
         from models.train import get_target_payload
 
-        dataset_path = self.root / "binding_sites.csv"
-        split_path = self.root / "binding_sites_split.csv"
+        dataset_path = self.root / "binding_sites_random_standardized.csv"
         write_csv(
             dataset_path,
-            ["uniprot_id", "protein_sequence", "binding_positions"],
+            ["uniprot_id", "protein_sequence", "binding_positions", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "binding_positions": "[1, 3]"},
-                {"uniprot_id": "P2", "protein_sequence": "AAA", "binding_positions": "[2]"},
-            ],
-        )
-        write_csv(
-            split_path,
-            ["uniprot_id", "split"],
-            [
-                {"uniprot_id": "P1", "split": "train"},
-                {"uniprot_id": "P2", "split": "train"},
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "binding_positions": "[1, 3]", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AAA", "binding_positions": "[2]", "split": "train"},
             ],
         )
 
@@ -471,11 +437,10 @@ class StructuredTrainingTests(unittest.TestCase):
             name="binding_sites_test",
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
-            dataset_path=dataset_path,
+            dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="binding_positions",
             sample_id_candidates=("uniprot_id",),
-            split_files={"random": split_path},
             split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(

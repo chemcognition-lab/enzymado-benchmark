@@ -3,6 +3,7 @@
 
 import argparse
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 import ankh
@@ -45,7 +46,7 @@ def read_fasta(fasta_path, split_char, id_field):
 
 
 def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_field,
-                   max_residues=4000, max_seq_len=1000, max_batch=100):
+                   mean_pooled_path=None, max_residues=4000, max_seq_len=1000, max_batch=100):
     seq_dict = read_fasta(seq_path, split_char, id_field)
 
     if model_name not in MODEL_LOADERS:
@@ -68,7 +69,10 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
     start = time.time()
     batch = []
 
-    with h5py.File(str(emb_path), "a") as hf:
+    with ExitStack() as stack:
+        hf = stack.enter_context(h5py.File(str(emb_path), "w"))
+        hf_pooled = stack.enter_context(h5py.File(str(mean_pooled_path), "w")) if mean_pooled_path is not None else None
+
         n_embeddings = sum(1 for pid, _ in seq_dict if pid in hf)
         seq_dict = [(pid, seq) for pid, seq in seq_dict if pid not in hf]
         if not seq_dict:
@@ -106,9 +110,19 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
                     s_len = seq_lens[batch_idx]
                     emb = outputs.last_hidden_state[batch_idx, 0:s_len]  # strip EOS token
 
-                    if per_protein:
-                        emb = emb.mean(dim=0)
-                    hf.create_dataset(bid, data=emb.detach().cpu().numpy(), compression="lzf")
+                    if mean_pooled_path is not None:
+                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
+                        ds = hf.create_dataset(bid, data=emb_np, compression="lzf")
+                        ds.attrs['dtype'] = 'bfloat16'
+                        pooled_np = emb.mean(dim=0).detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
+                        ds_p = hf_pooled.create_dataset(bid, data=pooled_np, compression="lzf")
+                        ds_p.attrs['dtype'] = 'bfloat16'
+                    else:
+                        if per_protein:
+                            emb = emb.mean(dim=0)
+                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
+                        ds = hf.create_dataset(bid, data=emb_np, compression="lzf")
+                        ds.attrs['dtype'] = 'bfloat16'
                     n_embeddings += 1
 
                     if n_embeddings == 1:
@@ -143,6 +157,9 @@ def create_arg_parser():
                         help='Ankh model to use. Choices: ankh_base, ankh_large, ankh3_large, ankh3_xl. Default: ankh_large')
     parser.add_argument('--per_protein', type=int, default=0,
                         help='0: per-residue embeddings (default). 1: mean-pooled per-protein embedding.')
+    parser.add_argument('--mean_pooled_output', type=str, default=None,
+                        help='Optional path to also save mean-pooled (D,) BF16 embeddings. '
+                             'When set, the main --output always stores per-residue (L, D).')
     parser.add_argument('--split_char', type=str, default='!',
                         help="Character for splitting the FASTA header to get the identifier. Default: '!'")
     parser.add_argument('--id', type=int, default=0,
@@ -157,8 +174,10 @@ def main():
     seq_path = Path(args.input)
     emb_path = Path(args.output)
     per_protein = False if int(args.per_protein) == 0 else True
+    mean_pooled_path = Path(args.mean_pooled_output) if args.mean_pooled_output else None
 
-    get_embeddings(seq_path, emb_path, args.model, per_protein, args.split_char, args.id)
+    get_embeddings(seq_path, emb_path, args.model, per_protein, args.split_char, args.id,
+                   mean_pooled_path=mean_pooled_path)
 
 
 if __name__ == '__main__':

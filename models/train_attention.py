@@ -20,7 +20,6 @@ from models.attention_models import get_attention_model_map, save_attention_chec
 from models.results_card import (
     build_artifact_stem,
     build_model_artifact_path,
-    build_prediction_artifact_path,
     ensure_results_card,
     find_result_entry,
     is_result_entry_complete,
@@ -44,9 +43,13 @@ from models.train_data import (
     load_lazy_embedding_store,
 )
 from models.train_output import (
-    make_predictions_file,
     make_result_entry,
     read_json,
+    save_model_safetensors,
+    save_prediction_artifacts,
+    write_hparams_file,
+    write_metrics_file,
+    write_training_log_file,
 )
 from models.train_runtime import train_model_loader
 from models.training.task_rows import (
@@ -228,6 +231,7 @@ def _run_attention_task(
     allowed_ids: set[str] | None,
     sequence_to_id: dict[str, str],
     batch_size: int,
+    split_variant_filter: str | None,
     benchmark_card: dict[str, Any] | None = None,
     results_card: dict[str, Any] | None = None,
 ) -> None:
@@ -249,12 +253,19 @@ def _run_attention_task(
 
     dataset_info = prop["datasets"][0]
     default_split = dataset_info.get("splits", {}).get("default_split")
-    split_variant = resolve_split_variant(default_split)
+    split_variant = split_variant_filter or resolve_split_variant(default_split)
     if split_variant is None:
         log(f"  Skipping '{task_name}' (no usable split defined in card)")
         return
+    if split_variant_filter is not None and split_variant not in config.dataset_paths:
+        available = ", ".join(sorted(config.dataset_paths)) or "<none>"
+        log(
+            f"  Skipping '{task_name}' (requested split '{split_variant}' is not available; "
+            f"available: {available})"
+        )
+        return
 
-    log(f"\n  Task: {task_name} | type: {task_type} | split: {default_split}")
+    log(f"\n  Task: {task_name} | type: {task_type} | split: {split_variant}")
     bundles: AttentionTaskBundles | None = None
     try:
         model_map = _select_attention_model_map(task_type, config.label_kind, model_prefix_filter)
@@ -318,6 +329,14 @@ def _run_attention_task(
             log(f"    [{model_name}] n_train={n_train}, n_test={n_test} | attention pooled")
             run_dir.mkdir(parents=True, exist_ok=True)
             artifact_stem = build_artifact_stem(task_name, emb_name, model_name, split_variant)
+            hparams_file = write_hparams_file(
+                run_dir,
+                task_name=task_name,
+                emb_name=emb_name,
+                model_name=model_name,
+                split_variant=split_variant,
+                model_info=model_info,
+            )
 
             (
                 trained,
@@ -332,53 +351,58 @@ def _run_attention_task(
                 target_mask_test,
             ) = _train_attention_model(model_info, bundles, config, batch_size, use_validation)
 
-            train_pred_file = make_predictions_file(
+            (
+                train_pred_file,
+                train_metrics,
+            ) = save_prediction_artifacts(
                 y_train,
                 pred_train,
-                run_dir,
-                "train",
                 target_mask_train,
-                artifact_path=build_prediction_artifact_path(
-                    run_dir,
-                    task_name=task_name,
-                    emb_name=emb_name,
-                    model_name=model_name,
-                    split_variant=split_variant,
-                    split_name="train",
-                ),
+                run_dir=run_dir,
+                task_name=task_name,
+                emb_name=emb_name,
+                model_name=model_name,
+                split_variant=split_variant,
+                split_name="train",
+                task_type=task_type,
             )
+            metrics_by_split = {"train": train_metrics}
             val_pred_file = None
             if use_validation:
-                val_pred_file = make_predictions_file(
+                (
+                    val_pred_file,
+                    val_metrics,
+                ) = save_prediction_artifacts(
                     y_val,
                     pred_val,
-                    run_dir,
-                    "val",
                     target_mask_val,
-                    artifact_path=build_prediction_artifact_path(
-                        run_dir,
-                        task_name=task_name,
-                        emb_name=emb_name,
-                        model_name=model_name,
-                        split_variant=split_variant,
-                        split_name="val",
-                    ),
-                )
-            test_pred_file = make_predictions_file(
-                y_test,
-                pred_test,
-                run_dir,
-                "test",
-                target_mask_test,
-                artifact_path=build_prediction_artifact_path(
-                    run_dir,
+                    run_dir=run_dir,
                     task_name=task_name,
                     emb_name=emb_name,
                     model_name=model_name,
                     split_variant=split_variant,
-                    split_name="test",
-                ),
+                    split_name="val",
+                    task_type=task_type,
+                )
+                metrics_by_split["val"] = val_metrics
+            (
+                test_pred_file,
+                test_metrics,
+            ) = save_prediction_artifacts(
+                y_test,
+                pred_test,
+                target_mask_test,
+                run_dir=run_dir,
+                task_name=task_name,
+                emb_name=emb_name,
+                model_name=model_name,
+                split_variant=split_variant,
+                split_name="test",
+                task_type=task_type,
             )
+            metrics_by_split["test"] = test_metrics
+            metrics_file = write_metrics_file(run_dir, metrics_by_split)
+            training_log_file = write_training_log_file(trained, run_dir)
             model_file = save_attention_model(trained, run_dir)
             canonical_model_path = build_model_artifact_path(
                 run_dir,
@@ -390,6 +414,18 @@ def _run_attention_task(
             )
             if model_file != canonical_model_path:
                 model_file = model_file.replace(canonical_model_path)
+            model_safetensors_file = save_model_safetensors(
+                trained,
+                run_dir,
+                model_path=build_model_artifact_path(
+                    run_dir,
+                    task_name=task_name,
+                    emb_name=emb_name,
+                    model_name=model_name,
+                    split_variant=split_variant,
+                    extension=".safetensors",
+                ),
+            )
 
             if getattr(trained, "best_epoch_", None) is not None:
                 log(
@@ -410,6 +446,14 @@ def _run_attention_task(
                 train_pred_file=train_pred_file,
                 test_pred_file=test_pred_file,
                 val_pred_file=val_pred_file,
+                train_pred_safetensors_file=train_pred_file,
+                test_pred_safetensors_file=test_pred_file,
+                val_pred_safetensors_file=val_pred_file,
+                model_safetensors_file=model_safetensors_file,
+                metrics=metrics_by_split,
+                metrics_file=metrics_file,
+                hparams_file=hparams_file,
+                training_log_file=training_log_file,
             )
             update_results_card_locked(
                 results_card_path,
@@ -440,6 +484,7 @@ def main(
     skip_label_kinds: set[str] | None = None,
     allowed_ids_path: str | None = None,
     batch_size: int = 16,
+    split_variant_filter: str | None = None,
     *,
     results_card_path: str,
 ):
@@ -454,6 +499,8 @@ def main(
     skip_label_kinds = skip_label_kinds or set()
     if skip_label_kinds:
         log(f"[startup] Skipping label kinds: {sorted(skip_label_kinds)}")
+    if split_variant_filter is not None:
+        log(f"[startup] Restricting split variant to: {split_variant_filter}")
 
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
@@ -503,6 +550,7 @@ def main(
                 allowed_ids=allowed_ids,
                 sequence_to_id=sequence_to_id,
                 batch_size=batch_size,
+                split_variant_filter=split_variant_filter,
                 benchmark_card=card,
                 results_card=results_card,
             )
@@ -546,6 +594,12 @@ if __name__ == "__main__":
         help="Per-task dataloader batch size for attention training.",
     )
     parser.add_argument(
+        "--split_variant",
+        choices=("random", "similarity", "loco"),
+        default=None,
+        help="Train only this split variant. Defaults to each task's card default_split.",
+    )
+    parser.add_argument(
         "--results_card",
         required=True,
         help="Path to results_card.json.",
@@ -561,5 +615,6 @@ if __name__ == "__main__":
         skip_label_kinds=set(args.skip_label_kind),
         allowed_ids_path=args.allowed_ids,
         batch_size=args.batch_size,
+        split_variant_filter=args.split_variant,
         results_card_path=args.results_card,
     )
