@@ -37,6 +37,7 @@ from models.train_common import (
 from models.results_card import (
     build_artifact_stem,
     build_model_artifact_path,
+    canonical_embedding_mode,
     ensure_results_card,
     find_result_entry,
     is_result_entry_complete,
