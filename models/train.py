@@ -447,8 +447,10 @@ class DirectArrayTrainingRoute(TrainingRoute):
         residue_store_mode: str = "auto",
         embedding_dim: int | None = None,
         embedding_storage_format: str = "safetensors",
+        needs_hierarchical_ec: bool = True,
+        needs_flat_ec: bool = False,
     ) -> PreparedTaskData:
-        del registry_name, split_variant, residue_store_mode, embedding_dim
+        del registry_name, split_variant, residue_store_mode, embedding_dim, needs_hierarchical_ec, needs_flat_ec
         route = _resolve_task_route(config)
         prepared = PreparedTaskData(route=route)
 
@@ -518,6 +520,8 @@ class PooledECTrainingRoute(TrainingRoute):
         residue_store_mode: str = "auto",
         embedding_dim: int | None = None,
         embedding_storage_format: str = "safetensors",
+        needs_hierarchical_ec: bool = True,
+        needs_flat_ec: bool = False,
     ) -> PreparedTaskData:
         del registry_name, split_variant, residue_store_mode, embedding_dim
         prepared = PreparedTaskData(route=_resolve_task_route(config))
@@ -543,39 +547,41 @@ class PooledECTrainingRoute(TrainingRoute):
             vocabulary_by_level=ec_label_builder.vocabulary_by_level,
         )
 
-        log("    Building pooled EC arrays...")
-        prepared.X_train, prepared.y_train, prepared.target_mask_train = build_multilabel_ec_direct(
-            task_rows.train_rows, by_id, by_seq, config, ec_label_builder
-        )
-        prepared.X_val, prepared.y_val, prepared.target_mask_val = build_multilabel_ec_direct(
-            task_rows.val_rows, by_id, by_seq, config, ec_label_builder
-        )
-        prepared.X_test, prepared.y_test, prepared.target_mask_test = build_multilabel_ec_direct(
-            task_rows.test_rows, by_id, by_seq, config, ec_label_builder
-        )
+        if needs_hierarchical_ec:
+            log("    Building pooled EC arrays...")
+            prepared.X_train, prepared.y_train, prepared.target_mask_train = build_multilabel_ec_direct(
+                task_rows.train_rows, by_id, by_seq, config, ec_label_builder
+            )
+            prepared.X_val, prepared.y_val, prepared.target_mask_val = build_multilabel_ec_direct(
+                task_rows.val_rows, by_id, by_seq, config, ec_label_builder
+            )
+            prepared.X_test, prepared.y_test, prepared.target_mask_test = build_multilabel_ec_direct(
+                task_rows.test_rows, by_id, by_seq, config, ec_label_builder
+            )
 
-        log("    Building pooled flat EC arrays for XGBoost...")
-        (
-            prepared.X_train_flat_ec,
-            prepared.y_train_flat_ec,
-            prepared.target_mask_train_flat_ec,
-        ) = build_flat_multilabel_ec_direct(
-            task_rows.train_rows, by_id, by_seq, config, flat_ec_label_builder
-        )
-        (
-            prepared.X_val_flat_ec,
-            prepared.y_val_flat_ec,
-            prepared.target_mask_val_flat_ec,
-        ) = build_flat_multilabel_ec_direct(
-            task_rows.val_rows, by_id, by_seq, config, flat_ec_label_builder
-        )
-        (
-            prepared.X_test_flat_ec,
-            prepared.y_test_flat_ec,
-            prepared.target_mask_test_flat_ec,
-        ) = build_flat_multilabel_ec_direct(
-            task_rows.test_rows, by_id, by_seq, config, flat_ec_label_builder
-        )
+        if needs_flat_ec:
+            log("    Building pooled flat EC arrays for XGBoost...")
+            (
+                prepared.X_train_flat_ec,
+                prepared.y_train_flat_ec,
+                prepared.target_mask_train_flat_ec,
+            ) = build_flat_multilabel_ec_direct(
+                task_rows.train_rows, by_id, by_seq, config, flat_ec_label_builder
+            )
+            (
+                prepared.X_val_flat_ec,
+                prepared.y_val_flat_ec,
+                prepared.target_mask_val_flat_ec,
+            ) = build_flat_multilabel_ec_direct(
+                task_rows.val_rows, by_id, by_seq, config, flat_ec_label_builder
+            )
+            (
+                prepared.X_test_flat_ec,
+                prepared.y_test_flat_ec,
+                prepared.target_mask_test_flat_ec,
+            ) = build_flat_multilabel_ec_direct(
+                task_rows.test_rows, by_id, by_seq, config, flat_ec_label_builder
+            )
         return prepared
 
     def train(
@@ -594,6 +600,8 @@ class PooledECTrainingRoute(TrainingRoute):
         t0 = time.time()
 
         if model_info.get("flat_ec_labels", False):
+            if prepared.X_train_flat_ec is None:
+                raise RuntimeError("Flat EC arrays were not prepared for a flat-label EC model.")
             log("      Training on pooled flat EC embeddings for XGBoost...")
             log(
                 "      Flat EC tensors: "
@@ -618,6 +626,8 @@ class PooledECTrainingRoute(TrainingRoute):
                 target_mask_test=prepared.target_mask_test_flat_ec,
             )
         else:
+            if prepared.X_train is None:
+                raise RuntimeError("Hierarchical EC arrays were not prepared for a hierarchical EC model.")
             log("      Training on pooled EC embeddings...")
             outputs = _fit_predict_arrays(
                 model_info=model_info,
@@ -654,7 +664,10 @@ class DatasetBundleTrainingRoute(TrainingRoute):
         residue_store_mode: str = "auto",
         embedding_dim: int | None = None,
         embedding_storage_format: str = "safetensors",
+        needs_hierarchical_ec: bool = True,
+        needs_flat_ec: bool = False,
     ) -> PreparedTaskData:
+        del needs_hierarchical_ec, needs_flat_ec
         prepared = PreparedTaskData(route=_resolve_task_route(config))
         if config.batch_kind == "protein_residue":
             if residue_store_mode == "materialized":
@@ -982,6 +995,12 @@ def _completed_models(
 def _dataset_sizes(prepared: PreparedTaskData) -> tuple[int, int, int]:
     """Return train/val/test sizes independent of the chosen training route."""
     if prepared.route.uses_direct_arrays:
+        if prepared.X_train is None and prepared.X_train_flat_ec is not None:
+            return (
+                len(prepared.X_train_flat_ec),
+                len(prepared.X_val_flat_ec),
+                len(prepared.X_test_flat_ec),
+            )
         return len(prepared.X_train), len(prepared.X_val), len(prepared.X_test)
     return (
         len(prepared.train_bundle.dataset),
@@ -1089,6 +1108,8 @@ def _run_task(
             return
 
         training_route = _select_training_route(config)
+        needs_flat_ec = any(info.get("flat_ec_labels", False) for info in model_map.values())
+        needs_hierarchical_ec = any(not info.get("flat_ec_labels", False) for info in model_map.values())
         prepared = training_route.prepare(
             config,
             registry_name,
@@ -1098,6 +1119,8 @@ def _run_task(
             residue_store_mode=residue_store_mode,
             embedding_dim=int(emb_info["dim"]) if emb_info.get("dim") is not None else None,
             embedding_storage_format=embedding_storage_format,
+            needs_hierarchical_ec=needs_hierarchical_ec,
+            needs_flat_ec=needs_flat_ec,
         )
         n_train, n_val, n_test = _dataset_sizes(prepared)
         log_loaded_data_summary(task_rows, n_train, n_val, n_test)

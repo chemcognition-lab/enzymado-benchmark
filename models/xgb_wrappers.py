@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 
@@ -42,6 +41,21 @@ def _should_log_progress(step_index: int, total_steps: int | None) -> bool:
 
 def _estimate_gib(num_bytes: int) -> float:
     return float(num_bytes) / float(1024**3)
+
+
+def _bf16_raw_to_float32(arr: np.ndarray) -> np.ndarray:
+    """Decode raw BF16 int16 bits into float32 for XGBoost's NumPy input path."""
+    return (arr.view(np.uint16).astype(np.uint32) << 16).view(np.float32)
+
+
+def _as_xgb_residue_features(value) -> np.ndarray:
+    """Return residue features as float32 for XGBoost's NumPy input path."""
+    if torch.is_tensor(value):
+        return value.detach().cpu().float().numpy()
+    array = np.asarray(value)
+    if array.dtype == np.int16:
+        return _bf16_raw_to_float32(array)
+    return array.astype(np.float32, copy=False)
 
 
 def _is_xgb_cuda_oom(exc: Exception) -> bool:
@@ -826,6 +840,59 @@ class XGBFlatECClassifier:
         return pred
 
 
+class _ResidueDataIter:
+    """Streaming DataIter over a residue dataloader for XGBoost QuantileDMatrix.
+
+    Decodes BF16-raw embeddings to float32 one batch at a time so the full residue
+    matrix never lives in RAM. Tracks unique labels seen and totals for logging.
+    """
+
+    def __init__(self, loader_factory, decode_fn):
+        if xgb is None:
+            raise ImportError("xgboost is required to build a residue DataIter.")
+        # xgb.DataIter is the upstream base class; subclass dynamically so this file
+        # still imports when xgboost is missing.
+        self._iter_impl = _build_residue_data_iter_impl(loader_factory, decode_fn)
+
+    def as_xgb_iter(self):
+        return self._iter_impl
+
+
+def _build_residue_data_iter_impl(loader_factory, decode_fn):
+    class _Impl(xgb.DataIter):
+        def __init__(self) -> None:
+            super().__init__()
+            self._loader_factory = loader_factory
+            self._decode_fn = decode_fn
+            self._iterator = None
+            self.labels_seen: set[int] = set()
+            self.residues_seen = 0
+            self.proteins_seen = 0
+
+        def next(self, input_data):
+            if self._iterator is None:
+                self._iterator = iter(self._loader_factory())
+            while True:
+                try:
+                    batch = next(self._iterator)
+                except StopIteration:
+                    return 0
+                X, y, lengths = self._decode_fn(batch)
+                if X.size == 0:
+                    continue
+                input_data(data=X, label=y)
+                self.residues_seen += int(X.shape[0])
+                self.proteins_seen += int(lengths.shape[0])
+                for value in np.unique(y).tolist():
+                    self.labels_seen.add(int(value))
+                return 1
+
+        def reset(self) -> None:
+            self._iterator = None
+
+    return _Impl()
+
+
 class XGBResidueBinaryClassifier:
     """XGBoost binary classifier over residue embeddings."""
 
@@ -844,7 +911,7 @@ class XGBResidueBinaryClassifier:
         eval_metric="logloss",
         early_stopping_rounds=None,
     ):
-        if XGBClassifier is None:
+        if xgb is None:
             raise ImportError("xgboost is required to use XGBResidueBinaryClassifier.")
 
         self.n_estimators = n_estimators
@@ -859,14 +926,16 @@ class XGBResidueBinaryClassifier:
         self.random_state = random_state
         self.eval_metric = eval_metric
         self.early_stopping_rounds = early_stopping_rounds
-        self.model = None
+        self.booster = None
         self.constant_prediction_ = None
         self.model_device_ = self.device
+        self.best_iteration_ = None
+        self.best_score_ = None
 
     @staticmethod
     def _flatten_batch(batch) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        X = np.asarray(batch.protein_emb, dtype=np.float32)
-        y = np.asarray(batch.target_per_residue, dtype=np.float32)
+        X = _as_xgb_residue_features(batch.protein_emb)
+        y = np.asarray(batch.target_per_residue, dtype=np.int8)
 
         if hasattr(batch, "lengths"):
             lengths = np.asarray(batch.lengths, dtype=np.int32)
@@ -890,12 +959,12 @@ class XGBResidueBinaryClassifier:
                     "Concatenated residue batch lengths must sum to the flattened residue count. "
                     f"sum(lengths)={lengths.sum()}, X={X.shape[0]}."
                 )
-            return X.astype(np.float32, copy=False), y.astype(np.int32, copy=False), lengths
+            return X.astype(np.float32, copy=False), y.astype(np.int8, copy=False), lengths
 
         mask = np.asarray(batch.target_mask, dtype=bool)
         return (
             X[mask].astype(np.float32, copy=False),
-            y[mask].astype(np.int32, copy=False),
+            y[mask].astype(np.int8, copy=False),
             mask.sum(axis=1).astype(np.int32, copy=False),
         )
 
@@ -950,7 +1019,7 @@ class XGBResidueBinaryClassifier:
         if not X_chunks:
             return (
                 np.empty((0, 0), dtype=np.float32),
-                np.empty((0,), dtype=np.int32),
+                np.empty((0,), dtype=np.int8),
                 np.empty((0,), dtype=np.int32),
             )
 
@@ -984,25 +1053,49 @@ class XGBResidueBinaryClassifier:
             start = stop
         return rows
 
-    def _make_model(self, use_early_stopping: bool, *, device_override: str | None = None) -> XGBClassifier:
-        params = {
+    def _make_train_params(self, *, device_override: str | None = None) -> dict:
+        return {
             "objective": "binary:logistic",
-            "n_estimators": self.n_estimators,
+            "tree_method": self.tree_method,
+            "device": device_override or self.device,
             "max_depth": self.max_depth,
             "learning_rate": self.learning_rate,
             "subsample": self.subsample,
             "colsample_bytree": self.colsample_bytree,
-            "tree_method": self.tree_method,
             "max_bin": self.max_bin,
-            "n_jobs": self.n_jobs,
-            "device": device_override or self.device,
-            "random_state": self.random_state,
+            "nthread": self.n_jobs,
+            "seed": self.random_state,
             "eval_metric": self.eval_metric,
             "verbosity": 0,
         }
-        if use_early_stopping and self.early_stopping_rounds is not None:
-            params["early_stopping_rounds"] = self.early_stopping_rounds
-        return XGBClassifier(**params)
+
+    def _build_quantile_dmatrix(
+        self,
+        dataloader,
+        *,
+        ref=None,
+        progress_label: str | None = None,
+        split_name: str = "train",
+    ):
+        """Stream the dataloader through xgb.DataIter to build a QuantileDMatrix in-place."""
+        data_iter = _ResidueDataIter(
+            loader_factory=lambda: dataloader,
+            decode_fn=self._flatten_batch,
+        )
+        impl = data_iter.as_xgb_iter()
+        build_start = time.perf_counter()
+        dmatrix = xgb.QuantileDMatrix(impl, max_bin=self.max_bin, ref=ref)
+        if progress_label is not None:
+            _progress_log(
+                f"Built {split_name} QuantileDMatrix "
+                f"| proteins={impl.proteins_seen:,} "
+                f"| residues={impl.residues_seen:,} "
+                f"| classes_seen={sorted(impl.labels_seen)} "
+                f"| max_bin={self.max_bin} "
+                f"| elapsed={time.perf_counter() - build_start:.1f}s",
+                label=progress_label,
+            )
+        return dmatrix, impl
 
     def fit_loader(
         self,
@@ -1015,94 +1108,85 @@ class XGBResidueBinaryClassifier:
         if batch_kind != "protein_residue":
             raise ValueError(f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'")
         resumed = _maybe_resume_xgb_wrapper(self, checkpoint_path)
-        if resumed and (self.model is not None or self.constant_prediction_ is not None):
+        if resumed and (self.booster is not None or self.constant_prediction_ is not None):
             if progress_label is not None:
                 _progress_log("Resuming from existing residue XGBoost checkpoint.", label=progress_label)
             return self
 
-        X_train, y_train, _ = self._flatten_loader(
+        self.constant_prediction_ = None
+        self.booster = None
+        self.best_iteration_ = None
+        self.best_score_ = None
+        self.model_device_ = self.device
+
+        if progress_label is not None:
+            _progress_log(
+                f"Residue XGBoost streaming fit starting | device={self.model_device_}",
+                label=progress_label,
+            )
+
+        dtrain, train_impl = self._build_quantile_dmatrix(
             dataloader,
             progress_label=progress_label,
             split_name="train",
         )
-        if X_train.size == 0:
+        if train_impl.residues_seen == 0:
             raise ValueError("No residue-level training samples found for XGBoost.")
 
-        unique_classes = np.unique(y_train)
-        if unique_classes.size == 1:
-            self.constant_prediction_ = float(unique_classes[0])
-            self.model = None
+        if len(train_impl.labels_seen) == 1:
+            only_class = next(iter(train_impl.labels_seen))
+            self.constant_prediction_ = float(only_class)
             self.model_device_ = None
             if progress_label is not None:
                 _progress_log(
-                    f"Residue XGBoost collapsed to constant prediction={int(unique_classes[0])}.",
+                    f"Residue XGBoost collapsed to constant prediction={only_class}.",
                     label=progress_label,
                 )
             _save_xgb_checkpoint(self, checkpoint_path)
             return self
 
-        X_val = y_val = None
+        evals: list[tuple] = []
         if val_dataloader is not None:
-            X_val, y_val, _ = self._flatten_loader(
+            dval, val_impl = self._build_quantile_dmatrix(
                 val_dataloader,
+                ref=dtrain,
                 progress_label=progress_label,
                 split_name="val",
             )
+            if val_impl.residues_seen > 0:
+                evals.append((dval, "validation"))
 
-        use_early_stopping = X_val is not None and X_val.size > 0
-        self.constant_prediction_ = None
-        self.model_device_ = self.device
-        gpu_input_max_gib = float(os.getenv("ENZYMADO_RESIDUE_XGB_GPU_MAX_INPUT_GIB", "6"))
-        train_input_gib = _estimate_gib(X_train.nbytes)
-        if self.model_device_ != "cpu" and train_input_gib > gpu_input_max_gib:
-            self.model_device_ = "cpu"
-            if progress_label is not None:
-                _progress_log(
-                    "Residue XGBoost input matrix is too large for the GPU heuristic "
-                    f"({train_input_gib:.1f} GiB > {gpu_input_max_gib:.1f} GiB); using CPU.",
-                    label=progress_label,
-                )
-        self.model = self._make_model(
-            use_early_stopping=use_early_stopping,
-            device_override=self.model_device_,
-        )
-        fit_kwargs = {"verbose": False}
-        if use_early_stopping:
-            fit_kwargs["eval_set"] = [(X_val, y_val)]
-            fit_kwargs["verbose"] = max(1, self.n_estimators // 5)
-
-        if progress_label is not None:
-            _progress_log(
-                f"Residue XGBoost fit starting "
-                f"| train_shape={X_train.shape} "
-                f"| val_shape={None if X_val is None else X_val.shape} "
-                f"| device={self.model_device_}",
-                label=progress_label,
-            )
+        train_kwargs = {
+            "params": self._make_train_params(device_override=self.model_device_),
+            "dtrain": dtrain,
+            "num_boost_round": self.n_estimators,
+            "evals": evals,
+            "verbose_eval": False,
+        }
+        if evals and self.early_stopping_rounds is not None:
+            train_kwargs["early_stopping_rounds"] = self.early_stopping_rounds
 
         fit_start = time.perf_counter()
         try:
-            self.model.fit(X_train, y_train, **fit_kwargs)
+            self.booster = xgb.train(**train_kwargs)
         except Exception as exc:
             if self.model_device_ != "cpu" and _is_xgb_cuda_oom(exc):
                 _progress_log("GPU OOM during residue XGBoost fit, retrying on CPU.", label=progress_label)
                 self.model_device_ = "cpu"
-                self.model = self._make_model(
-                    use_early_stopping=use_early_stopping,
-                    device_override=self.model_device_,
-                )
-                self.model.fit(X_train, y_train, **fit_kwargs)
+                train_kwargs["params"] = self._make_train_params(device_override="cpu")
+                self.booster = xgb.train(**train_kwargs)
             else:
                 raise
 
+        self.best_iteration_ = getattr(self.booster, "best_iteration", None)
+        self.best_score_ = getattr(self.booster, "best_score", None)
+
         if progress_label is not None:
             summary = f"Residue XGBoost fit done in {time.perf_counter() - fit_start:.1f}s"
-            best_iteration = getattr(self.model, "best_iteration", None)
-            best_score = getattr(self.model, "best_score", None)
-            if best_iteration is not None:
-                summary += f" | best_iteration={best_iteration}"
-            if best_score is not None:
-                summary += f" | best_score={best_score}"
+            if self.best_iteration_ is not None:
+                summary += f" | best_iteration={self.best_iteration_}"
+            if self.best_score_ is not None:
+                summary += f" | best_score={self.best_score_}"
             summary += f" | device={self.model_device_}"
             _progress_log(summary, label=progress_label)
         _save_xgb_checkpoint(self, checkpoint_path)
@@ -1112,7 +1196,7 @@ class XGBResidueBinaryClassifier:
         if batch_kind != "protein_residue":
             raise ValueError(f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'")
 
-        if self.model is None and self.constant_prediction_ is None:
+        if self.booster is None and self.constant_prediction_ is None:
             raise ValueError("XGBResidueBinaryClassifier must be fit before calling predict_loader().")
 
         pred_rows: list[np.ndarray] = []
@@ -1121,18 +1205,11 @@ class XGBResidueBinaryClassifier:
             if self.constant_prediction_ is not None:
                 flat_pred = np.full((X_flat.shape[0],), self.constant_prediction_, dtype=np.float32)
             else:
-                if self.model_device_ == "cpu":
-                    booster = self.model.get_booster()
-                    try:
-                        raw_pred = booster.inplace_predict(X_flat, validate_features=False)
-                        flat_pred = (np.asarray(raw_pred, dtype=np.float32).reshape(-1) >= 0.5).astype(
-                            np.float32,
-                            copy=False,
-                        )
-                    except Exception:
-                        flat_pred = self.model.predict(X_flat).astype(np.float32, copy=False)
-                else:
-                    flat_pred = self.model.predict(X_flat).astype(np.float32, copy=False)
+                raw_pred = self.booster.inplace_predict(X_flat, validate_features=False)
+                flat_pred = (np.asarray(raw_pred, dtype=np.float32).reshape(-1) >= 0.5).astype(
+                    np.float32,
+                    copy=False,
+                )
             pred_rows.extend(self._split_flat_predictions(flat_pred, lengths))
 
         return pad_1d_array_list(pred_rows, dtype=np.float32)

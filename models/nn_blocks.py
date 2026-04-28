@@ -20,13 +20,15 @@ class LinearModel(nn.Module):
 class MLPModel(nn.Module):
     """Feed-forward MLP used for pooled or residue-wise embedding inputs."""
 
-    def __init__(self, input_dim, hidden_dims, output_dim):
+    def __init__(self, input_dim, hidden_dims, output_dim, dropout: float = 0.0):
         super().__init__()
         layers = []
         in_dim = input_dim
         for hidden_dim in hidden_dims:
             layers.append(nn.Linear(in_dim, hidden_dim))
-            layers.append(nn.ReLU())
+            layers.append(nn.SiLU())
+            if dropout > 0.0:
+                layers.append(nn.Dropout(dropout))
             in_dim = hidden_dim
         layers.append(nn.Linear(in_dim, output_dim))
         self.net = nn.Sequential(*layers)
@@ -38,13 +40,15 @@ class MLPModel(nn.Module):
 class SharedMLPBackbone(nn.Module):
     """Shared hidden stack for multi-head EC prediction models."""
 
-    def __init__(self, input_dim, hidden_dims):
+    def __init__(self, input_dim, hidden_dims, dropout: float = 0.0):
         super().__init__()
         layers = []
         in_dim = input_dim
         for hidden_dim in hidden_dims:
             layers.append(nn.Linear(in_dim, hidden_dim))
-            layers.append(nn.ReLU())
+            layers.append(nn.SiLU())
+            if dropout > 0.0:
+                layers.append(nn.Dropout(dropout))
             in_dim = hidden_dim
         self.net = nn.Identity() if not layers else nn.Sequential(*layers)
         self.output_dim = in_dim
@@ -56,9 +60,9 @@ class SharedMLPBackbone(nn.Module):
 class MultiHeadMLPModel(nn.Module):
     """Shared MLP backbone followed by one linear head per target group."""
 
-    def __init__(self, input_dim, hidden_dims, output_dims):
+    def __init__(self, input_dim, hidden_dims, output_dims, dropout: float = 0.0):
         super().__init__()
-        self.backbone = SharedMLPBackbone(input_dim, hidden_dims)
+        self.backbone = SharedMLPBackbone(input_dim, hidden_dims, dropout=dropout)
         self.heads = nn.ModuleDict(
             {
                 head_name: nn.Linear(self.backbone.output_dim, output_dim)

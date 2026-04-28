@@ -9,6 +9,7 @@ import torch.nn as nn
 from models.common import (
     DEVICE,
     batch_to_input,
+    make_optimizer,
     make_torch_checkpoint_callback,
     masked_mean_pool,
     maybe_resume_torch_wrapper,
@@ -354,10 +355,26 @@ class LinearClassifierTorch:
 class MLPRegressorTorch:
     """MLP regressor for pooled or residue-aware embedding inputs."""
 
-    def __init__(self, hidden_dims=(512, 256), lr=1e-3, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
+    def __init__(
+        self,
+        hidden_dims=(2048,),
+        lr=1e-3,
+        epochs=100,
+        optimizer_name="adamw",
+        weight_decay=0.0,
+        dropout=0.0,
+        batch_size=256,
+        early_stopping_patience=None,
+        early_stopping_min_delta=0.0,
+        device=None,
+    ):
         self.hidden_dims = hidden_dims
         self.lr = lr
         self.epochs = epochs
+        self.optimizer_name = optimizer_name
+        self.weight_decay = weight_decay
+        self.dropout = dropout
+        self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
@@ -382,9 +399,9 @@ class MLPRegressorTorch:
             X_val = _apply_feature_scaler(X_val, self.x_mean_, self.x_scale_)
         X_t, mask_t, input_dim = prepare_inputs(X, mask, self.device)
         y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1).to(self.device)
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1).to(self.device)
+        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1, dropout=self.dropout).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.MSELoss()
 
         val_payload = None
@@ -393,18 +410,34 @@ class MLPRegressorTorch:
             y_val_t = torch.from_numpy(np.asarray(y_val, dtype=np.float32)).unsqueeze(1).to(self.device)
             val_payload = (X_val_t, mask_val_t, y_val_t)
 
+        n = X_t.shape[0]
+
         def train_epoch():
             self.model.train()
-            optimizer.zero_grad()
-            loss = criterion(self._forward(X_t, mask_t), y_t)
-            loss.backward()
-            optimizer.step()
+            perm = torch.randperm(n, device=self.device)
+            for start in range(0, n, self.batch_size):
+                idx = perm[start:start + self.batch_size]
+                Xb = X_t[idx]
+                mb = mask_t[idx] if mask_t is not None else None
+                yb = y_t[idx]
+                optimizer.zero_grad()
+                loss = criterion(self._forward(Xb, mb), yb)
+                loss.backward()
+                optimizer.step()
 
         def val_loss():
             self.model.eval()
+            X_val_t, mask_val_t, y_val_t = val_payload
+            nv = X_val_t.shape[0]
+            losses = []
             with torch.no_grad():
-                X_val_t, mask_val_t, y_val_t = val_payload
-                return criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
+                for start in range(0, nv, self.batch_size):
+                    stop = min(start + self.batch_size, nv)
+                    Xb = X_val_t[start:stop]
+                    mb = mask_val_t[start:stop] if mask_val_t is not None else None
+                    yb = y_val_t[start:stop]
+                    losses.append(float(criterion(self._forward(Xb, mb), yb).item()))
+            return sum(losses) / max(len(losses), 1)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
             self.model,
@@ -426,16 +459,23 @@ class MLPRegressorTorch:
             X = _apply_feature_scaler(X, self.x_mean_, self.x_scale_)
         X_t, mask_t, _ = prepare_inputs(X, mask, self.device)
         self.model.eval()
+        n = X_t.shape[0]
+        chunks = []
         with torch.no_grad():
-            return self._forward(X_t, mask_t).squeeze(1).cpu().numpy()
+            for start in range(0, n, self.batch_size):
+                stop = min(start + self.batch_size, n)
+                Xb = X_t[start:stop]
+                mb = mask_t[start:stop] if mask_t is not None else None
+                chunks.append(self._forward(Xb, mb).squeeze(1).cpu().numpy())
+        return np.concatenate(chunks) if chunks else np.zeros((0,), dtype=np.float32)
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
         first_batch = next(iter(dataloader))
         X_t, _, _ = batch_to_input(first_batch, batch_kind, self.device)
         input_dim = X_t.shape[2]
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1).to(self.device)
+        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1, dropout=self.dropout).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.MSELoss()
 
         def train_epoch():
@@ -485,10 +525,26 @@ class MLPRegressorTorch:
 class MLPClassifierTorch:
     """MLP classifier for pooled or residue-aware embedding inputs."""
 
-    def __init__(self, hidden_dims=(512, 256), lr=1e-3, epochs=200, early_stopping_patience=None, early_stopping_min_delta=0.0, device=None):
+    def __init__(
+        self,
+        hidden_dims=(2048,),
+        lr=1e-3,
+        epochs=100,
+        optimizer_name="adamw",
+        weight_decay=0.0,
+        dropout=0.0,
+        batch_size=256,
+        early_stopping_patience=None,
+        early_stopping_min_delta=0.0,
+        device=None,
+    ):
         self.hidden_dims = hidden_dims
         self.lr = lr
         self.epochs = epochs
+        self.optimizer_name = optimizer_name
+        self.weight_decay = weight_decay
+        self.dropout = dropout
+        self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
@@ -517,9 +573,9 @@ class MLPClassifierTorch:
         self.classes_ = np.unique(y)
         n_classes = len(self.classes_)
         output_dim = 1 if n_classes == 2 else n_classes
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim).to(self.device)
+        self.model = MLPModel(input_dim, self.hidden_dims, output_dim, dropout=self.dropout).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         if n_classes == 2:
             criterion = nn.BCEWithLogitsLoss()
             y_t = torch.from_numpy(y.astype(np.float32)).unsqueeze(1).to(self.device)
@@ -537,18 +593,34 @@ class MLPClassifierTorch:
                 y_val_t = torch.tensor([label_map[v] for v in np.asarray(y_val)], dtype=torch.long).to(self.device)
             val_payload = (X_val_t, mask_val_t, y_val_t)
 
+        n = X_t.shape[0]
+
         def train_epoch():
             self.model.train()
-            optimizer.zero_grad()
-            loss = criterion(self._forward(X_t, mask_t), y_t)
-            loss.backward()
-            optimizer.step()
+            perm = torch.randperm(n, device=self.device)
+            for start in range(0, n, self.batch_size):
+                idx = perm[start:start + self.batch_size]
+                Xb = X_t[idx]
+                mb = mask_t[idx] if mask_t is not None else None
+                yb = y_t[idx]
+                optimizer.zero_grad()
+                loss = criterion(self._forward(Xb, mb), yb)
+                loss.backward()
+                optimizer.step()
 
         def val_loss():
             self.model.eval()
+            X_val_t, mask_val_t, y_val_t = val_payload
+            nv = X_val_t.shape[0]
+            losses = []
             with torch.no_grad():
-                X_val_t, mask_val_t, y_val_t = val_payload
-                return criterion(self._forward(X_val_t, mask_val_t), y_val_t).item()
+                for start in range(0, nv, self.batch_size):
+                    stop = min(start + self.batch_size, nv)
+                    Xb = X_val_t[start:stop]
+                    mb = mask_val_t[start:stop] if mask_val_t is not None else None
+                    yb = y_val_t[start:stop]
+                    losses.append(float(criterion(self._forward(Xb, mb), yb).item()))
+            return sum(losses) / max(len(losses), 1)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
             self.model,
@@ -565,13 +637,23 @@ class MLPClassifierTorch:
         )
         return self
 
+    def _chunked_logits(self, X_t: torch.Tensor, mask_t: torch.Tensor | None) -> torch.Tensor:
+        n = X_t.shape[0]
+        chunks = []
+        for start in range(0, n, self.batch_size):
+            stop = min(start + self.batch_size, n)
+            Xb = X_t[start:stop]
+            mb = mask_t[start:stop] if mask_t is not None else None
+            chunks.append(self._forward(Xb, mb))
+        return torch.cat(chunks, dim=0) if chunks else torch.zeros((0, 1), device=self.device)
+
     def predict(self, X, mask=None):
         if self.x_mean_ is not None and self.x_scale_ is not None:
             X = _apply_feature_scaler(X, self.x_mean_, self.x_scale_)
         X_t, mask_t, _ = prepare_inputs(X, mask, self.device)
         self.model.eval()
         with torch.no_grad():
-            logits = self._forward(X_t, mask_t)
+            logits = self._chunked_logits(X_t, mask_t)
         if len(self.classes_) == 2:
             preds = (torch.sigmoid(logits).squeeze(1) >= 0.5).cpu().numpy().astype(int)
         else:
@@ -584,7 +666,7 @@ class MLPClassifierTorch:
         X_t, mask_t, _ = prepare_inputs(X, mask, self.device)
         self.model.eval()
         with torch.no_grad():
-            logits = self._forward(X_t, mask_t)
+            logits = self._chunked_logits(X_t, mask_t)
         if len(self.classes_) == 2:
             p = torch.sigmoid(logits).squeeze(1).cpu().numpy()
             return np.column_stack([1 - p, p])
@@ -600,9 +682,9 @@ class MLPClassifierTorch:
         first_batch = next(iter(dataloader))
         X_t, _, _ = batch_to_input(first_batch, batch_kind, self.device)
         input_dim = X_t.shape[2]
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim).to(self.device)
+        self.model = MLPModel(input_dim, self.hidden_dims, output_dim, dropout=self.dropout).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.BCEWithLogitsLoss() if n_classes == 2 else nn.CrossEntropyLoss()
 
         def train_epoch():

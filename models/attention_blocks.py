@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import numpy as np
 import torch
 import torch.nn as nn
 
 from models.nn_blocks import MLPModel, SharedMLPBackbone
+
+
+def _seq_emb_to_tensor(protein_emb, device: torch.device) -> torch.Tensor:
+    """Move a protein sequence embedding to the target device without going via NumPy for BF16.
+
+    Accepts:
+      - torch.Tensor (e.g. BF16 from the residue collator) → just transferred to device.
+      - np.ndarray with dtype=int16 (BF16 raw bits) → reinterpreted as bfloat16.
+      - any other numpy-convertible source → upcast to float32.
+    """
+    if torch.is_tensor(protein_emb):
+        return protein_emb.to(device)
+    array = np.asarray(protein_emb)
+    if array.dtype == np.int16:
+        return torch.from_numpy(array).view(torch.bfloat16).to(device)
+    return torch.from_numpy(array.astype(np.float32, copy=False)).to(device)
+
+
+def attention_autocast(device: torch.device):
+    """BF16 autocast context for attention forward passes; loss must still be FP32."""
+    if device.type in {"cuda", "cpu"}:
+        return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+    return nullcontext()
 
 
 class MeanAggregation(nn.Module):
@@ -66,15 +91,15 @@ class AttentionAggregation(nn.Module):
 def batch_to_attention_tensors(batch, batch_kind: str, device: torch.device):
     """Convert a collated batch into tensors used by attention wrappers."""
     if batch_kind == "protein_global":
-        seq = torch.from_numpy(np.asarray(batch.protein_emb, dtype=np.float32)).to(device)
+        seq = _seq_emb_to_tensor(batch.protein_emb, device)
         mask = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
         extra = None
     elif batch_kind == "protein_ligand_global":
-        seq = torch.from_numpy(np.asarray(batch.protein_emb, dtype=np.float32)).to(device)
+        seq = _seq_emb_to_tensor(batch.protein_emb, device)
         mask = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
         extra = torch.from_numpy(np.asarray(batch.ligand_feat, dtype=np.float32)).to(device)
     elif batch_kind == "mutation_delta_global":
-        seq = torch.from_numpy(np.asarray(batch.protein_delta_emb, dtype=np.float32)).to(device)
+        seq = _seq_emb_to_tensor(batch.protein_delta_emb, device)
         mask = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
         extra = None
     else:
@@ -93,6 +118,7 @@ class AttentionPredictor(nn.Module):
         extra_dim: int = 0,
         num_attention_heads: int = 1,
         attention_dropout_rate: float = 0.0,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.pooler = AttentionAggregation(
@@ -101,7 +127,7 @@ class AttentionPredictor(nn.Module):
             dropout_rate=attention_dropout_rate,
         )
         self.extra_dim = extra_dim
-        self.head = MLPModel(input_dim + extra_dim, hidden_dims, output_dim)
+        self.head = MLPModel(input_dim + extra_dim, hidden_dims, output_dim, dropout=dropout)
 
     def pooled_features(
         self,
@@ -136,6 +162,7 @@ class AttentionMultiHeadPredictor(nn.Module):
         extra_dim: int = 0,
         num_attention_heads: int = 1,
         attention_dropout_rate: float = 0.0,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.pooler = AttentionAggregation(
@@ -144,7 +171,7 @@ class AttentionMultiHeadPredictor(nn.Module):
             dropout_rate=attention_dropout_rate,
         )
         self.extra_dim = extra_dim
-        self.backbone = SharedMLPBackbone(input_dim + extra_dim, hidden_dims)
+        self.backbone = SharedMLPBackbone(input_dim + extra_dim, hidden_dims, dropout=dropout)
         self.heads = nn.ModuleDict({
             head_name: nn.Linear(self.backbone.output_dim, output_dim)
             for head_name, output_dim in output_dims.items()
@@ -177,10 +204,80 @@ class AttentionMultiHeadPredictor(nn.Module):
         }
 
 
+class AttentionResidueMixer(nn.Module):
+    """Self-attention over residues with LayerNorm + residual; no pooling."""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int = 1,
+        dropout_rate: float = 0.0,
+    ):
+        super().__init__()
+        self.input_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout_rate = dropout_rate
+        self.layer_norm = nn.LayerNorm(embed_dim)
+        self.self_attn = nn.MultiheadAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            dropout=dropout_rate,
+            batch_first=True,
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        key_padding_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        normed = self.layer_norm(x)
+        attended, _ = self.self_attn(
+            query=normed,
+            key=normed,
+            value=normed,
+            key_padding_mask=key_padding_mask,
+            need_weights=False,
+        )
+        return x + attended
+
+
+class AttentionResiduePredictor(nn.Module):
+    """Self-attention over residues plus a per-residue MLP head (no pooling)."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: tuple[int, ...],
+        output_dim: int,
+        num_attention_heads: int = 1,
+        attention_dropout_rate: float = 0.0,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+        self.mixer = AttentionResidueMixer(
+            input_dim,
+            num_heads=num_attention_heads,
+            dropout_rate=attention_dropout_rate,
+        )
+        self.head = MLPModel(input_dim, hidden_dims, output_dim, dropout=dropout)
+
+    def forward(
+        self,
+        seq_emb: torch.Tensor,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        key_padding_mask = ~mask if mask is not None else None
+        mixed = self.mixer(seq_emb, key_padding_mask)
+        return self.head(mixed)
+
+
 __all__ = [
     "MeanAggregation",
     "AttentionAggregation",
+    "attention_autocast",
     "batch_to_attention_tensors",
     "AttentionPredictor",
     "AttentionMultiHeadPredictor",
+    "AttentionResidueMixer",
+    "AttentionResiduePredictor",
 ]

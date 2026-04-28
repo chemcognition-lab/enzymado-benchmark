@@ -244,7 +244,7 @@ class ProteinResidueConcatCollator:
             sample_id=[sample["sample_id"] for sample in samples],
             protein_emb=protein_emb,
             target_per_residue=np.concatenate(
-                [np.asarray(sample["target_per_residue"], dtype=np.float32) for sample in samples],
+                [np.asarray(sample["target_per_residue"], dtype=np.int8) for sample in samples],
                 axis=0,
             ),
             lengths=lengths,

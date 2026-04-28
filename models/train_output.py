@@ -194,10 +194,9 @@ def evaluate_predictions(
     if y_flat.size == 0:
         return metrics
 
-    y_float = y_flat.astype(np.float64, copy=False)
-    pred_float = pred_flat.astype(np.float64, copy=False)
-
     if task_type == "regression":
+        y_float = y_flat.astype(np.float64, copy=False)
+        pred_float = pred_flat.astype(np.float64, copy=False)
         residual = pred_float - y_float
         metrics["mae"] = float(np.mean(np.abs(residual)))
         metrics["rmse"] = float(np.sqrt(np.mean(residual**2)))
@@ -206,8 +205,9 @@ def evaluate_predictions(
         metrics["kendall_tau"] = _kendall_tau(y_float, pred_float)
         return metrics
 
-    y_label = np.rint(y_float).astype(np.int64, copy=False)
-    pred_label = np.rint(pred_float).astype(np.int64, copy=False)
+    y_label = np.rint(y_flat).astype(np.int8, copy=False)
+    pred_label = np.rint(pred_flat).astype(np.int8, copy=False)
+    del y_flat, pred_flat
     metrics["accuracy"] = float(np.mean(y_label == pred_label))
     try:
         from sklearn.metrics import f1_score, precision_score, recall_score

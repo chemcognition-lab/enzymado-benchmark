@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,11 +24,13 @@ class ECMultiHeadClassifierTorch:
 
     def __init__(
         self,
-        hidden_dims=(512, 256),
+        hidden_dims=(2048,),
         lr=1e-3,
-        epochs=200,
-        optimizer_name="adam",
-        batch_size=1024,
+        epochs=100,
+        optimizer_name="adamw",
+        weight_decay=0.0,
+        dropout=0.0,
+        batch_size=256,
         early_stopping_patience=None,
         early_stopping_min_delta=0.0,
         device=None,
@@ -35,6 +39,8 @@ class ECMultiHeadClassifierTorch:
         self.lr = lr
         self.epochs = epochs
         self.optimizer_name = optimizer_name
+        self.weight_decay = weight_decay
+        self.dropout = dropout
         self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
@@ -90,9 +96,9 @@ class ECMultiHeadClassifierTorch:
             level_name: int(np.asarray(target, dtype=np.float32).shape[1])
             for level_name, target in y.items()
         }
-        self.model = MultiHeadMLPModel(input_dim, self.hidden_dims, self.output_dims).to(self.device)
+        self.model = MultiHeadMLPModel(input_dim, self.hidden_dims, self.output_dims, dropout=self.dropout).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
+        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
         val_payload = None
@@ -187,8 +193,10 @@ class ResidueBinaryClassifierTorch:
         self,
         hidden_dims=(),
         lr=1e-3,
-        epochs=200,
-        optimizer_name="adam",
+        epochs=100,
+        optimizer_name="adamw",
+        weight_decay=0.0,
+        dropout=0.0,
         early_stopping_patience=None,
         early_stopping_min_delta=0.0,
         device=None,
@@ -197,6 +205,8 @@ class ResidueBinaryClassifierTorch:
         self.lr = lr
         self.epochs = epochs
         self.optimizer_name = optimizer_name
+        self.weight_decay = weight_decay
+        self.dropout = dropout
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = torch.device(device) if device else DEVICE
@@ -207,8 +217,23 @@ class ResidueBinaryClassifierTorch:
         self.best_model_state_ = None
 
     @staticmethod
-    def _batch_to_input(batch, device: torch.device):
-        X_t = torch.from_numpy(np.asarray(batch.protein_emb, dtype=np.float32)).to(device)
+    def _protein_emb_to_tensor(protein_emb, device: torch.device) -> torch.Tensor:
+        if torch.is_tensor(protein_emb):
+            return protein_emb.to(device)
+        array = np.asarray(protein_emb)
+        if array.dtype == np.int16:
+            return torch.from_numpy(array).view(torch.bfloat16).to(device)
+        return torch.from_numpy(array.astype(np.float32, copy=False)).to(device)
+
+    @staticmethod
+    def _autocast_context(device: torch.device):
+        if device.type in {"cuda", "cpu"}:
+            return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+        return nullcontext()
+
+    @classmethod
+    def _batch_to_input(cls, batch, device: torch.device):
+        X_t = cls._protein_emb_to_tensor(batch.protein_emb, device)
         y_t = torch.from_numpy(np.asarray(batch.target_per_residue, dtype=np.float32)).to(device)
         target_mask_t = torch.from_numpy(np.asarray(batch.target_mask, dtype=bool)).to(device)
         return X_t, y_t, target_mask_t
@@ -220,21 +245,25 @@ class ResidueBinaryClassifierTorch:
         first_batch = next(iter(dataloader))
         X_t, _, _ = self._batch_to_input(first_batch, self.device)
         input_dim = X_t.shape[2]
-        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1).to(self.device)
+        self.model = MLPModel(input_dim, self.hidden_dims, output_dim=1, dropout=self.dropout).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr)
+        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
         def compute_batch_loss(logits, y_t, target_mask_t):
-            loss = criterion(logits, y_t)
+            loss = criterion(logits.float(), y_t.float())
             mask_f = target_mask_t.float()
             return (loss * mask_f).sum() / mask_f.sum().clamp(min=1.0)
+
+        def forward_batch(X_t):
+            with self._autocast_context(self.device):
+                return self.model(X_t).squeeze(-1)
 
         def train_epoch():
             self.model.train()
             for batch in dataloader:
                 X_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
-                logits = self.model(X_t).squeeze(-1)
+                logits = forward_batch(X_t)
                 loss = compute_batch_loss(logits, y_t, target_mask_t)
                 optimizer.zero_grad()
                 loss.backward()
@@ -246,8 +275,9 @@ class ResidueBinaryClassifierTorch:
             with torch.no_grad():
                 for batch in val_dataloader:
                     X_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
-                    logits = self.model(X_t).squeeze(-1)
-                    losses.append(float(compute_batch_loss(logits, y_t, target_mask_t).item()))
+                    logits = forward_batch(X_t)
+                    loss = compute_batch_loss(logits, y_t, target_mask_t)
+                    losses.append(float(loss.item()))
             return sum(losses) / max(len(losses), 1)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
@@ -274,7 +304,8 @@ class ResidueBinaryClassifierTorch:
         with torch.no_grad():
             for batch in dataloader:
                 X_t, _, target_mask_t = self._batch_to_input(batch, self.device)
-                logits = self.model(X_t).squeeze(-1)
+                with self._autocast_context(self.device):
+                    logits = self.model(X_t).squeeze(-1)
                 batch_pred = (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
                 batch_mask = target_mask_t.cpu().numpy().astype(bool)
                 for pred_row, mask_row in zip(batch_pred, batch_mask):

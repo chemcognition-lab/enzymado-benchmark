@@ -21,6 +21,8 @@ MODEL_FAMILY_ALIASES = {
     "attention_linear_regressor": "linear",
     "attention_mlp_classification": "mlp",
     "attention_mlp_regressor": "mlp",
+    "linear_classification": "linear",
+    "linear_regressor": "linear",
     "sgd_classification": "linear",
     "sgd_regressor": "linear",
     "mlp_classification": "mlp",
@@ -213,11 +215,18 @@ def is_result_entry_complete(entry: dict[str, Any] | None) -> bool:
     """Return whether a results-card entry points to a finished artifact set."""
     if not entry:
         return False
-    model_file = entry.get("model_file")
-    test_pred_file = entry.get("test_pred_file")
-    if not model_file or not test_pred_file:
+    required_fields = (
+        "model_file",
+        "train_pred_file",
+        "test_pred_file",
+        "metrics_file",
+        "hparams_file",
+        "training_log_file",
+    )
+    required_paths = [entry.get(field) for field in required_fields]
+    if not all(required_paths):
         return False
-    return Path(model_file).exists() and Path(test_pred_file).exists()
+    return all(Path(path).exists() for path in required_paths)
 
 
 def ensure_results_card(path: Path, benchmark_card: dict[str, Any] | None = None) -> None:

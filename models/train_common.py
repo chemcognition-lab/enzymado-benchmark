@@ -32,10 +32,17 @@ def log(msg: str) -> None:
 
 
 def is_run_complete(run_dir: Path) -> bool:
-    """A run is complete when test predictions and a saved model both exist."""
-    has_preds = find_prediction_artifact(run_dir, "test") is not None
+    """A run is complete when the current artifact set exists on disk."""
+    has_predictions = (
+        find_prediction_artifact(run_dir, "train") is not None
+        and find_prediction_artifact(run_dir, "test") is not None
+    )
     has_model = find_model_artifact(run_dir) is not None
-    return has_preds and has_model
+    has_metadata = all(
+        (run_dir / filename).is_file()
+        for filename in ("hparams.json", "metrics.json", "training_log.csv")
+    )
+    return has_predictions and has_model and has_metadata
 
 
 def build_result_run_dir(

@@ -22,12 +22,14 @@ def masked_mean_pool(out: torch.Tensor, mask: torch.Tensor | None) -> torch.Tens
     return (out * mask_f).sum(dim=1) / mask_f.sum(dim=1).clamp(min=1)
 
 
-def make_optimizer(parameters, optimizer_name: str, lr: float):
+def make_optimizer(parameters, optimizer_name: str, lr: float, weight_decay: float = 0.0):
     """Instantiate the optimizer requested by a lightweight wrapper config."""
     if optimizer_name == "sgd":
-        return torch.optim.SGD(parameters, lr=lr)
+        return torch.optim.SGD(parameters, lr=lr, weight_decay=weight_decay)
     if optimizer_name == "adam":
-        return torch.optim.Adam(parameters, lr=lr)
+        return torch.optim.Adam(parameters, lr=lr, weight_decay=weight_decay)
+    if optimizer_name == "adamw":
+        return torch.optim.AdamW(parameters, lr=lr, weight_decay=weight_decay)
     raise ValueError(f"Unsupported optimizer_name '{optimizer_name}'.")
 
 

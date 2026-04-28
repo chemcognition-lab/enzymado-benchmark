@@ -48,6 +48,14 @@ class ResultsCardTests(unittest.TestCase):
             root / "mean" / "random" / "linear" / "binding" / "ankh_base",
         )
         self.assertEqual(
+            build_result_run_dir(root, "random", "ddg", "ankh_base", "linear_regressor"),
+            root / "mean" / "random" / "linear" / "ddg" / "ankh_base",
+        )
+        self.assertEqual(
+            build_result_run_dir(root, "random", "solubility", "ankh_base", "linear_classification"),
+            root / "mean" / "random" / "linear" / "solubility" / "ankh_base",
+        )
+        self.assertEqual(
             build_result_run_dir(root, "similarity", "kcat", "esm2_650M", "attention_mlp_regressor"),
             root / "attention" / "loco" / "mlp" / "kcat" / "esm2_650M",
         )
@@ -176,6 +184,30 @@ class ResultsCardTests(unittest.TestCase):
             )
             self.assertIsNotNone(results_card_module.find_model_artifact(run_dir))
             self.assertIsNotNone(results_card_module.find_prediction_artifact(run_dir, "test"))
+
+    def test_result_entry_complete_requires_current_artifact_set(self) -> None:
+        results_card_module = load_results_card_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "results" / "predictions" / "per_residue" / "random" / "linear" / "active_sites" / "ankh_base"
+            legacy_entry = {
+                "model_file": str(run_dir / "model.pt"),
+                "test_pred_file": str(run_dir / "test_predictions.npz"),
+            }
+            write_file(run_dir / "model.pt")
+            write_file(run_dir / "test_predictions.npz")
+            self.assertFalse(results_card_module.is_result_entry_complete(legacy_entry))
+
+            current_entry = {
+                "model_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_per_residue.pt"),
+                "train_pred_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_per_residue_train_predictions.safetensors.xz"),
+                "test_pred_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_per_residue_test_predictions.safetensors.xz"),
+                "metrics_file": str(run_dir / "metrics.json"),
+                "hparams_file": str(run_dir / "hparams.json"),
+                "training_log_file": str(run_dir / "training_log.csv"),
+            }
+            for path in current_entry.values():
+                write_file(Path(path))
+            self.assertTrue(results_card_module.is_result_entry_complete(current_entry))
 
 
 if __name__ == "__main__":

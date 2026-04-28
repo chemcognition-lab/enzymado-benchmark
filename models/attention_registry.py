@@ -8,6 +8,7 @@ from models.attention_wrappers import (
     AttentionBinaryClassifierTorch,
     AttentionECMultiHeadClassifierTorch,
     AttentionRegressorTorch,
+    AttentionResidueBinaryClassifierTorch,
 )
 
 
@@ -29,9 +30,9 @@ def _attention_linear_classifier_entry() -> dict[str, Any]:
         AttentionBinaryClassifierTorch,
         {
             "hidden_dims": (),
-            "lr": 0.01,
+            "lr": 0.001,
             "epochs": 200,
-            "optimizer_name": "sgd",
+            "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -43,9 +44,9 @@ def _attention_linear_regressor_entry() -> dict[str, Any]:
         AttentionRegressorTorch,
         {
             "hidden_dims": (),
-            "lr": 0.01,
+            "lr": 0.001,
             "epochs": 200,
-            "optimizer_name": "sgd",
+            "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -57,9 +58,23 @@ def _attention_ec_linear_entry() -> dict[str, Any]:
         AttentionECMultiHeadClassifierTorch,
         {
             "hidden_dims": (),
-            "lr": 0.01,
+            "lr": 0.001,
             "epochs": 200,
-            "optimizer_name": "sgd",
+            "optimizer_name": "adamw",
+            "early_stopping_patience": 20,
+            "early_stopping_min_delta": 1e-4,
+        },
+    )
+
+
+def _attention_residue_linear_entry() -> dict[str, Any]:
+    return _make_attention_entry(
+        AttentionResidueBinaryClassifierTorch,
+        {
+            "hidden_dims": (),
+            "lr": 0.001,
+            "epochs": 200,
+            "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -74,10 +89,12 @@ def _attention_mlp_classifier_entry() -> dict[str, Any]:
     return _make_attention_entry(
         AttentionBinaryClassifierTorch,
         {
-            "hidden_dims": (512, 256),
+            "hidden_dims": (2048,),
             "lr": 1e-3,
-            "epochs": 200,
-            "optimizer_name": "adam",
+            "epochs": 100,
+            "optimizer_name": "adamw",
+            "weight_decay": 0.1,
+            "dropout": 0.1,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -88,10 +105,12 @@ def _attention_mlp_regressor_entry() -> dict[str, Any]:
     return _make_attention_entry(
         AttentionRegressorTorch,
         {
-            "hidden_dims": (512, 256),
+            "hidden_dims": (2048,),
             "lr": 1e-3,
-            "epochs": 200,
-            "optimizer_name": "adam",
+            "epochs": 100,
+            "optimizer_name": "adamw",
+            "weight_decay": 0.1,
+            "dropout": 0.1,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -102,10 +121,29 @@ def _attention_ec_mlp_entry() -> dict[str, Any]:
     return _make_attention_entry(
         AttentionECMultiHeadClassifierTorch,
         {
-            "hidden_dims": (512, 256),
+            "hidden_dims": (2048,),
             "lr": 1e-3,
-            "epochs": 200,
-            "optimizer_name": "adam",
+            "epochs": 100,
+            "optimizer_name": "adamw",
+            "weight_decay": 0.1,
+            "dropout": 0.1,
+            "batch_size": 256,
+            "early_stopping_patience": 20,
+            "early_stopping_min_delta": 1e-4,
+        },
+    )
+
+
+def _attention_residue_mlp_entry() -> dict[str, Any]:
+    return _make_attention_entry(
+        AttentionResidueBinaryClassifierTorch,
+        {
+            "hidden_dims": (256,),
+            "lr": 1e-3,
+            "epochs": 100,
+            "optimizer_name": "adamw",
+            "weight_decay": 0.1,
+            "dropout": 0.1,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -132,6 +170,10 @@ ATTENTION_STRUCTURED_MODEL_MAP = {
     "multilabel_ec": {
         "attention_mlp_classification": _attention_ec_mlp_entry(),
         "attention_linear_classification": _attention_ec_linear_entry(),
+    },
+    "residue_binary_vector": {
+        "attention_mlp_classification": _attention_residue_mlp_entry(),
+        "attention_linear_classification": _attention_residue_linear_entry(),
     },
 }
 

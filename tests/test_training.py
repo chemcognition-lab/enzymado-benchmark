@@ -342,10 +342,15 @@ class StructuredTrainingTests(unittest.TestCase):
             sample_id_candidates=("uniprot_id",),
             split_id_candidates=("uniprot_id",),
         )
+        import torch
+
+        def bf16_raw(values: list[list[float]]) -> np.ndarray:
+            return torch.tensor(values, dtype=torch.bfloat16).view(torch.int16).numpy()
+
         store = ResidueEmbeddingStore(
             by_id={
-                "P1": np.ones((4, 2), dtype=np.float32),
-                "P2": np.ones((2, 2), dtype=np.float32),
+                "P1": bf16_raw([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]),
+                "P2": bf16_raw([[1.0, 1.0], [1.0, 1.0]]),
             }
         )
 
@@ -379,6 +384,72 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIn("y_true", payload)
         self.assertIn("predictions", payload)
         self.assertIn("target_mask", payload)
+
+    def test_attention_ligand_extra_features_are_train_scaled(self) -> None:
+        from torch.utils.data import DataLoader
+
+        from models.attention_blocks import batch_to_attention_tensors
+        from models.attention_wrappers import AttentionBinaryClassifierTorch
+
+        dataset_path = self.root / "binding_random_standardized.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "smiles", "binding", "split"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "smiles": "L1", "binding": "1", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "AAAA", "smiles": "L2", "binding": "0", "split": "train"},
+                {"uniprot_id": "P3", "protein_sequence": "AAAA", "smiles": "L3", "binding": "1", "split": "train"},
+                {"uniprot_id": "P4", "protein_sequence": "AAAA", "smiles": "L4", "binding": "0", "split": "train"},
+            ],
+        )
+        config = TaskConfig(
+            name="binding_test",
+            batch_kind="protein_ligand_global",
+            label_kind="binary",
+            dataset_paths={"random": dataset_path},
+            target_column="binding",
+            ligand_column="smiles",
+            sample_id_candidates=("uniprot_id",),
+            split_id_candidates=("uniprot_id",),
+        )
+        store = ResidueEmbeddingStore(
+            by_id={
+                "P1": np.ones((4, 2), dtype=np.float32),
+                "P2": np.ones((4, 2), dtype=np.float32),
+                "P3": np.ones((4, 2), dtype=np.float32),
+                "P4": np.ones((4, 2), dtype=np.float32),
+            }
+        )
+        ligand_values = {
+            "L1": np.asarray([100.0, 10.0], dtype=np.float32),
+            "L2": np.asarray([200.0, 20.0], dtype=np.float32),
+            "L3": np.asarray([300.0, 30.0], dtype=np.float32),
+            "L4": np.asarray([400.0, 40.0], dtype=np.float32),
+        }
+        bundle = build_dataset_from_config(
+            config,
+            store,
+            split_name="train",
+            ligand_featurizer=lambda smiles: ligand_values[smiles],
+        )
+        loader = DataLoader(
+            bundle.dataset,
+            batch_size=2,
+            collate_fn=bundle.collator,
+            shuffle=False,
+            num_workers=0,
+        )
+        model = AttentionBinaryClassifierTorch(hidden_dims=(), lr=1e-3, epochs=1)
+        model._fit_extra_scaler(loader, "protein_ligand_global")
+
+        normalized_chunks = []
+        for batch in loader:
+            _, _, extra_t = batch_to_attention_tensors(batch, "protein_ligand_global", model.device)
+            normalized_chunks.append(model._normalize_extra(extra_t).cpu().numpy())
+        normalized = np.concatenate(normalized_chunks, axis=0)
+
+        np.testing.assert_allclose(normalized.mean(axis=0), np.zeros(2, dtype=np.float32), atol=1e-6)
+        np.testing.assert_allclose(normalized.std(axis=0), np.ones(2, dtype=np.float32), atol=1e-6)
 
     def test_get_target_payload_for_residue_tasks_does_not_reload_embeddings(self) -> None:
         from models.train import get_target_payload
@@ -446,15 +517,18 @@ class StructuredTrainingTests(unittest.TestCase):
             sample_id_candidates=("uniprot_id",),
             split_id_candidates=("uniprot_id",),
         )
+        import torch
+
+        def bf16_raw(values: list[list[float]]) -> np.ndarray:
+            return torch.tensor(values, dtype=torch.bfloat16).view(torch.int16).numpy()
+
         store = ResidueEmbeddingStore(
             by_id={
-                "P1": np.asarray(
+                "P1": bf16_raw(
                     [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
-                    dtype=np.float32,
                 ),
-                "P2": np.asarray(
+                "P2": bf16_raw(
                     [[0.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
-                    dtype=np.float32,
                 ),
             }
         )
@@ -479,6 +553,9 @@ class StructuredTrainingTests(unittest.TestCase):
             n_jobs=1,
             device="cpu",
         )
+        X_flat, y_flat, _ = model._flatten_loader(loader)
+        self.assertEqual(X_flat.dtype, np.float32)
+        self.assertEqual(y_flat.dtype, np.int8)
         model.fit_loader(loader, batch_kind="protein_residue", val_dataloader=loader)
         preds = model.predict_loader(loader, batch_kind="protein_residue")
         y_true, target_mask = get_target_payload(bundle)

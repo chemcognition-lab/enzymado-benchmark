@@ -79,8 +79,6 @@ class AttentionTaskBundles:
 
 def _is_attention_supported_task(config, skip_label_kinds: set[str]) -> tuple[bool, str | None]:
     """Return whether the task can run on the attention pipeline and why if not."""
-    if config.batch_kind == "protein_residue":
-        return False, "site tasks stay on the existing pipeline"
     if config.label_kind in skip_label_kinds:
         return False, f"label_kind='{config.label_kind}' filtered by CLI"
     if config.label_kind in SKIP_LABEL_KINDS:

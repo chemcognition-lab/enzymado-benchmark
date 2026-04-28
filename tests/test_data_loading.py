@@ -552,8 +552,32 @@ class DataLoadingTests(unittest.TestCase):
         )
         np.testing.assert_array_equal(
             batch.target_per_residue,
-            np.asarray([1.0, 0.0, 0.0], dtype=np.float32),
+            np.asarray([1, 0, 0], dtype=np.int8),
         )
+        self.assertEqual(batch.target_per_residue.dtype, np.int8)
+
+    def test_protein_residue_concat_collator_preserves_bf16_embeddings(self) -> None:
+        import torch
+
+        collator = ProteinResidueConcatCollator()
+
+        batch = collator(
+            [
+                {
+                    "sample_id": "P1",
+                    "protein_emb": torch.tensor(
+                        [[1.0, 0.0], [0.0, 1.0]],
+                        dtype=torch.bfloat16,
+                    ).view(torch.int16).numpy(),
+                    "target_per_residue": np.asarray([1.0, 0.0], dtype=np.float32),
+                    "target_mask": np.asarray([True, True], dtype=bool),
+                },
+            ]
+        )
+
+        self.assertTrue(torch.is_tensor(batch.protein_emb))
+        self.assertEqual(batch.protein_emb.dtype, torch.bfloat16)
+        self.assertEqual(batch.target_per_residue.dtype, np.int8)
 
     def test_missing_policy_skip_filters_rows_with_missing_embeddings(self) -> None:
         dataset_path = self.root / "solubility_skip.csv"
