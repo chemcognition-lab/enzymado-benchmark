@@ -194,7 +194,8 @@ def _train_attention_model(
     use_validation: bool,
 ):
     """Train one attention model and return predictions plus labels for saving."""
-    train_loader = get_dataloader(bundles.train_bundle, batch_size=batch_size)
+    train_loader = get_dataloader(bundles.train_bundle, batch_size=batch_size, shuffle=True)
+    train_predict_loader = get_dataloader(bundles.train_bundle, batch_size=batch_size)
     val_loader = get_dataloader(bundles.val_bundle, batch_size=batch_size) if use_validation else None
     test_loader = get_dataloader(bundles.test_bundle, batch_size=batch_size)
 
@@ -208,7 +209,7 @@ def _train_attention_model(
     )
     log(f"      Training done ({time.time()-t0:.1f}s). Predicting...")
 
-    pred_train = trained.predict_loader(train_loader, batch_kind=config.batch_kind)
+    pred_train = trained.predict_loader(train_predict_loader, batch_kind=config.batch_kind)
     pred_val = trained.predict_loader(val_loader, batch_kind=config.batch_kind) if use_validation else None
     pred_test = trained.predict_loader(test_loader, batch_kind=config.batch_kind)
 

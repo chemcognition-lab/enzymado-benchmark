@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import torch
 from torch.utils.data import DataLoader
 
 from data_loading import (
@@ -978,13 +979,25 @@ def build_Xy_pooled(bundle, batch_kind: str):
     return np.stack(X_list), np.array(y_list, dtype=np.float32)
 
 
-def get_dataloader(bundle, batch_size: int = 32, collate_fn=None) -> DataLoader:
-    """Build a deterministic DataLoader for one dataset bundle."""
+def get_dataloader(
+    bundle,
+    batch_size: int = 32,
+    collate_fn=None,
+    *,
+    shuffle: bool = False,
+    seed: int = 0,
+) -> DataLoader:
+    """Build a DataLoader for one dataset bundle."""
+    generator = None
+    if shuffle:
+        generator = torch.Generator()
+        generator.manual_seed(seed)
     return DataLoader(
         bundle.dataset,
         batch_size=batch_size,
         collate_fn=collate_fn if collate_fn is not None else bundle.collator,
-        shuffle=False,
+        shuffle=shuffle,
+        generator=generator,
         num_workers=0,
     )
 

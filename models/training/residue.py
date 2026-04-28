@@ -18,6 +18,7 @@ class ResidueAwareLoaders:
     """Train/validation/test DataLoaders for residue-aware models."""
 
     train_loader: Any
+    train_predict_loader: Any
     val_loader: Any | None
     test_loader: Any
 
@@ -46,7 +47,7 @@ def build_residue_aware_loaders(
     test_bundle,
     use_validation: bool,
 ) -> ResidueAwareLoaders:
-    """Create deterministic loaders for residue-aware training and prediction."""
+    """Create loaders for residue-aware training and prediction."""
     residue_batch_size = int(model_info.get("loader_batch_size", 64))
     log(f"      Using residue-aware loader batch_size={residue_batch_size}")
     residue_collate_fn = None
@@ -55,6 +56,12 @@ def build_residue_aware_loaders(
         residue_collate_fn = ProteinResidueConcatCollator()
 
     train_loader = get_dataloader(
+        train_bundle,
+        batch_size=residue_batch_size,
+        collate_fn=residue_collate_fn,
+        shuffle=True,
+    )
+    train_predict_loader = get_dataloader(
         train_bundle,
         batch_size=residue_batch_size,
         collate_fn=residue_collate_fn,
@@ -74,6 +81,7 @@ def build_residue_aware_loaders(
     )
     return ResidueAwareLoaders(
         train_loader=train_loader,
+        train_predict_loader=train_predict_loader,
         val_loader=val_loader,
         test_loader=test_loader,
     )
@@ -116,7 +124,7 @@ def collect_residue_aware_outputs(
     y_train, target_mask_train = get_target_payload(train_bundle)
     return ResidueAwareOutputs(
         trained=trained,
-        pred_train=trained.predict_loader(loaders.train_loader, batch_kind=batch_kind),
+        pred_train=trained.predict_loader(loaders.train_predict_loader, batch_kind=batch_kind),
         pred_val=(
             trained.predict_loader(loaders.val_loader, batch_kind=batch_kind)
             if use_validation else None
