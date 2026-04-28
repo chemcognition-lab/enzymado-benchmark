@@ -24,24 +24,41 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-# shellcheck disable=SC1091
-source "${REPO}/scripts/cluster_scratch_paths.sh"
-init_cluster_runtime_dirs
+: "${CLUSTER_RUNTIME_ROOT:=${REPO}/.cluster_runtime}"
+: "${UV_LINK_MODE:=copy}"
+: "${EMBEDDINGS_DATA_ROOT:=${REPO}/data}"
+: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=0}"
+if [[ -z "${UV_CACHE_DIR:-}" || "${UV_CACHE_DIR}" == /scratch/* ]]; then
+    UV_CACHE_DIR="${CLUSTER_RUNTIME_ROOT}/uv-cache"
+fi
+if [[ -z "${HF_HOME:-}" || "${HF_HOME}" == /scratch/* ]]; then
+    HF_HOME="${CLUSTER_RUNTIME_ROOT}/hf-cache"
+fi
+if [[ -z "${TORCH_HOME:-}" || "${TORCH_HOME}" == /scratch/* ]]; then
+    TORCH_HOME="${CLUSTER_RUNTIME_ROOT}/torch-cache"
+fi
+if [[ -z "${XDG_CACHE_HOME:-}" || "${XDG_CACHE_HOME}" == /scratch/* ]]; then
+    XDG_CACHE_HOME="${CLUSTER_RUNTIME_ROOT}/xdg-cache"
+fi
+if [[ -z "${TMPDIR:-}" || "${TMPDIR}" == /scratch/* ]]; then
+    TMPDIR="${CLUSTER_RUNTIME_ROOT}/tmp"
+fi
+export CLUSTER_RUNTIME_ROOT UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
+export PYTHONNOUSERSITE=1
+mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
 
-: "${EMBEDDINGS_DATA_ROOT:=${SCRATCH_ROOT}/data}"
-: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=1}"
 if [[ -z "${CARD_PATH:-}" ]]; then
     if [[ -f "${REPO}/benchmark_card_attention.json" ]]; then
-        CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card_attention.json")"
+        CARD_PATH="${REPO}/benchmark_card_attention.json"
     else
-        CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
+        CARD_PATH="${REPO}/benchmark_card.json"
     fi
 fi
 if [[ -z "${RESULTS_CARD_PATH:-}" ]]; then
-    RESULTS_CARD_PATH="$(ensure_scratch_card "${REPO}/results_card.json")"
+    RESULTS_CARD_PATH="${REPO}/results_card.json"
 fi
 : "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
-: "${OUTPUT_DIR:=${SCRATCH_ROOT}/results/predictions}"
+: "${OUTPUT_DIR:=${REPO}/results/predictions}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
 : "${SKIP_LABEL_KINDS:=}"
@@ -51,8 +68,17 @@ fi
 : "${OVERWRITE_RESULTS:=0}"
 
 if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
-    EMBEDDINGS_JSON="$(relocate_manifest_to_scratch "${REPO}" "${EMBEDDINGS_JSON}" "${EMBEDDINGS_DATA_ROOT}")"
+    echo "ERROR: AUTO_RELOCATE_EMBEDDINGS_JSON=1 is disabled for training jobs." >&2
+    echo "Jobs must read/write project paths, not generated scratch manifests." >&2
+    exit 1
 fi
+
+for _write_path in "${OUTPUT_DIR}" "${RESULTS_CARD_PATH}" "${CLUSTER_RUNTIME_ROOT}" "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"; do
+    if [[ "${_write_path}" == /scratch/* ]]; then
+        echo "ERROR: training jobs may not write to scratch: ${_write_path}" >&2
+        exit 1
+    fi
+done
 
 export EMBEDDINGS_DATA_ROOT AUTO_RELOCATE_EMBEDDINGS_JSON
 

@@ -86,6 +86,16 @@ def _path_with_data_segment(path: Path, old: str, new: str) -> Path | None:
     return Path(*parts)
 
 
+def _project_data_equivalent(path: Path) -> Path | None:
+    """Return the repo-local equivalent for an absolute path containing a data segment."""
+    parts = list(path.parts)
+    try:
+        data_index = parts.index("data")
+    except ValueError:
+        return None
+    return PROJECT_ROOT / Path(*parts[data_index:])
+
+
 def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
     """Return plausible safetensors sources for a manifest path.
 
@@ -95,17 +105,22 @@ def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
     """
     full_path = _as_project_path(path)
     candidates: list[Path] = []
+    base_paths = [full_path]
+    project_equivalent = _project_data_equivalent(full_path)
+    if project_equivalent is not None:
+        base_paths.append(project_equivalent)
 
-    if full_path.suffix == ".safetensors" or full_path.is_dir():
-        candidates.append(full_path)
-    if full_path.suffix == ".h5":
-        candidates.append(full_path.with_suffix(".safetensors"))
-        candidates.append(full_path.with_name(f"{full_path.stem}_shards"))
+    for base_path in base_paths:
+        if base_path.suffix == ".safetensors" or base_path.is_dir():
+            candidates.append(base_path)
+        if base_path.suffix == ".h5":
+            candidates.append(base_path.with_suffix(".safetensors"))
+            candidates.append(base_path.with_name(f"{base_path.stem}_shards"))
 
-        swapped = _path_with_data_segment(full_path, "embeddings_mean_pooled", "embeddings")
-        if swapped is not None:
-            candidates.append(swapped.with_suffix(".safetensors"))
-            candidates.append(swapped.with_name(f"{swapped.stem}_shards"))
+            swapped = _path_with_data_segment(base_path, "embeddings_mean_pooled", "embeddings")
+            if swapped is not None:
+                candidates.append(swapped.with_suffix(".safetensors"))
+                candidates.append(swapped.with_name(f"{swapped.stem}_shards"))
 
     # De-duplicate while preserving order.
     seen: set[Path] = set()
