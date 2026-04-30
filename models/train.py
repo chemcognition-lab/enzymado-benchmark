@@ -971,6 +971,7 @@ def _completed_models(
     split_variant: str,
     task_name: str,
     emb_name: str,
+    task_scope: str = "properties",
     results_card: dict[str, Any] | None = None,
 ) -> list[str]:
     """Return which candidate models already have finished artifacts on disk."""
@@ -982,7 +983,7 @@ def _completed_models(
         or is_result_entry_complete(
             find_result_entry(
                 results_card or {},
-                task_scope="properties",
+                task_scope=task_scope,
                 task_name=task_name,
                 emb_name=emb_name,
                 model_name=model_name,
@@ -1022,6 +1023,7 @@ def _is_residue_aware_training(model_info: dict, prepared: PreparedTaskData) -> 
 
 def _run_task(
     *,
+    task_scope: str,
     task_name: str,
     prop: dict,
     emb_name: str,
@@ -1092,6 +1094,7 @@ def _run_task(
                 split_variant,
                 task_name,
                 emb_name,
+                task_scope=task_scope,
                 results_card=results_card,
             )
             if len(already_done) == len(model_map):
@@ -1215,7 +1218,7 @@ def _run_task(
                 model_file,
                 task_name=task_name,
                 split_variant=split_variant,
-                task_scope="properties",
+                task_scope=task_scope,
                 train_pred_file=saved_prediction_paths["train"],
                 test_pred_file=saved_prediction_paths["test"],
                 val_pred_file=saved_prediction_paths.get("val"),
@@ -1230,7 +1233,7 @@ def _run_task(
             )
             update_results_card_locked(
                 results_card_path,
-                task_scope="properties",
+                task_scope=task_scope,
                 task_name=task_name,
                 emb_name=emb_name,
                 model_name=model_name,
@@ -1253,6 +1256,7 @@ def main(
     emb_name_filter: str | None = None,
     model_prefix_filter: str | None = None,
     task_name_filters: set[str] | None = None,
+    task_scope_filters: set[str] | None = None,
     skip_label_kinds: set[str] | None = None,
     allowed_ids_path: str | None = None,
     residue_store_mode: str = "auto",
@@ -1271,6 +1275,11 @@ def main(
     task_name_filters = task_name_filters or set()
     if task_name_filters:
         log(f"[startup] Restricting tasks to: {sorted(task_name_filters)}")
+    task_scope_filters = task_scope_filters or {"properties"}
+    invalid_task_scopes = task_scope_filters - {"properties", "real_case"}
+    if invalid_task_scopes:
+        raise ValueError(f"Unknown task scopes: {sorted(invalid_task_scopes)}")
+    log(f"[startup] Restricting task scopes to: {sorted(task_scope_filters)}")
 
     skip_label_kinds = skip_label_kinds or set()
     if skip_label_kinds:
@@ -1286,7 +1295,11 @@ def main(
 
     card = read_json(card_path)
     embeddings = read_json(embeddings_json)
-    log(f"[startup] JSON loaded. {len(embeddings)} embedding models, {len(card['properties'])} tasks.")
+    selected_task_count = sum(
+        len(card.get(scope_name, {}) or {})
+        for scope_name in task_scope_filters
+    )
+    log(f"[startup] JSON loaded. {len(embeddings)} embedding models, {selected_task_count} tasks.")
 
     card_path_obj = Path(card_path)
     results_card_path_obj = Path(results_card_path)
@@ -1316,30 +1329,34 @@ def main(
 
         log(f"\n=== Embedding: {emb_name} (dim={emb_info['dim']}) ===")
 
-        for task_name, prop in card["properties"].items():
-            if task_name_filters and task_name not in task_name_filters:
-                log(f"  Skipping '{task_name}' (not selected by CLI task filter)")
+        for task_scope in ("properties", "real_case"):
+            if task_scope not in task_scope_filters:
                 continue
+            for task_name, prop in (card.get(task_scope, {}) or {}).items():
+                if task_name_filters and task_name not in task_name_filters:
+                    log(f"  Skipping '{task_name}' (not selected by CLI task filter)")
+                    continue
 
-            _run_task(
-                task_name=task_name,
-                prop=prop,
-                emb_name=emb_name,
-                emb_info=emb_info,
-                results_card_path=results_card_path_obj,
-                output_dir=output_dir_obj,
-                model_prefix_filter=model_prefix_filter,
-                allowed_ids=allowed_ids,
-                sequence_to_id=sequence_to_id,
-                skip_label_kinds=skip_label_kinds,
-                residue_store_mode=residue_store_mode,
-                split_variant_filter=split_variant_filter,
-                embedding_mode_filters=embedding_mode_filters,
-                embedding_storage_format=embedding_storage_format,
-                overwrite_results=overwrite_results,
-                benchmark_card=card,
-                results_card=results_card,
-            )
+                _run_task(
+                    task_scope=task_scope,
+                    task_name=task_name,
+                    prop=prop,
+                    emb_name=emb_name,
+                    emb_info=emb_info,
+                    results_card_path=results_card_path_obj,
+                    output_dir=output_dir_obj,
+                    model_prefix_filter=model_prefix_filter,
+                    allowed_ids=allowed_ids,
+                    sequence_to_id=sequence_to_id,
+                    skip_label_kinds=skip_label_kinds,
+                    residue_store_mode=residue_store_mode,
+                    split_variant_filter=split_variant_filter,
+                    embedding_mode_filters=embedding_mode_filters,
+                    embedding_storage_format=embedding_storage_format,
+                    overwrite_results=overwrite_results,
+                    benchmark_card=card,
+                    results_card=results_card,
+                )
 
     log(f"\nDone. Dataset card read from {card_path_obj}")
     log(f"Done. Results written to {results_card_path_obj}")
@@ -1361,6 +1378,13 @@ if __name__ == "__main__":
         action="append",
         default=[],
         help="Train only this benchmark task name. Repeatable.",
+    )
+    parser.add_argument(
+        "--task_scope",
+        action="append",
+        choices=("properties", "real_case"),
+        default=[],
+        help="Train tasks from this benchmark-card section. Repeatable. Defaults to properties.",
     )
     parser.add_argument(
         "--skip_label_kind",
@@ -1422,6 +1446,7 @@ if __name__ == "__main__":
         args.emb_name,
         model_prefix_filter=args.model_prefix,
         task_name_filters=set(args.task_name),
+        task_scope_filters=set(args.task_scope) or None,
         skip_label_kinds=set(args.skip_label_kind),
         allowed_ids_path=args.allowed_ids,
         residue_store_mode=args.residue_store_mode,

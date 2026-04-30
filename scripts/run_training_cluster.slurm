@@ -39,6 +39,7 @@ fi
 : "${AUTO_RELOCATE_EMBEDDINGS_JSON:=0}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
+: "${TASK_SCOPES:=}"
 : "${SPLIT_VARIANT:=}"
 : "${SKIP_LABEL_KINDS:=}"
 : "${COMMON_IDS_PATH:=}"
@@ -169,6 +170,9 @@ fi
 if [[ -n "${TASK_NAMES}" ]]; then
     echo "Task names: ${TASK_NAMES}"
 fi
+if [[ -n "${TASK_SCOPES}" ]]; then
+    echo "Task scopes: ${TASK_SCOPES}"
+fi
 if [[ -n "${SPLIT_VARIANT}" ]]; then
     echo "Split variant: ${SPLIT_VARIANT}"
 fi
@@ -207,6 +211,15 @@ if [[ -n "${TASK_NAMES}" ]]; then
     for _task_name in "${_task_names[@]}"; do
         if [[ -n "${_task_name}" ]]; then
             TRAIN_ARGS+=(--task_name "${_task_name}")
+        fi
+    done
+fi
+
+if [[ -n "${TASK_SCOPES}" ]]; then
+    IFS=',' read -r -a _task_scopes <<< "${TASK_SCOPES}"
+    for _task_scope in "${_task_scopes[@]}"; do
+        if [[ -n "${_task_scope}" ]]; then
+            TRAIN_ARGS+=(--task_scope "${_task_scope}")
         fi
     done
 fi

@@ -22,8 +22,9 @@ logs/
 scripts/logs/
 *.out
 results/predictions/
+results/bootstrap/
 pytest-of-chemist/
-
+.claude
 
 data/embeddings_mean_pooled/
 *.h5

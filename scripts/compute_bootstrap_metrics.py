@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -33,6 +34,11 @@ from src.evaluation.bootstrap import (
     make_resample_indices,
     n_resample_units,
     summarise_replicates,
+)
+from src.evaluation.bootstrap_fast import (
+    bootstrap_classification_fast,
+    is_fast_classification_eligible,
+    precompute_binary_micro_indicators,
 )
 from src.evaluation.discover import discover_experiments, task_signature
 from src.evaluation.loaders import (
@@ -55,7 +61,8 @@ def _resolve_task_type(run_dir: Path) -> str | None:
 def _per_task_seed(seed_root: int, signature: tuple) -> int:
     """Hash signature deterministically into an int32 seed."""
     rng = np.random.default_rng(seed_root)
-    salt = abs(hash(signature)) % (2**31 - 1)
+    payload = json.dumps(signature, separators=(",", ":"), sort_keys=False).encode()
+    salt = int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "little") % (2**31 - 1)
     return int(rng.integers(0, 2**31 - 1)) ^ salt
 
 
@@ -67,6 +74,15 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--confidence-level", type=float, default=0.95)
     parser.add_argument(
+        "--filter-task",
+        action="append",
+        default=None,
+        help=(
+            "Only compute bootstrap metrics for this task name. "
+            "May be provided multiple times."
+        ),
+    )
+    parser.add_argument(
         "--skip-existing",
         action="store_true",
         help="Do not recompute if results/bootstrap/<run>/test.npz already exists.",
@@ -74,6 +90,14 @@ def main() -> None:
     args = parser.parse_args()
 
     experiments = discover_experiments(args.predictions_root)
+    if args.filter_task:
+        selected_tasks = set(args.filter_task)
+        before = len(experiments)
+        experiments = [e for e in experiments if e.task in selected_tasks]
+        print(
+            f"Filtering to task(s): {', '.join(sorted(selected_tasks))} "
+            f"({len(experiments)}/{before} experiments)"
+        )
     print(f"Discovered {len(experiments)} experiments under {args.predictions_root}")
     if not experiments:
         return
@@ -134,7 +158,16 @@ def main() -> None:
 
             metric_set = metric_set_for(task_type)
             t0 = time.perf_counter()
-            replicates = bootstrap_replicates(payload, indices, metric_set)
+            if task_type == "classification" and is_fast_classification_eligible(payload):
+                # Pre-aggregate per-row TP/FP/FN/TN once, then each replicate is
+                # a single sum + four arithmetic ops. Bit-exact with the generic
+                # path for binary classification (incl. multilabel/per-residue).
+                precomputed = precompute_binary_micro_indicators(payload)
+                replicates = bootstrap_classification_fast(precomputed, indices)
+                fast_path = True
+            else:
+                replicates = bootstrap_replicates(payload, indices, metric_set)
+                fast_path = False
             elapsed = time.perf_counter() - t0
             summary = summarise_replicates(replicates, confidence_level=args.confidence_level)
 
@@ -152,12 +185,13 @@ def main() -> None:
             }
             write_metrics(e.run_dir, md)
 
+            path_tag = "fast" if fast_path else "generic"
             print(
                 f"    {e.embedding_model}: {task_type} "
                 f"primary={PRIMARY_METRIC[task_type]}={summary[PRIMARY_METRIC[task_type]]['mean']:.4f} "
                 f"({summary[PRIMARY_METRIC[task_type]]['ci_lo']:.4f}, "
                 f"{summary[PRIMARY_METRIC[task_type]]['ci_hi']:.4f}) "
-                f"in {elapsed:.1f}s"
+                f"in {elapsed:.1f}s [{path_tag}]"
             )
 
     print("\nBootstrap complete.")

@@ -205,6 +205,117 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         sample_id_candidates=("uniprot_id", "protein_sequence"),
         split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
+    "align_amylase_activity": TaskConfig(
+        name="align_amylase_activity",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/align_amylase_activity/alpha_amylase__specific_activity.csv",
+        },
+        target_column="specific_activity",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_column="source_split",
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "align_amylase_expression": TaskConfig(
+        name="align_amylase_expression",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/align_amylase_expression/alpha_amylase__expression.csv",
+        },
+        target_column="expression",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_column="source_split",
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "align_amylase_stability": TaskConfig(
+        name="align_amylase_stability",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/align_amylase_stability/alpha_amylase__thermostability.csv",
+        },
+        target_column="thermostability",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_column="source_split",
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "align_glucosidase_activity": TaskConfig(
+        name="align_glucosidase_activity",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/align_glucosidase_activity/b_glucosidase__activity.csv",
+        },
+        target_column="activity",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_column="source_split",
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "align_glucosidase_expression": TaskConfig(
+        name="align_glucosidase_expression",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/align_glucosidase_expression/"
+            "b_glucosidase__expression_random_80_10_10_standardized.csv",
+        },
+        target_column="expression_standardized",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "align_glucosidase_melting": TaskConfig(
+        name="align_glucosidase_melting",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/align_glucosidase_melting/"
+            "b_glucosidase__melting_point_random_80_10_10_standardized.csv",
+        },
+        target_column="melting_point_standardized",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "cleeveland_galox": TaskConfig(
+        name="cleeveland_galox",
+        batch_kind="protein_ligand_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": _standardized_path(
+                "data/processed/real_case/cleeveland_galox", "cleeveland", "random"
+            ),
+            "similarity": _standardized_path(
+                "data/processed/real_case/cleeveland_galox", "cleeveland", "similarity"
+            ),
+        },
+        target_column="specific_activity_standardized",
+        ligand_column="smiles",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
+    "erickson_petase": TaskConfig(
+        name="erickson_petase",
+        batch_kind="protein_global",
+        label_kind="scalar_regression",
+        dataset_paths={
+            "random": _standardized_path(
+                "data/processed/real_case/erickson_petase", "erickson", "random"
+            ),
+            "similarity": _standardized_path(
+                "data/processed/real_case/erickson_petase", "erickson", "similarity"
+            ),
+        },
+        target_column="sum_aromatic_products_standardized",
+        sample_id_candidates=("dataset_id", "protein_sequence"),
+        split_id_candidates=("dataset_id", "protein_sequence"),
+    ),
 }
 
 

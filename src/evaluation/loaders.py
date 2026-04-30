@@ -2,12 +2,20 @@
 
 Tabular runs (mean, attention) store predictions as `<stem>_test_predictions.safetensors.xz`.
 Per-residue runs store them as `test_predictions.npz`.
+
+Some attention-based EC runs use a multi-head schema where each of the four EC
+levels has its own `(y_true_level_k, predictions_level_k, target_mask_level_k)`
+trio (target mask is per-sample 1D for these). We unify those by horizontally
+concatenating the four levels into a single `(N, sum(C_k))` tensor and
+broadcasting each level's 1D mask across its own column block, so downstream
+code sees the same `(y_true, predictions, target_mask)` shape it always does.
 """
 
 from __future__ import annotations
 
 import json
 import lzma
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -27,14 +35,75 @@ def _safetensors_load(blob: bytes) -> dict[str, np.ndarray]:
     return load(blob)
 
 
+_LEVEL_RE = re.compile(r"^(?P<kind>y_true|predictions|target_mask)_level_(?P<level>\d+)$")
+
+
+def _unify_multi_head_levels(out: dict[str, np.ndarray]) -> PredictionPayload | None:
+    """Concatenate per-level multi-head EC tensors into a single payload.
+
+    Returns None if the dict does not match the multi-head schema.
+    """
+    levels: dict[int, dict[str, np.ndarray]] = {}
+    for key, value in out.items():
+        match = _LEVEL_RE.match(key)
+        if not match:
+            return None
+        levels.setdefault(int(match.group("level")), {})[match.group("kind")] = value
+
+    expected_kinds = {"y_true", "predictions", "target_mask"}
+    for level, parts in levels.items():
+        if set(parts.keys()) != expected_kinds:
+            raise ValueError(
+                f"Multi-head EC level {level} is missing keys; "
+                f"got {sorted(parts.keys())}"
+            )
+
+    y_blocks: list[np.ndarray] = []
+    p_blocks: list[np.ndarray] = []
+    m_blocks: list[np.ndarray] = []
+    for level in sorted(levels.keys()):
+        y_k = levels[level]["y_true"]
+        p_k = levels[level]["predictions"]
+        m_k = levels[level]["target_mask"]
+        if y_k.ndim != 2 or p_k.ndim != 2 or y_k.shape != p_k.shape:
+            raise ValueError(
+                f"Multi-head EC level {level}: y_true/predictions must be matching 2D arrays, "
+                f"got {y_k.shape} and {p_k.shape}."
+            )
+        if m_k.ndim != 1 or m_k.shape[0] != y_k.shape[0]:
+            raise ValueError(
+                f"Multi-head EC level {level}: target_mask must be 1D with length "
+                f"{y_k.shape[0]}, got shape {m_k.shape}."
+            )
+        # Broadcast the 1D sample mask across this level's columns.
+        m_2d = np.broadcast_to(m_k.astype(bool)[:, None], y_k.shape)
+        y_blocks.append(y_k)
+        p_blocks.append(p_k)
+        m_blocks.append(m_2d)
+
+    return PredictionPayload(
+        y_true=np.concatenate(y_blocks, axis=1),
+        predictions=np.concatenate(p_blocks, axis=1),
+        target_mask=np.concatenate(m_blocks, axis=1),
+    )
+
+
 def _read_safetensors_xz(path: Path) -> PredictionPayload:
     with lzma.open(path, "rb") as f:
         blob = f.read()
     out = _safetensors_load(blob)
-    return PredictionPayload(
-        y_true=out["y_true"],
-        predictions=out["predictions"],
-        target_mask=out.get("target_mask"),
+    if "y_true" in out and "predictions" in out:
+        return PredictionPayload(
+            y_true=out["y_true"],
+            predictions=out["predictions"],
+            target_mask=out.get("target_mask"),
+        )
+    unified = _unify_multi_head_levels(out)
+    if unified is not None:
+        return unified
+    raise KeyError(
+        f"{path.name}: could not interpret keys {sorted(out.keys())} "
+        "(expected either 'y_true'/'predictions' or per-level multi-head EC keys)."
     )
 
 

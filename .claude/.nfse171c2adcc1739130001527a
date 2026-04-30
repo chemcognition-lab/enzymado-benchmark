@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(.venv/bin/python -c ' *)",
-      "Bash(kill 2680467)"
-    ]
-  }
-}

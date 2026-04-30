@@ -14,6 +14,11 @@ from src.evaluation.bootstrap import (
     n_resample_units,
     summarise_replicates,
 )
+from src.evaluation.bootstrap_fast import (
+    bootstrap_classification_fast,
+    is_fast_classification_eligible,
+    precompute_binary_micro_indicators,
+)
 from src.evaluation.discover import (
     Experiment,
     TrackKey,
@@ -100,6 +105,113 @@ class TestBootstrap(TestCase):
         s = summarise_replicates({"f1": arr}, confidence_level=0.95)
         self.assertEqual(s["f1"]["n_finite"], 3)
         self.assertAlmostEqual(s["f1"]["mean"], np.mean([0.5, 0.6, 0.55]))
+
+
+class TestLoaders(TestCase):
+    def test_multi_head_ec_unification_concatenates_levels(self) -> None:
+        from src.evaluation.loaders import _unify_multi_head_levels
+
+        out = {
+            "y_true_level_1": np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float32),
+            "predictions_level_1": np.array([[1, 0, 0], [0, 0, 0]], dtype=np.float32),
+            "target_mask_level_1": np.array([True, True], dtype=bool),
+            "y_true_level_2": np.array([[0, 1], [1, 1]], dtype=np.float32),
+            "predictions_level_2": np.array([[0, 1], [1, 0]], dtype=np.float32),
+            "target_mask_level_2": np.array([True, False], dtype=bool),  # row 1 unknown @ level 2
+        }
+        payload = _unify_multi_head_levels(out)
+        assert payload is not None
+        self.assertEqual(payload.y_true.shape, (2, 5))
+        self.assertEqual(payload.predictions.shape, (2, 5))
+        self.assertEqual(payload.target_mask.shape, (2, 5))
+        # Row 0 fully known, row 1 known at level_1 but masked at level_2
+        np.testing.assert_array_equal(
+            payload.target_mask,
+            np.array(
+                [
+                    [True, True, True, True, True],
+                    [True, True, True, False, False],
+                ]
+            ),
+        )
+        # The concatenation order must follow ascending level number.
+        np.testing.assert_array_equal(payload.y_true[0], [1, 0, 0, 0, 1])
+        np.testing.assert_array_equal(payload.y_true[1], [0, 1, 0, 1, 1])
+
+    def test_multi_head_unify_returns_none_for_flat_schema(self) -> None:
+        from src.evaluation.loaders import _unify_multi_head_levels
+
+        flat = {"y_true": np.zeros((2, 3)), "predictions": np.zeros((2, 3))}
+        self.assertIsNone(_unify_multi_head_levels(flat))
+
+
+class TestBootstrapFast(TestCase):
+    def _assert_metrics_match(self, generic: dict, fast: dict, atol: float = 1e-12) -> None:
+        for name in ("accuracy", "precision", "recall", "f1"):
+            np.testing.assert_allclose(
+                fast[name], generic[name], atol=atol, err_msg=f"{name} mismatch"
+            )
+
+    def test_fast_path_matches_generic_for_1d_binary(self) -> None:
+        rng = np.random.default_rng(0)
+        n = 80
+        y = (rng.random(n) > 0.5).astype(np.float32)
+        p = y.copy()
+        p[rng.choice(n, size=15, replace=False)] = 1 - p[rng.choice(n, size=15, replace=False)]
+        payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
+
+        idx = make_resample_indices(n, 30, seed=42)
+        generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        precomputed = precompute_binary_micro_indicators(payload)
+        fast = bootstrap_classification_fast(precomputed, idx)
+        self._assert_metrics_match(generic, fast)
+
+    def test_fast_path_matches_generic_for_per_residue(self) -> None:
+        rng = np.random.default_rng(1)
+        n_proteins, max_len = 25, 12
+        y = (rng.random((n_proteins, max_len)) > 0.6).astype(np.float32)
+        p = y.copy()
+        # Inject ~20% disagreement only on valid positions
+        flip = rng.random((n_proteins, max_len)) < 0.2
+        p = np.where(flip, 1.0 - p, p).astype(np.float32)
+        # Valid mask varies per protein
+        mask = rng.random((n_proteins, max_len)) > 0.1
+        payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
+
+        idx = make_resample_indices(n_proteins, 50, seed=7)
+        generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        precomputed = precompute_binary_micro_indicators(payload)
+        fast = bootstrap_classification_fast(precomputed, idx)
+        self._assert_metrics_match(generic, fast)
+
+    def test_fast_path_matches_generic_for_multilabel(self) -> None:
+        rng = np.random.default_rng(2)
+        n_rows, n_cols = 40, 6
+        y = (rng.random((n_rows, n_cols)) > 0.7).astype(np.float32)
+        p = (rng.random((n_rows, n_cols)) > 0.6).astype(np.float32)
+        mask = np.ones_like(y, dtype=bool)
+        payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
+
+        idx = make_resample_indices(n_rows, 40, seed=3)
+        generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        precomputed = precompute_binary_micro_indicators(payload)
+        fast = bootstrap_classification_fast(precomputed, idx)
+        self._assert_metrics_match(generic, fast)
+
+    def test_eligibility_detection(self) -> None:
+        binary = PredictionPayload(
+            y_true=np.array([0.0, 1.0, 0.0]),
+            predictions=np.array([1.0, 1.0, 0.0]),
+            target_mask=None,
+        )
+        self.assertTrue(is_fast_classification_eligible(binary))
+
+        multiclass = PredictionPayload(
+            y_true=np.array([0.0, 1.0, 2.0]),
+            predictions=np.array([1.0, 1.0, 2.0]),
+            target_mask=None,
+        )
+        self.assertFalse(is_fast_classification_eligible(multiclass))
 
 
 class TestDiscover(TestCase):
