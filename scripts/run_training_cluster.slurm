@@ -42,7 +42,10 @@ fi
 : "${TASK_SCOPES:=}"
 : "${SPLIT_VARIANT:=}"
 : "${SKIP_LABEL_KINDS:=}"
-: "${COMMON_IDS_PATH:=}"
+# Default to the embedding-intersection allowlist so every embedding is evaluated
+# on the exact same subset of IDs. Override with `COMMON_IDS_PATH= sbatch ...` to
+# disable, or point it elsewhere.
+: "${COMMON_IDS_PATH:=${REPO}/results/embedding_intersection/common_ids.txt}"
 : "${RESIDUE_STORE_MODE:=auto}"
 : "${EMBEDDING_STORAGE_FORMAT:=safetensors}"
 : "${EMBEDDING_MODES:=}"

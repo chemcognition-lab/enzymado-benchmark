@@ -209,6 +209,13 @@ class ResultsCardTests(unittest.TestCase):
                 write_file(Path(path))
             self.assertTrue(results_card_module.is_result_entry_complete(current_entry))
 
+            current_entry["invalidated"] = {"reason": "target_payload_mismatch_current_dataset"}
+            self.assertFalse(results_card_module.is_result_entry_complete(current_entry))
+            del current_entry["invalidated"]
+
+            write_file(run_dir / results_card_module.INVALIDATION_MARKER)
+            self.assertFalse(results_card_module.is_result_entry_complete(current_entry))
+
 
 if __name__ == "__main__":
     unittest.main()

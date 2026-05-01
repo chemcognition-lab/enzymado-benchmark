@@ -9,6 +9,7 @@ from pathlib import Path
 from data_loading import TASK_REGISTRY
 from data_loading.splits import clean_text, normalize_sequence
 from models.results_card import (
+    INVALIDATION_MARKER,
     build_results_run_dir,
     find_model_artifact,
     find_prediction_artifact,
@@ -33,6 +34,8 @@ def log(msg: str) -> None:
 
 def is_run_complete(run_dir: Path) -> bool:
     """A run is complete when the current artifact set exists on disk."""
+    if (run_dir / INVALIDATION_MARKER).exists():
+        return False
     has_predictions = (
         find_prediction_artifact(run_dir, "train") is not None
         and find_prediction_artifact(run_dir, "test") is not None

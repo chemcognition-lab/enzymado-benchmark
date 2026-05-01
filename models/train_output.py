@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 from models.results_card import (
+    INVALIDATION_MARKER,
     build_prediction_artifact_path,
     canonical_embedding_mode,
     canonical_model_family,
@@ -232,8 +233,13 @@ def write_hparams_file(
     model_name: str,
     split_variant: str,
     model_info: dict,
+    task_config=None,
 ) -> Path:
     """Persist the model configuration used for one run."""
+    invalidation_marker = run_dir / INVALIDATION_MARKER
+    if invalidation_marker.exists():
+        invalidation_marker.unlink()
+
     path = run_dir / "hparams.json"
     payload = {
         "task_name": task_name,
@@ -243,6 +249,14 @@ def write_hparams_file(
         "wrapper": getattr(model_info["wrap"], "__name__", str(model_info["wrap"])),
         "params": model_info["params"],
     }
+    if task_config is not None:
+        payload["task_config"] = {
+            "registry_name": getattr(task_config, "name", None),
+            "batch_kind": getattr(task_config, "batch_kind", None),
+            "label_kind": getattr(task_config, "label_kind", None),
+            "target_column": getattr(task_config, "target_column", None),
+            "dataset_paths": getattr(task_config, "dataset_paths", {}),
+        }
     path.write_text(json.dumps(_json_ready(payload), indent=4) + "\n", encoding="utf-8")
     return path
 

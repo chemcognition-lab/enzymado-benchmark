@@ -66,6 +66,8 @@ class _BaseAttentionWrapper:
         self.batch_kind_ = None
         self.current_epoch_ = 0
         self.best_model_state_ = None
+        self.seq_mean_ = None
+        self.seq_scale_ = None
         self.extra_mean_ = None
         self.extra_scale_ = None
 
@@ -94,6 +96,55 @@ class _BaseAttentionWrapper:
         self.extra_mean_ = torch.from_numpy(mean.astype(np.float32, copy=False)).to(self.device)
         self.extra_scale_ = torch.from_numpy(scale.astype(np.float32, copy=False)).to(self.device)
 
+    def _fit_sequence_scaler_from_batches(self, dataloader, tensor_fn) -> None:
+        """Fit train-only per-channel standardization over valid residue embeddings."""
+        sum_t = None
+        sumsq_t = None
+        count = 0
+        cpu = torch.device("cpu")
+        for batch in dataloader:
+            seq_t, mask_t = tensor_fn(batch, cpu)
+            seq_t = seq_t.float()
+            mask_t = mask_t.bool()
+            observed = seq_t[mask_t]
+            if observed.numel() == 0:
+                continue
+            batch_sum = observed.sum(dim=0)
+            batch_sumsq = (observed * observed).sum(dim=0)
+            sum_t = batch_sum if sum_t is None else sum_t + batch_sum
+            sumsq_t = batch_sumsq if sumsq_t is None else sumsq_t + batch_sumsq
+            count += int(observed.shape[0])
+
+        if count == 0 or sum_t is None or sumsq_t is None:
+            self.seq_mean_ = None
+            self.seq_scale_ = None
+            return
+
+        mean = sum_t / float(count)
+        var = (sumsq_t / float(count)) - (mean * mean)
+        scale = torch.sqrt(torch.clamp(var, min=1e-12))
+        mean = torch.nan_to_num(mean, nan=0.0, posinf=0.0, neginf=0.0)
+        scale = torch.nan_to_num(scale, nan=1.0, posinf=1.0, neginf=1.0)
+        scale[scale == 0.0] = 1.0
+        self.seq_mean_ = mean.reshape(1, 1, -1).to(self.device)
+        self.seq_scale_ = scale.reshape(1, 1, -1).to(self.device)
+
+    def _fit_sequence_scaler(self, dataloader, batch_kind: str) -> None:
+        """Fit sequence embedding normalization for global attention tasks."""
+
+        def _tensor_fn(batch, device):
+            seq_t, mask_t, _ = batch_to_attention_tensors(batch, batch_kind, device)
+            return seq_t, mask_t
+
+        self._fit_sequence_scaler_from_batches(dataloader, _tensor_fn)
+
+    def _normalize_sequence(self, seq_t: torch.Tensor) -> torch.Tensor:
+        mean = getattr(self, "seq_mean_", None)
+        scale = getattr(self, "seq_scale_", None)
+        if mean is None or scale is None:
+            return seq_t
+        return (seq_t.float() - mean) / scale
+
     def _normalize_extra(self, extra_t: torch.Tensor | None) -> torch.Tensor | None:
         if extra_t is None or self.extra_mean_ is None or self.extra_scale_ is None:
             return extra_t
@@ -120,6 +171,8 @@ class _BaseAttentionWrapper:
             "batch_kind": self.batch_kind_,
             "best_epoch": self.best_epoch_,
             "best_val_loss": self.best_val_loss_,
+            "seq_mean": self.seq_mean_.detach().cpu() if self.seq_mean_ is not None else None,
+            "seq_scale": self.seq_scale_.detach().cpu() if self.seq_scale_ is not None else None,
             "extra_mean": self.extra_mean_.detach().cpu() if self.extra_mean_ is not None else None,
             "extra_scale": self.extra_scale_.detach().cpu() if self.extra_scale_ is not None else None,
             "model_state_dict": self.model.state_dict(),
@@ -163,6 +216,7 @@ class AttentionRegressorTorch(_BaseAttentionWrapper):
         self.input_dim_ = input_dim
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
+        self._fit_sequence_scaler(dataloader, batch_kind)
         self._fit_extra_scaler(dataloader, batch_kind)
         self.model = AttentionPredictor(
             input_dim,
@@ -178,6 +232,7 @@ class AttentionRegressorTorch(_BaseAttentionWrapper):
         criterion = nn.MSELoss()
 
         def forward_logits(seq_t, mask_t, extra_t):
+            seq_t = self._normalize_sequence(seq_t)
             extra_t = self._normalize_extra(extra_t)
             with attention_autocast(self.device):
                 return self.model(seq_t, mask_t, extra_t).float()
@@ -225,6 +280,7 @@ class AttentionRegressorTorch(_BaseAttentionWrapper):
         with torch.no_grad():
             for batch in dataloader:
                 seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
+                seq_t = self._normalize_sequence(seq_t)
                 extra_t = self._normalize_extra(extra_t)
                 with attention_autocast(self.device):
                     out = self.model(seq_t, mask_t, extra_t).float()
@@ -268,6 +324,7 @@ class AttentionBinaryClassifierTorch(_BaseAttentionWrapper):
         self.input_dim_ = input_dim
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
+        self._fit_sequence_scaler(dataloader, batch_kind)
         self._fit_extra_scaler(dataloader, batch_kind)
         self.model = AttentionPredictor(
             input_dim,
@@ -283,6 +340,7 @@ class AttentionBinaryClassifierTorch(_BaseAttentionWrapper):
         criterion = nn.BCEWithLogitsLoss()
 
         def forward_logits(seq_t, mask_t, extra_t):
+            seq_t = self._normalize_sequence(seq_t)
             extra_t = self._normalize_extra(extra_t)
             with attention_autocast(self.device):
                 return self.model(seq_t, mask_t, extra_t).float()
@@ -330,6 +388,7 @@ class AttentionBinaryClassifierTorch(_BaseAttentionWrapper):
         with torch.no_grad():
             for batch in dataloader:
                 seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
+                seq_t = self._normalize_sequence(seq_t)
                 extra_t = self._normalize_extra(extra_t)
                 with attention_autocast(self.device):
                     logits = self.model(seq_t, mask_t, extra_t).float()
@@ -382,6 +441,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
         self.output_dims_ = dict(output_dims)
+        self._fit_sequence_scaler(dataloader, batch_kind)
         self._fit_extra_scaler(dataloader, batch_kind)
         self.model = AttentionMultiHeadPredictor(
             input_dim,
@@ -410,6 +470,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
             return torch.stack(loss_terms).mean()
 
         def forward_logits(seq_t, mask_t, extra_t):
+            seq_t = self._normalize_sequence(seq_t)
             extra_t = self._normalize_extra(extra_t)
             with attention_autocast(self.device):
                 return self.model(seq_t, mask_t, extra_t)
@@ -477,6 +538,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
         with torch.no_grad():
             for batch in dataloader:
                 seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
+                seq_t = self._normalize_sequence(seq_t)
                 extra_t = self._normalize_extra(extra_t)
                 with attention_autocast(self.device):
                     logits_by_level = self.model(seq_t, mask_t, extra_t)
@@ -536,6 +598,15 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
         target_mask_t = torch.from_numpy(np.asarray(batch.target_mask, dtype=bool)).to(device)
         return X_t, mask_t, y_t, target_mask_t
 
+    def _fit_residue_sequence_scaler(self, dataloader) -> None:
+        """Fit sequence embedding normalization for per-residue attention tasks."""
+
+        def _tensor_fn(batch, device):
+            X_t, mask_t, _, _ = self._batch_to_input(batch, device)
+            return X_t, mask_t
+
+        self._fit_sequence_scaler_from_batches(dataloader, _tensor_fn)
+
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
         if batch_kind != "protein_residue":
             raise ValueError(
@@ -547,6 +618,7 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
         self.input_dim_ = input_dim
         self.extra_dim_ = 0
         self.batch_kind_ = batch_kind
+        self._fit_residue_sequence_scaler(dataloader)
         self.model = AttentionResiduePredictor(
             input_dim,
             self.hidden_dims,
@@ -565,6 +637,7 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
             return (loss * mask_f).sum() / mask_f.sum().clamp(min=1.0)
 
         def forward_logits(X_t, mask_t):
+            X_t = self._normalize_sequence(X_t)
             with attention_autocast(self.device):
                 return self.model(X_t, mask_t).squeeze(-1)
 
@@ -615,6 +688,7 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
         with torch.no_grad():
             for batch in dataloader:
                 X_t, mask_t, _, target_mask_t = self._batch_to_input(batch, self.device)
+                X_t = self._normalize_sequence(X_t)
                 with attention_autocast(self.device):
                     logits = self.model(X_t, mask_t).squeeze(-1).float()
                 batch_pred = (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
@@ -643,6 +717,8 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
             "batch_kind": self.batch_kind_,
             "best_epoch": self.best_epoch_,
             "best_val_loss": self.best_val_loss_,
+            "seq_mean": self.seq_mean_.detach().cpu() if self.seq_mean_ is not None else None,
+            "seq_scale": self.seq_scale_.detach().cpu() if self.seq_scale_ is not None else None,
             "model_state_dict": self.model.state_dict(),
             "mixer_state_dict": self.model.mixer.state_dict(),
         }

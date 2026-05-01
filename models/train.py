@@ -1161,6 +1161,7 @@ def _run_task(
                 model_name=model_name,
                 split_variant=split_variant,
                 model_info=model_info,
+                task_config=config,
             )
             saved_run = training_route.run_model(
                 model_name=model_name,

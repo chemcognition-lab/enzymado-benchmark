@@ -61,9 +61,13 @@ fi
 : "${OUTPUT_DIR:=${REPO}/results/predictions}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
+: "${TASK_SCOPES:=}"
 : "${SPLIT_VARIANT:=}"
 : "${SKIP_LABEL_KINDS:=}"
-: "${COMMON_IDS_PATH:=}"
+# Default to the embedding-intersection allowlist so every embedding is evaluated
+# on the exact same subset of IDs. Override with `COMMON_IDS_PATH= sbatch ...` to
+# disable, or point it elsewhere.
+: "${COMMON_IDS_PATH:=${REPO}/results/embedding_intersection/common_ids.txt}"
 : "${BATCH_SIZE:=16}"
 : "${EMBEDDING_STORAGE_FORMAT:=safetensors}"
 : "${OVERWRITE_RESULTS:=0}"
@@ -158,6 +162,9 @@ fi
 if [[ -n "${TASK_NAMES}" ]]; then
     echo "Task names: ${TASK_NAMES}"
 fi
+if [[ -n "${TASK_SCOPES}" ]]; then
+    echo "Task scopes: ${TASK_SCOPES}"
+fi
 if [[ -n "${SPLIT_VARIANT}" ]]; then
     echo "Split variant: ${SPLIT_VARIANT}"
 fi
@@ -194,6 +201,15 @@ if [[ -n "${TASK_NAMES}" ]]; then
     for _task_name in "${_task_names[@]}"; do
         if [[ -n "${_task_name}" ]]; then
             TRAIN_ARGS+=(--task_name "${_task_name}")
+        fi
+    done
+fi
+
+if [[ -n "${TASK_SCOPES}" ]]; then
+    IFS=',' read -r -a _task_scopes <<< "${TASK_SCOPES}"
+    for _task_scope in "${_task_scopes[@]}"; do
+        if [[ -n "${_task_scope}" ]]; then
+            TRAIN_ARGS+=(--task_scope "${_task_scope}")
         fi
     done
 fi

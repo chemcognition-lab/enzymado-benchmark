@@ -38,7 +38,10 @@ init_cluster_runtime_dirs
 : "${SEED:=0}"
 : "${PROFILE_DIR:=${SCRATCH_ROOT}/results/xgb_bench_profiles/${EMB_NAME}}"
 : "${OUTPUT_JSON:=${SCRATCH_ROOT}/results/xgb_benchmark_${EMB_NAME}.json}"
-: "${COMMON_IDS_PATH:=}"
+# Default to the embedding-intersection allowlist so every embedding is evaluated
+# on the exact same subset of IDs. Override with `COMMON_IDS_PATH= sbatch ...` to
+# disable, or point it elsewhere.
+: "${COMMON_IDS_PATH:=${REPO}/results/embedding_intersection/common_ids.txt}"
 
 if [[ -z "${CARD_PATH:-}" ]]; then
     CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"

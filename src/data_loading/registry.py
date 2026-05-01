@@ -211,11 +211,11 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         label_kind="scalar_regression",
         dataset_paths={
             "random": PROJECT_ROOT
-            / "data/processed/real_case/align_amylase_activity/alpha_amylase__specific_activity.csv",
+            / "data/processed/real_case/align_amylase_activity/"
+            "alpha_amylase__specific_activity_random_80_10_10_standardized.csv",
         },
-        target_column="specific_activity",
+        target_column="specific_activity_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_column="source_split",
         split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_amylase_expression": TaskConfig(
@@ -224,11 +224,11 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         label_kind="scalar_regression",
         dataset_paths={
             "random": PROJECT_ROOT
-            / "data/processed/real_case/align_amylase_expression/alpha_amylase__expression.csv",
+            / "data/processed/real_case/align_amylase_expression/"
+            "alpha_amylase__expression_random_80_10_10_standardized.csv",
         },
-        target_column="expression",
+        target_column="expression_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_column="source_split",
         split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_amylase_stability": TaskConfig(
@@ -237,11 +237,11 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         label_kind="scalar_regression",
         dataset_paths={
             "random": PROJECT_ROOT
-            / "data/processed/real_case/align_amylase_stability/alpha_amylase__thermostability.csv",
+            / "data/processed/real_case/align_amylase_stability/"
+            "alpha_amylase__thermostability_random_80_10_10_standardized.csv",
         },
-        target_column="thermostability",
+        target_column="thermostability_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_column="source_split",
         split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_glucosidase_activity": TaskConfig(
@@ -250,11 +250,11 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         label_kind="scalar_regression",
         dataset_paths={
             "random": PROJECT_ROOT
-            / "data/processed/real_case/align_glucosidase_activity/b_glucosidase__activity.csv",
+            / "data/processed/real_case/align_glucosidase_activity/"
+            "b_glucosidase__activity_random_80_10_10_standardized.csv",
         },
-        target_column="activity",
+        target_column="activity_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_column="source_split",
         split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_glucosidase_expression": TaskConfig(

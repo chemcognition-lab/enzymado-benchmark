@@ -39,18 +39,20 @@ def is_fast_classification_eligible(payload: PredictionPayload) -> bool:
     p = payload.predictions
     if y.size == 0 or p.size == 0:
         return False
-    finite_y = y[np.isfinite(y)] if np.issubdtype(y.dtype, np.floating) else y
-    finite_p = p[np.isfinite(p)] if np.issubdtype(p.dtype, np.floating) else p
-    if finite_y.size == 0 or finite_p.size == 0:
+    # Use NaN-aware reductions so we never materialise a float-filtered copy of
+    # the full (N, C) array (that copy is what made this >1 GB on multi-head EC).
+    if np.issubdtype(y.dtype, np.floating):
+        y_max, y_min = float(np.nanmax(y)), float(np.nanmin(y))
+    else:
+        y_max, y_min = float(y.max()), float(y.min())
+    if np.issubdtype(p.dtype, np.floating):
+        p_max, p_min = float(np.nanmax(p)), float(np.nanmin(p))
+    else:
+        p_max, p_min = float(p.max()), float(p.min())
+    if not all(np.isfinite(v) for v in (y_max, y_min, p_max, p_min)):
         return False
-    y_round = np.rint(finite_y).astype(np.int64, copy=False)
-    p_round = np.rint(finite_p).astype(np.int64, copy=False)
-    return (
-        int(y_round.max(initial=0)) <= 1
-        and int(p_round.max(initial=0)) <= 1
-        and int(y_round.min(initial=0)) >= 0
-        and int(p_round.min(initial=0)) >= 0
-    )
+    # After rounding, values must land in {0, 1}. Allow a small margin for FP noise.
+    return y_max <= 1.5 and p_max <= 1.5 and y_min >= -0.5 and p_min >= -0.5
 
 
 def precompute_binary_micro_indicators(payload: PredictionPayload) -> np.ndarray:
@@ -71,13 +73,13 @@ def precompute_binary_micro_indicators(payload: PredictionPayload) -> np.ndarray
     else:
         valid = np.asarray(m, dtype=bool)
 
-    # Replace masked-out NaNs before rounding so the int8 cast does not warn.
-    # The boolean masks below still gate every cell on `valid`, so the value
-    # we substitute here never affects the counts.
-    y_clean = np.where(valid, y, 0.0) if np.issubdtype(y.dtype, np.floating) else y
-    p_clean = np.where(valid, p, 0.0) if np.issubdtype(p.dtype, np.floating) else p
-    y_int = np.rint(y_clean).astype(np.int8, copy=False)
-    p_int = np.rint(p_clean).astype(np.int8, copy=False)
+    # Cast to int8 directly. Masked-out cells may carry NaN → undefined int8,
+    # but the boolean masks below gate every cell on `valid`, so those cells
+    # never enter the TP/FP/FN/TN counts. Suppress the cast warning that
+    # numpy issues for NaN→int conversions; the result is still correct.
+    with np.errstate(invalid="ignore"):
+        y_int = np.rint(y).astype(np.int8, copy=False)
+        p_int = np.rint(p).astype(np.int8, copy=False)
 
     # Build the four indicator masks. For 2D arrays we sum within each row;
     # for 1D arrays the per-cell indicator already lives at the unit level.

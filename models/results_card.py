@@ -10,6 +10,7 @@ from typing import Any
 
 RESULTS_CARD_VERSION = 2
 RESULTS_CARD_NAME = "enzymado_results"
+INVALIDATION_MARKER = "target_audit_invalid.json"
 PER_RESIDUE_TASKS = {"active_sites", "binding_site"}
 SPLIT_FAMILY_ALIASES = {
     "random": "random",
@@ -215,6 +216,8 @@ def is_result_entry_complete(entry: dict[str, Any] | None) -> bool:
     """Return whether a results-card entry points to a finished artifact set."""
     if not entry:
         return False
+    if entry.get("invalidated"):
+        return False
     required_fields = (
         "model_file",
         "train_pred_file",
@@ -226,7 +229,12 @@ def is_result_entry_complete(entry: dict[str, Any] | None) -> bool:
     required_paths = [entry.get(field) for field in required_fields]
     if not all(required_paths):
         return False
-    return all(Path(path).exists() for path in required_paths)
+    if not all(Path(path).exists() for path in required_paths):
+        return False
+    run_dir = entry.get("run_dir")
+    if not run_dir and entry.get("model_file"):
+        run_dir = str(Path(entry["model_file"]).parent)
+    return not (run_dir and (Path(run_dir) / INVALIDATION_MARKER).exists())
 
 
 def ensure_results_card(path: Path, benchmark_card: dict[str, Any] | None = None) -> None:
@@ -306,6 +314,7 @@ def update_results_card_locked(
 
 
 __all__ = [
+    "INVALIDATION_MARKER",
     "PER_RESIDUE_TASKS",
     "RESULTS_CARD_NAME",
     "RESULTS_CARD_VERSION",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import lzma
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -55,6 +56,7 @@ class TrainOutputTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
+            (run_dir / "target_audit_invalid.json").write_text("{}", encoding="utf-8")
             model_info = {"wrap": FakeWrapper, "params": {"epochs": 3, "lr": 0.01}}
             hparams_file = write_hparams_file(
                 run_dir,
@@ -63,6 +65,13 @@ class TrainOutputTests(unittest.TestCase):
                 model_name="mlp_regressor",
                 split_variant="random",
                 model_info=model_info,
+                task_config=types.SimpleNamespace(
+                    name="ph_opt",
+                    batch_kind="protein_global",
+                    label_kind="scalar_regression",
+                    target_column="phopt_median_standardized",
+                    dataset_paths={"random": run_dir / "phopt.csv"},
+                ),
             )
             metrics_file = write_metrics_file(run_dir, {"val": {"mae": 0.1}})
             training_log_file = write_training_log_file(FakeTrained(), run_dir)
@@ -97,7 +106,10 @@ class TrainOutputTests(unittest.TestCase):
                 str(run_dir / "train_predictions.safetensors.xz"),
             )
             self.assertEqual(entry["model_safetensors_file"], str(run_dir / "model.safetensors"))
-            self.assertEqual(json.loads(hparams_file.read_text())["params"]["epochs"], 3)
+            hparams = json.loads(hparams_file.read_text())
+            self.assertEqual(hparams["params"]["epochs"], 3)
+            self.assertEqual(hparams["task_config"]["target_column"], "phopt_median_standardized")
+            self.assertFalse((run_dir / "target_audit_invalid.json").exists())
 
     def test_safetensors_prediction_file_is_compressed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
