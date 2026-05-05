@@ -73,6 +73,31 @@ def _is_xgb_cuda_oom(exc: Exception) -> bool:
     )
 
 
+def _is_xgb_cuda_failure(exc: Exception) -> bool:
+    """Heuristic for any XGBoost failure that should trigger a CPU fallback.
+
+    Catches OOM plus the broader class of CUDA / device-mismatch errors that
+    XGBoost 3.x can surface from QuantileDMatrix(iter, ...) when fed CPU numpy
+    arrays while the booster targets cuda — a vague C++ `vector::_M_range_check`
+    is the typical symptom.
+    """
+    if XGBoostError is not None and not isinstance(exc, XGBoostError):
+        return False
+    if _is_xgb_cuda_oom(exc):
+        return True
+    message = str(exc).lower()
+    return any(
+        needle in message
+        for needle in (
+            "vector::_m_range_check",
+            "cuda",
+            "mismatched device",
+            "device_vector",
+            "gpu",
+        )
+    )
+
+
 def _atomic_joblib_dump(payload, path: str | Path) -> None:
     path_obj = Path(path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -1125,11 +1150,27 @@ class XGBResidueBinaryClassifier:
                 label=progress_label,
             )
 
-        dtrain, train_impl = self._build_quantile_dmatrix(
-            dataloader,
-            progress_label=progress_label,
-            split_name="train",
-        )
+        try:
+            dtrain, train_impl = self._build_quantile_dmatrix(
+                dataloader,
+                progress_label=progress_label,
+                split_name="train",
+            )
+        except Exception as exc:
+            if self.model_device_ != "cpu" and _is_xgb_cuda_failure(exc):
+                _progress_log(
+                    "GPU failure building residue QuantileDMatrix "
+                    f"({type(exc).__name__}: {exc}); retrying on CPU.",
+                    label=progress_label,
+                )
+                self.model_device_ = "cpu"
+                dtrain, train_impl = self._build_quantile_dmatrix(
+                    dataloader,
+                    progress_label=progress_label,
+                    split_name="train",
+                )
+            else:
+                raise
         if train_impl.residues_seen == 0:
             raise ValueError("No residue-level training samples found for XGBoost.")
 
@@ -1170,8 +1211,12 @@ class XGBResidueBinaryClassifier:
         try:
             self.booster = xgb.train(**train_kwargs)
         except Exception as exc:
-            if self.model_device_ != "cpu" and _is_xgb_cuda_oom(exc):
-                _progress_log("GPU OOM during residue XGBoost fit, retrying on CPU.", label=progress_label)
+            if self.model_device_ != "cpu" and _is_xgb_cuda_failure(exc):
+                _progress_log(
+                    f"GPU failure during residue XGBoost fit ({type(exc).__name__}: {exc}); "
+                    "retrying on CPU.",
+                    label=progress_label,
+                )
                 self.model_device_ = "cpu"
                 train_kwargs["params"] = self._make_train_params(device_override="cpu")
                 self.booster = xgb.train(**train_kwargs)

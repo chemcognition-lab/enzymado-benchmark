@@ -260,7 +260,11 @@ def _residue_xgb_classifier_entry() -> dict:
             "colsample_bytree": 0.25,
             "max_bin": 64,
             "n_jobs": -1,
-            "device": "cuda" if torch.cuda.is_available() else "cpu",
+            # Force CPU for the streaming QuantileDMatrix path: XGBoost 3.x crashes
+            # with `vector::_M_range_check` when building a QuantileDMatrix from a
+            # CPU iterator while the booster targets cuda. CPU is plenty fast here
+            # (the per-batch sums dominate; binning to <=256 bins is cheap).
+            "device": "cpu",
             "random_state": 0,
             "eval_metric": "logloss",
             "early_stopping_rounds": 10,
