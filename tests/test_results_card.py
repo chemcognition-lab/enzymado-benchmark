@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def load_migration_module():
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "enzyme_utils" / "migrate_results_card.py"
+    module_path = Path(__file__).resolve().parents[1] / "scripts" / "results" / "migrate_results_card.py"
     spec = importlib.util.spec_from_file_location("migrate_results_card", module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

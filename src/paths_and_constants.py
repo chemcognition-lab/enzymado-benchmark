@@ -26,8 +26,6 @@ class Paths:
     results_dir = project_root / "results"
     results_figures_dir = results_dir / "figures"
     scripts_dir = project_root / "scripts"
-    scripts_data_utils_dir = scripts_dir / "data_utils"
-    scripts_enzyme_utils_dir = scripts_dir / "enzyme_utils"
     src_dir = project_root / "src"
     tests_dir = project_root / "tests"
 

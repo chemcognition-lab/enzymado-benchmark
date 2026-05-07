@@ -1,0 +1,25 @@
+"""Training pipelines, wrappers, and output helpers."""
+
+from training.residue import (
+    ResidueAwareLoaders,
+    ResidueAwareOutputs,
+    build_residue_aware_loaders,
+    collect_residue_aware_outputs,
+    train_residue_aware_model,
+)
+from training.task_rows import (
+    LoadedTaskRows,
+    load_task_rows_bundle,
+    log_loaded_data_summary,
+)
+
+__all__ = [
+    "LoadedTaskRows",
+    "ResidueAwareLoaders",
+    "ResidueAwareOutputs",
+    "build_residue_aware_loaders",
+    "collect_residue_aware_outputs",
+    "load_task_rows_bundle",
+    "log_loaded_data_summary",
+    "train_residue_aware_model",
+]

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.clean_utils.concat_unique_protein_sequences import build_unique_sequences
+from scripts.data_prep.concat_unique_protein_sequences import build_unique_sequences
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:

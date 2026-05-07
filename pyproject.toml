@@ -3,9 +3,9 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "src"
+name = "enzymado"
 version = "0.0.1"
-description = "A short description of the project."
+description = "Enzymado: protein function benchmark across embedding models and properties."
 authors = [
   { name = "chemcognition-lab" },
 ]
@@ -79,7 +79,14 @@ explicit = true
 [tool.ruff]
 line-length = 99
 src = ["src"]
-include = ["pyproject.toml", "src/**/*.py"]
+include = [
+    "pyproject.toml",
+    "src/**/*.py",
+    "models/**/*.py",
+    "scripts/**/*.py",
+    "embedding_scripts/**/*.py",
+    "tests/**/*.py",
+]
 
 [tool.ruff.lint]
 extend-select = [
@@ -90,5 +97,12 @@ extend-select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = [
+    "src",
+    "models",
+    "training",
+    "data_loading",
+    "evaluation",
+    "dataset_card",
+]
 force-sort-within-sections = true

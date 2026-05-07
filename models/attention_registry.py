@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from models.attention_wrappers import (
+from training.attention_wrappers import (
     AttentionBinaryClassifierTorch,
     AttentionECMultiHeadClassifierTorch,
     AttentionRegressorTorch,

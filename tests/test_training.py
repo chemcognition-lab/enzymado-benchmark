@@ -37,9 +37,9 @@ class StructuredTrainingTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_ec_multihead_training_and_prediction_serialization(self) -> None:
-        from models.models import ECMultiHeadClassifierTorch
-        from models.train import get_target_payload
-        from models.train_output import make_safetensors_predictions_file
+        from training.torch_structured_wrappers import ECMultiHeadClassifierTorch
+        from training.train import get_target_payload
+        from training.train_output import make_safetensors_predictions_file
         from safetensors.torch import load as load_tensors
 
         dataset_path = self.root / "ec_random_standardized.csv"
@@ -100,7 +100,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIn("target_mask_level_3", payload)
 
     def test_ec_multihead_pooled_training_and_prediction(self) -> None:
-        from models.models import ECMultiHeadClassifierTorch
+        from training.torch_structured_wrappers import ECMultiHeadClassifierTorch
 
         X = np.asarray(
             [
@@ -147,7 +147,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIsNotNone(model.best_epoch_)
 
     def test_build_protein_global_Xy_direct(self) -> None:
-        from models.train import build_protein_global_Xy_direct
+        from training.train import build_protein_global_Xy_direct
 
         config = TaskConfig(
             name="solubility_test",
@@ -176,7 +176,7 @@ class StructuredTrainingTests(unittest.TestCase):
         np.testing.assert_array_equal(y, np.asarray([1.0, 0.0], dtype=np.float32))
 
     def test_build_mutation_delta_Xy_direct(self) -> None:
-        from models.train import build_mutation_delta_Xy_direct
+        from training.train import build_mutation_delta_Xy_direct
 
         config = TaskConfig(
             name="dtm_test",
@@ -219,7 +219,7 @@ class StructuredTrainingTests(unittest.TestCase):
         np.testing.assert_array_equal(y, np.asarray([1.5, -0.5], dtype=np.float32))
 
     def test_load_task_embedding_store_materializes_small_protein_residue_tasks_in_auto_mode(self) -> None:
-        from models.train import load_task_embedding_store
+        from training.train import load_task_embedding_store
 
         config = TaskConfig(
             name="active_sites_test",
@@ -233,8 +233,8 @@ class StructuredTrainingTests(unittest.TestCase):
         materialized_store = object()
 
         with (
-            mock.patch("models.train.load_embedding_store_subset", return_value=materialized_store) as load_subset,
-            mock.patch("models.train.load_lazy_embedding_store") as load_lazy,
+            mock.patch("training.train.load_embedding_store_subset", return_value=materialized_store) as load_subset,
+            mock.patch("training.train.load_lazy_embedding_store") as load_lazy,
         ):
             store, mode = load_task_embedding_store(
                 config,
@@ -252,7 +252,7 @@ class StructuredTrainingTests(unittest.TestCase):
         load_lazy.assert_not_called()
 
     def test_load_task_embedding_store_uses_lazy_for_large_protein_residue_tasks_in_auto_mode(self) -> None:
-        from models.train import load_task_embedding_store
+        from training.train import load_task_embedding_store
 
         config = TaskConfig(
             name="binding_sites_test",
@@ -266,8 +266,8 @@ class StructuredTrainingTests(unittest.TestCase):
         lazy_store = object()
 
         with (
-            mock.patch("models.train.load_embedding_store_subset") as load_subset,
-            mock.patch("models.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
+            mock.patch("training.train.load_embedding_store_subset") as load_subset,
+            mock.patch("training.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
         ):
             store, mode = load_task_embedding_store(
                 config,
@@ -285,7 +285,7 @@ class StructuredTrainingTests(unittest.TestCase):
         load_subset.assert_not_called()
 
     def test_load_task_embedding_store_keeps_lazy_strategy_for_non_residue_tasks(self) -> None:
-        from models.train import load_task_embedding_store
+        from training.train import load_task_embedding_store
 
         config = TaskConfig(
             name="solubility_test",
@@ -298,8 +298,8 @@ class StructuredTrainingTests(unittest.TestCase):
         lazy_store = object()
 
         with (
-            mock.patch("models.train.load_embedding_store_subset") as load_subset,
-            mock.patch("models.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
+            mock.patch("training.train.load_embedding_store_subset") as load_subset,
+            mock.patch("training.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
         ):
             store, mode = load_task_embedding_store(
                 config,
@@ -317,9 +317,9 @@ class StructuredTrainingTests(unittest.TestCase):
     def test_residue_binary_training_and_prediction_serialization(self) -> None:
         from torch.utils.data import DataLoader
 
-        from models.models import ResidueBinaryClassifierTorch
-        from models.train import get_target_payload
-        from models.train_output import make_safetensors_predictions_file
+        from training.torch_structured_wrappers import ResidueBinaryClassifierTorch
+        from training.train import get_target_payload
+        from training.train_output import make_safetensors_predictions_file
         from safetensors.torch import load as load_tensors
 
         dataset_path = self.root / "active_sites_random_standardized.csv"
@@ -389,7 +389,7 @@ class StructuredTrainingTests(unittest.TestCase):
         from torch.utils.data import DataLoader
 
         from models.attention_blocks import batch_to_attention_tensors
-        from models.attention_wrappers import AttentionBinaryClassifierTorch
+        from training.attention_wrappers import AttentionBinaryClassifierTorch
 
         dataset_path = self.root / "binding_random_standardized.csv"
         write_csv(
@@ -452,7 +452,7 @@ class StructuredTrainingTests(unittest.TestCase):
         np.testing.assert_allclose(normalized.std(axis=0), np.ones(2, dtype=np.float32), atol=1e-6)
 
     def test_get_target_payload_for_residue_tasks_does_not_reload_embeddings(self) -> None:
-        from models.train import get_target_payload
+        from training.train import get_target_payload
 
         dataset_path = self.root / "active_sites_random_standardized.csv"
         write_csv(
@@ -494,8 +494,8 @@ class StructuredTrainingTests(unittest.TestCase):
     def test_xgb_residue_binary_training_and_prediction(self) -> None:
         from torch.utils.data import DataLoader
 
-        from models.models import XGBResidueBinaryClassifier
-        from models.train import get_target_payload
+        from training.xgb_wrappers import XGBResidueBinaryClassifier
+        from training.train import get_target_payload
 
         dataset_path = self.root / "binding_sites_random_standardized.csv"
         write_csv(
@@ -565,7 +565,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertEqual(preds.shape, (2, 4))
 
     def test_xgb_flat_ec_block_classifier_trains_blocks(self) -> None:
-        import models.xgb_wrappers as wrappers
+        import training.xgb_wrappers as wrappers
 
         fit_label_shapes: list[tuple[int, ...]] = []
 
@@ -641,7 +641,7 @@ class StructuredTrainingTests(unittest.TestCase):
         np.testing.assert_array_equal(preds[:, 4], np.ones(4, dtype=np.float32))
 
     def test_train_model_loader_passes_supported_extra_kwargs(self) -> None:
-        from models.train_runtime import train_model_loader
+        from training.train_runtime import train_model_loader
 
         calls: dict[str, object] = {}
 

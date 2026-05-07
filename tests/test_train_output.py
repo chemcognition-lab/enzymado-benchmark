@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from models.train_output import (
+from training.train_output import (
     evaluate_predictions,
     make_result_entry,
     make_safetensors_predictions_file,

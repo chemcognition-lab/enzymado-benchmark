@@ -2,7 +2,7 @@ import csv
 import json
 from pathlib import Path
 
-from scripts.clean_utils.clean_real import (
+from scripts.data_prep.clean_real import (
     build_align_rows,
     build_argument_parser,
     resolve_align_processed_dir,

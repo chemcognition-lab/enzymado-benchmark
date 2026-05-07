@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def load_sync_module():
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "enzyme_utils" / "sync_training_results.py"
+    module_path = Path(__file__).resolve().parents[1] / "scripts" / "results" / "sync_training_results.py"
     spec = importlib.util.spec_from_file_location("sync_training_results", module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

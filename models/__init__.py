@@ -22,7 +22,7 @@ from models.nn_blocks import (
     SGDModel,
     SharedMLPBackbone,
 )
-from models.torch_standard_wrappers import (
+from training.torch_standard_wrappers import (
     LinearClassifierTorch,
     LinearRegressorTorch,
     MLPClassifierTorch,
@@ -30,11 +30,11 @@ from models.torch_standard_wrappers import (
     SGDClassifierTorch,
     SGDRegressorTorch,
 )
-from models.torch_structured_wrappers import (
+from training.torch_structured_wrappers import (
     ECMultiHeadClassifierTorch,
     ResidueBinaryClassifierTorch,
 )
-from models.xgb_wrappers import (
+from training.xgb_wrappers import (
     XGBClassifier,
     XGBFlatECBlockClassifier,
     XGBFlatECClassifier,
