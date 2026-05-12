@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import sys
 import time
@@ -43,7 +42,6 @@ from training.train_common import (
 from training.train_data import (
     get_dataloader,
     get_target_payload,
-    load_lazy_embedding_store,
     load_lazy_safetensors_embedding_store,
 )
 from training.train_output import (
@@ -133,23 +131,15 @@ def _build_attention_task_bundles(
     split_variant: str,
     emb_path: str | Path,
     task_rows: LoadedTaskRows,
-    *,
-    embedding_storage_format: str = "safetensors",
 ) -> AttentionTaskBundles:
     """Load the lazy store and build train/val/test bundles for one attention task."""
     t0 = time.time()
-    if embedding_storage_format == "h5":
-        store = load_lazy_embedding_store(emb_path, task_rows.needed_ids, task_rows.needed_sequences)
-    else:
-        store = load_lazy_safetensors_embedding_store(
-            emb_path,
-            task_rows.needed_ids,
-            task_rows.needed_sequences,
-            storage_format=embedding_storage_format,
-        )
+    store = load_lazy_safetensors_embedding_store(
+        emb_path, task_rows.needed_ids, task_rows.needed_sequences
+    )
     log(
-        f"    Lazy {embedding_storage_format} store ready ({time.time()-t0:.1f}s) — "
-        f"{len(store._available_ids)} ids, {len(store._seq_to_h5key)} seqs indexed"
+        f"    Lazy safetensors store ready ({time.time()-t0:.1f}s) — "
+        f"{len(store._available_ids)} ids, {len(store._seq_to_key)} seqs indexed"
     )
 
     t0 = time.time()
@@ -247,7 +237,6 @@ def _run_attention_task(
     sequence_to_id: dict[str, str],
     batch_size: int,
     split_variant_filter: str | None,
-    embedding_storage_format: str,
     overwrite_results: bool,
     benchmark_card: dict[str, Any] | None = None,
     results_card: dict[str, Any] | None = None,
@@ -325,7 +314,6 @@ def _run_attention_task(
             split_variant,
             emb_info["path"],
             task_rows,
-            embedding_storage_format=embedding_storage_format,
         )
         n_train = len(bundles.train_bundle.dataset)
         n_val = len(bundles.val_bundle.dataset)
@@ -511,7 +499,6 @@ def main(
     allowed_ids_path: str | None = None,
     batch_size: int = 16,
     split_variant_filter: str | None = None,
-    embedding_storage_format: str = "safetensors",
     overwrite_results: bool = False,
     *,
     results_card_path: str,
@@ -534,7 +521,6 @@ def main(
         log(f"[startup] Skipping label kinds: {sorted(skip_label_kinds)}")
     if split_variant_filter is not None:
         log(f"[startup] Restricting split variant to: {split_variant_filter}")
-    log(f"[startup] Embedding storage format: {embedding_storage_format}")
     log(f"[startup] Overwrite results: {overwrite_results}")
 
     card = read_json(card_path)
@@ -594,7 +580,6 @@ def main(
                     sequence_to_id=sequence_to_id,
                     batch_size=batch_size,
                     split_variant_filter=split_variant_filter,
-                    embedding_storage_format=embedding_storage_format,
                     overwrite_results=overwrite_results,
                     benchmark_card=card,
                     results_card=results_card,
@@ -652,12 +637,6 @@ if __name__ == "__main__":
         help="Train only this split variant. Defaults to each task's card default_split.",
     )
     parser.add_argument(
-        "--embedding_storage_format",
-        choices=("safetensors", "h5", "auto"),
-        default=os.getenv("ENZYMADO_EMBEDDING_STORAGE_FORMAT", "safetensors"),
-        help="Embedding storage backend to use. Defaults to safetensors.",
-    )
-    parser.add_argument(
         "--overwrite_results",
         action="store_true",
         help="Replace existing artifacts for selected attention runs instead of skipping completed runs.",
@@ -680,7 +659,6 @@ if __name__ == "__main__":
         allowed_ids_path=args.allowed_ids,
         batch_size=args.batch_size,
         split_variant_filter=args.split_variant,
-        embedding_storage_format=args.embedding_storage_format,
         overwrite_results=args.overwrite_results,
         results_card_path=args.results_card,
     )

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+import torch
 
 from .splits import clean_text, normalize_identifier, normalize_sequence
 
@@ -17,36 +18,18 @@ class EmbeddingLookupError(KeyError):
     pass
 
 
-def _h5_dataset_to_array(ds) -> np.ndarray:
-    """Load an H5 dataset, preserving int16 storage for BF16-tagged datasets.
-
-    BF16-tagged datasets stay as int16 raw bit-patterns so the collator can
-    produce torch.bfloat16 tensors with zero extra copies.  Legacy float32
-    datasets are returned as float32 unchanged.
-    """
-    arr = np.asarray(ds)
-    attrs = getattr(ds, "attrs", {})
-    if attrs.get("dtype", "") == "bfloat16":
-        return arr  # int16 raw BF16 bits — collator will view as torch.bfloat16
-    return np.asarray(arr, dtype=np.float32)
-
-
-def _bf16_int16_to_float32(arr: np.ndarray) -> np.ndarray:
-    """Decode BF16-as-int16 to float32 (needed only for arithmetic between embeddings)."""
-    return (arr.view(np.uint16).astype(np.uint32) << 16).view(np.float32)
-
-
-def _ensure_2d_array(value: np.ndarray, key: str) -> np.ndarray:
+def _ensure_2d_tensor(value: torch.Tensor, key: str) -> torch.Tensor:
     """Validate that residue embeddings keep the expected `(length, dim)` shape."""
-    array = np.asarray(value)  # preserve dtype (int16 for BF16, float32 for legacy)
-    if array.ndim != 2:
-        raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {array.shape}.")
-    return array
+    if not torch.is_tensor(value):
+        value = torch.as_tensor(value)
+    if value.ndim != 2:
+        raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {tuple(value.shape)}.")
+    return value
 
 
 @lru_cache(maxsize=None)
 def _load_sequence_index(sequence_index_path: str) -> dict[str, str]:
-    """Load the normalized sequence-to-sequence-id index used for H5 subsets."""
+    """Load the normalized sequence-to-sequence-id index used for safetensors subsets."""
     mapping: dict[str, str] = {}
     csv_path = Path(sequence_index_path)
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
@@ -62,125 +45,23 @@ def _load_sequence_index(sequence_index_path: str) -> dict[str, str]:
 
 @dataclass
 class ResidueEmbeddingStore:
-    """Lookup store for residue embeddings keyed by sequence and/or identifier."""
-    by_sequence: dict[str, np.ndarray] = field(default_factory=dict)
-    by_id: dict[str, np.ndarray] = field(default_factory=dict)
+    """Lookup store for residue embeddings keyed by sequence and/or identifier.
+
+    Embeddings are held as ``torch.bfloat16`` tensors of shape ``(length, dim)``.
+    """
+    by_sequence: dict[str, torch.Tensor] = field(default_factory=dict)
+    by_id: dict[str, torch.Tensor] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Normalize keys once so downstream lookups stay consistent."""
         self.by_sequence = {
-            normalize_sequence(key): _ensure_2d_array(value, key)
+            normalize_sequence(key): _ensure_2d_tensor(value, key)
             for key, value in self.by_sequence.items()
         }
         self.by_id = {
-            clean_text(key): _ensure_2d_array(value, key)
+            clean_text(key): _ensure_2d_tensor(value, key)
             for key, value in self.by_id.items()
         }
-
-    @classmethod
-    def _load_h5_mapping(cls, file_path: Path | str) -> dict[str, np.ndarray]:
-        """Load every top-level H5 dataset into memory as a float32 array."""
-        try:
-            import h5py
-        except ModuleNotFoundError as exc:
-            raise ImportError(
-                "h5py is required to load residue embeddings from .h5 files."
-            ) from exc
-
-        mapping: dict[str, np.ndarray] = {}
-        with h5py.File(str(file_path), "r") as handle:
-            for key in handle.keys():
-                mapping[str(key)] = _h5_dataset_to_array(handle[key])
-        return mapping
-
-    @classmethod
-    def from_h5(
-        cls,
-        file_path: Path | str,
-        key_kind: str = "id",
-    ) -> "ResidueEmbeddingStore":
-        """Build a store from a single H5 file keyed by id or sequence."""
-        mapping = cls._load_h5_mapping(file_path)
-        if key_kind == "id":
-            return cls(by_id=mapping)
-        if key_kind == "sequence":
-            return cls(by_sequence=mapping)
-        raise ValueError("key_kind must be either 'id' or 'sequence'.")
-
-    @classmethod
-    def from_h5_files(
-        cls,
-        id_h5_path: Path | str | None = None,
-        sequence_h5_path: Path | str | None = None,
-    ) -> "ResidueEmbeddingStore":
-        """Build a store from separate identifier-keyed and sequence-keyed H5 files."""
-        if id_h5_path is None and sequence_h5_path is None:
-            raise ValueError("Provide at least one of id_h5_path or sequence_h5_path.")
-
-        by_id: dict[str, np.ndarray] = {}
-        by_sequence: dict[str, np.ndarray] = {}
-        if id_h5_path is not None:
-            by_id = cls._load_h5_mapping(id_h5_path)
-        if sequence_h5_path is not None:
-            by_sequence = cls._load_h5_mapping(sequence_h5_path)
-        return cls(by_id=by_id, by_sequence=by_sequence)
-
-    @classmethod
-    def from_h5_subset(
-        cls,
-        file_path: Path | str,
-        needed_ids: set[str] | None = None,
-        needed_sequences: set[str] | None = None,
-        sequence_index_path: Path | str | None = None,
-    ) -> "ResidueEmbeddingStore":
-        """Load only the identifiers and sequences required for a dataset split."""
-        try:
-            import h5py
-        except ModuleNotFoundError as exc:
-            raise ImportError(
-                "h5py is required to load residue embeddings from .h5 files."
-            ) from exc
-
-        normalized_ids = {
-            clean_text(value)
-            for value in (needed_ids or set())
-            if clean_text(value)
-        }
-        normalized_sequences = {
-            normalize_sequence(value)
-            for value in (needed_sequences or set())
-            if normalize_sequence(value)
-        }
-
-        sequence_key_to_sequence = {
-            sequence: sequence
-            for sequence in normalized_sequences
-        }
-        if sequence_index_path is not None and normalized_sequences:
-            sequence_to_id = _load_sequence_index(str(sequence_index_path))
-            for sequence in normalized_sequences:
-                sequence_id = sequence_to_id.get(sequence)
-                if sequence_id:
-                    sequence_key_to_sequence[sequence_id] = sequence
-
-        by_id: dict[str, np.ndarray] = {}
-        by_sequence: dict[str, np.ndarray] = {}
-        with h5py.File(str(file_path), "r") as handle:
-            for raw_key in handle.keys():
-                key = clean_text(str(raw_key))
-                array: np.ndarray | None = None
-
-                if key in normalized_ids:
-                    array = _h5_dataset_to_array(handle[raw_key])
-                    by_id[key] = array
-
-                sequence = sequence_key_to_sequence.get(key)
-                if sequence is not None:
-                    if array is None:
-                        array = _h5_dataset_to_array(handle[raw_key])
-                    by_sequence[sequence] = array
-
-        return cls(by_id=by_id, by_sequence=by_sequence)
 
     def has_sequence(self, sequence: str) -> bool:
         """Return whether a normalized sequence key is present."""
@@ -210,7 +91,7 @@ class ResidueEmbeddingStore:
                 f"Missing residue embedding for id '{normalized}'."
             ) from exc
 
-    def lookup_sequence(self, sequence: str) -> np.ndarray:
+    def lookup_sequence(self, sequence: str) -> torch.Tensor:
         """Fetch an embedding by normalized sequence."""
         normalized = normalize_sequence(sequence)
         try:
@@ -218,7 +99,7 @@ class ResidueEmbeddingStore:
         except KeyError as exc:
             raise EmbeddingLookupError(f"Missing residue embedding for sequence '{normalized[:20]}...'") from exc
 
-    def lookup_id(self, identifier: str) -> np.ndarray:
+    def lookup_id(self, identifier: str) -> torch.Tensor:
         """Fetch an embedding by normalized identifier."""
         normalized = clean_text(identifier)
         try:
@@ -231,7 +112,7 @@ class ResidueEmbeddingStore:
         row: dict[str, str],
         id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id"),
         sequence_column: str = "protein_sequence",
-    ) -> np.ndarray:
+    ) -> torch.Tensor:
         """Resolve the best available embedding key for a dataset row."""
         sequence = normalize_sequence(row.get(sequence_column))
         if sequence and self.has_sequence(sequence):
@@ -282,7 +163,7 @@ class ProteinResidueEmbeddingBuilder:
     sequence_column: str = "protein_sequence"
     id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
-    def build(self, row: dict[str, str]) -> np.ndarray:
+    def build(self, row: dict[str, str]) -> torch.Tensor:
         """Materialize the residue embedding for one row."""
         return self.embedding_store.lookup_row(
             row,
@@ -291,7 +172,7 @@ class ProteinResidueEmbeddingBuilder:
         )
 
     def lookup_length(self, row: dict[str, str]) -> int:
-        """Resolve the residue length without materializing the full embedding array."""
+        """Resolve the residue length without materializing the full embedding tensor."""
         return self.embedding_store.lookup_row_length(
             row,
             id_columns=self.id_columns,
@@ -300,8 +181,6 @@ class ProteinResidueEmbeddingBuilder:
 
     def validate_row(self, row: dict[str, str]) -> str | None:
         """Check lookup availability without forcing a full embedding read."""
-        # Check existence only — avoids loading the full embedding during dataset construction.
-        # Critical for lazy stores where build() triggers an H5 read per row.
         for col in self.id_columns:
             identifier = row.get(col, "").strip()
             if identifier and self.embedding_store.has_id(identifier):
@@ -418,20 +297,15 @@ class MutationDeltaEmbeddingBuilder:
             )
         if mutant_embedding.shape != wildtype_embedding.shape:
             raise ValueError(
-                f"Delta embedding requires equal shapes. Mutant={mutant_embedding.shape}, "
-                f"wildtype={wildtype_embedding.shape} for sample '{row.get('sample_id', '')}'."
+                f"Delta embedding requires equal shapes. Mutant={tuple(mutant_embedding.shape)}, "
+                f"wildtype={tuple(wildtype_embedding.shape)} for sample '{row.get('sample_id', '')}'."
             )
-        # Arithmetic requires float32; decode BF16-as-int16 if necessary.
-        if mutant_embedding.dtype == np.int16:
-            mutant_embedding = _bf16_int16_to_float32(mutant_embedding)
-        if wildtype_embedding.dtype == np.int16:
-            wildtype_embedding = _bf16_int16_to_float32(wildtype_embedding)
-        return (mutant_embedding - wildtype_embedding).astype(np.float32, copy=False)
+        # Arithmetic in float32 — bfloat16 has insufficient precision for the delta.
+        delta = mutant_embedding.float() - wildtype_embedding.float()
+        return delta.cpu().numpy().astype(np.float32, copy=False)
 
     def validate_row(self, row: dict[str, str]) -> str | None:
         """Check that both mutant and wildtype embeddings can be resolved."""
-        # Check existence only — avoids loading the full embedding during dataset construction.
-        # Critical for lazy stores where build() triggers an H5 read per row.
         store = self.embedding_store
         for col in self.id_columns:
             identifier = row.get(col, "").strip()

@@ -43,18 +43,11 @@ def _estimate_gib(num_bytes: int) -> float:
     return float(num_bytes) / float(1024**3)
 
 
-def _bf16_raw_to_float32(arr: np.ndarray) -> np.ndarray:
-    """Decode raw BF16 int16 bits into float32 for XGBoost's NumPy input path."""
-    return (arr.view(np.uint16).astype(np.uint32) << 16).view(np.float32)
-
-
 def _as_xgb_residue_features(value) -> np.ndarray:
     """Return residue features as float32 for XGBoost's NumPy input path."""
     if torch.is_tensor(value):
         return value.detach().cpu().float().numpy()
     array = np.asarray(value)
-    if array.dtype == np.int16:
-        return _bf16_raw_to_float32(array)
     return array.astype(np.float32, copy=False)
 
 

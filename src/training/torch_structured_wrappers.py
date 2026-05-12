@@ -221,8 +221,6 @@ class ResidueBinaryClassifierTorch:
         if torch.is_tensor(protein_emb):
             return protein_emb.to(device)
         array = np.asarray(protein_emb)
-        if array.dtype == np.int16:
-            return torch.from_numpy(array).view(torch.bfloat16).to(device)
         return torch.from_numpy(array.astype(np.float32, copy=False)).to(device)
 
     @staticmethod

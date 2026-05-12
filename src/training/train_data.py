@@ -100,9 +100,9 @@ def _project_data_equivalent(path: Path) -> Path | None:
 def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
     """Return plausible safetensors sources for a manifest path.
 
-    Training manifests historically pointed at `.h5` files.  Current cluster
-    embeddings are safetensors, either as a single mean-pooled file or as a
-    directory of per-residue shards named `<model>_shards`.
+    Manifests may reference a single mean-pooled file, a per-residue shard
+    directory named ``<model>_shards``, or a legacy ``.h5`` path whose
+    safetensors sibling should be used instead.
     """
     full_path = _as_project_path(path)
     candidates: list[Path] = []
@@ -123,7 +123,6 @@ def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
                 candidates.append(swapped.with_suffix(".safetensors"))
                 candidates.append(swapped.with_name(f"{swapped.stem}_shards"))
 
-    # De-duplicate while preserving order.
     seen: set[Path] = set()
     unique = []
     for candidate in candidates:
@@ -133,25 +132,15 @@ def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
     return unique
 
 
-def resolve_embedding_source(path: str | Path, *, storage_format: str = "safetensors") -> Path:
-    """Resolve an embedding manifest path to the on-disk source used for training."""
-    if storage_format not in {"safetensors", "h5", "auto"}:
-        raise ValueError("storage_format must be one of 'safetensors', 'h5', or 'auto'.")
-
-    full_path = _as_project_path(path)
-    if storage_format in {"safetensors", "auto"}:
-        for candidate in _candidate_safetensor_sources(path):
-            if candidate.is_file() or candidate.is_dir():
-                return candidate
-        if storage_format == "safetensors":
-            candidates = ", ".join(str(candidate) for candidate in _candidate_safetensor_sources(path))
-            raise FileNotFoundError(
-                f"No safetensors embedding source found for '{path}'. Tried: {candidates}"
-            )
-
-    if full_path.exists():
-        return full_path
-    raise FileNotFoundError(f"Embedding source does not exist: {full_path}")
+def resolve_embedding_source(path: str | Path) -> Path:
+    """Resolve an embedding manifest path to the on-disk safetensors source."""
+    for candidate in _candidate_safetensor_sources(path):
+        if candidate.is_file() or candidate.is_dir():
+            return candidate
+    candidates = ", ".join(str(candidate) for candidate in _candidate_safetensor_sources(path))
+    raise FileNotFoundError(
+        f"No safetensors embedding source found for '{path}'. Tried: {candidates}"
+    )
 
 
 def _safetensor_files(source: Path) -> list[Path]:
@@ -167,16 +156,7 @@ def _safetensor_files(source: Path) -> list[Path]:
     raise FileNotFoundError(f"No .safetensors files found in '{source}'.")
 
 
-def _tensor_to_numpy(tensor) -> np.ndarray:
-    """Convert a safetensors torch tensor to NumPy, preserving BF16 compactly."""
-    import torch
-
-    if tensor.dtype == torch.bfloat16:
-        return tensor.cpu().view(torch.int16).numpy()
-    return tensor.cpu().numpy()
-
-
-def _tensor_to_float32_numpy(tensor) -> np.ndarray:
+def _tensor_to_float32_numpy(tensor: torch.Tensor) -> np.ndarray:
     """Convert a safetensors tensor to a float32 NumPy array for arithmetic models."""
     return tensor.float().cpu().numpy().astype(np.float32, copy=False)
 
@@ -223,115 +203,8 @@ def _index_safetensors(source: Path) -> dict[str, Path]:
     return key_to_file
 
 
-class LazyResidueEmbeddingStore(ResidueEmbeddingStore):
-    """Reads embeddings from H5 on-demand instead of loading all into RAM."""
-
-    def __init__(
-        self,
-        h5_path: str | Path,
-        available_ids: set[str],
-        seq_to_h5key: dict[str, str],
-    ):
-        super().__init__(by_id={}, by_sequence={})
-        self._h5_path = str(h5_path)
-        self._h5 = None
-        self._available_ids: set[str] = available_ids
-        self._seq_to_h5key: dict[str, str] = seq_to_h5key
-
-    def _open(self):
-        """Open the H5 file lazily on first lookup."""
-        import h5py
-
-        if self._h5 is None or not self._h5.id.valid:
-            self._h5 = h5py.File(self._h5_path, "r")
-
-    def has_id(self, identifier: str) -> bool:
-        """Check id availability without loading any embedding arrays."""
-        from data_loading.splits import clean_text
-
-        return clean_text(identifier) in self._available_ids
-
-    def has_sequence(self, sequence: str) -> bool:
-        """Check sequence availability without loading any embedding arrays."""
-        from data_loading.splits import normalize_sequence as _ns
-
-        return _ns(sequence) in self._seq_to_h5key
-
-    def lookup_id(self, identifier: str) -> np.ndarray:
-        """Read one identifier-keyed embedding directly from the H5 file."""
-        from data_loading.features import EmbeddingLookupError
-        from data_loading.splits import clean_text
-
-        key = clean_text(identifier)
-        if key not in self._available_ids:
-            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
-        self._open()
-        try:
-            return np.asarray(self._h5[key], dtype=np.float32)
-        except KeyError:
-            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
-
-    def lookup_id_length(self, identifier: str) -> int:
-        """Read one identifier-keyed embedding shape without materializing its array."""
-        from data_loading.features import EmbeddingLookupError
-        from data_loading.splits import clean_text
-
-        key = clean_text(identifier)
-        if key not in self._available_ids:
-            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
-        self._open()
-        try:
-            shape = self._h5[key].shape
-        except KeyError:
-            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
-        if len(shape) != 2:
-            raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {shape}.")
-        return int(shape[0])
-
-    def lookup_sequence(self, sequence: str) -> np.ndarray:
-        """Read one sequence-keyed embedding directly from the H5 file."""
-        from data_loading.features import EmbeddingLookupError
-        from data_loading.splits import normalize_sequence as _ns
-
-        norm_seq = _ns(sequence)
-        h5_key = self._seq_to_h5key.get(norm_seq)
-        if h5_key is None:
-            raise EmbeddingLookupError("Missing residue embedding for sequence.")
-        self._open()
-        try:
-            return np.asarray(self._h5[h5_key], dtype=np.float32)
-        except KeyError:
-            raise EmbeddingLookupError("Missing residue embedding for sequence.")
-
-    def lookup_sequence_length(self, sequence: str) -> int:
-        """Read one sequence-keyed embedding shape without materializing its array."""
-        from data_loading.features import EmbeddingLookupError
-        from data_loading.splits import normalize_sequence as _ns
-
-        norm_seq = _ns(sequence)
-        h5_key = self._seq_to_h5key.get(norm_seq)
-        if h5_key is None:
-            raise EmbeddingLookupError("Missing residue embedding for sequence.")
-        self._open()
-        try:
-            shape = self._h5[h5_key].shape
-        except KeyError:
-            raise EmbeddingLookupError("Missing residue embedding for sequence.")
-        if len(shape) != 2:
-            raise ValueError(f"Embedding for key '{h5_key}' must be 2D. Received shape {shape}.")
-        return int(shape[0])
-
-    def __del__(self):
-        """Close the H5 handle when the store is garbage collected."""
-        if getattr(self, "_h5", None) is not None:
-            try:
-                self._h5.close()
-            except Exception:
-                pass
-
-
 class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
-    """Reads residue embeddings from safetensors shards on-demand."""
+    """Reads residue embeddings from safetensors shards on-demand as torch.bfloat16 tensors."""
 
     def __init__(
         self,
@@ -342,7 +215,6 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
         super().__init__(by_id={}, by_sequence={})
         self._key_to_file = key_to_file
         self._available_ids = available_ids
-        self._seq_to_h5key = seq_to_key  # Compatibility with existing logging/tests.
         self._seq_to_key = seq_to_key
         self._handles = {}
 
@@ -356,16 +228,15 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
             self._handles[file_path] = handle
         return handle
 
-    def _lookup_key(self, key: str) -> np.ndarray:
+    def _lookup_key(self, key: str) -> torch.Tensor:
         from data_loading.features import EmbeddingLookupError
 
         if key not in self._key_to_file:
             raise EmbeddingLookupError(f"Missing residue embedding for key '{key}'.")
         tensor = self._handle_for_key(key).get_tensor(key)
-        array = _tensor_to_numpy(tensor)
-        if array.ndim != 2:
-            raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {array.shape}.")
-        return array
+        if tensor.ndim != 2:
+            raise ValueError(f"Embedding for key '{key}' must be 2D. Received shape {tuple(tensor.shape)}.")
+        return tensor
 
     def has_id(self, identifier: str) -> bool:
         from data_loading.splits import clean_text
@@ -377,7 +248,7 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
 
         return _ns(sequence) in self._seq_to_key
 
-    def lookup_id(self, identifier: str) -> np.ndarray:
+    def lookup_id(self, identifier: str) -> torch.Tensor:
         from data_loading.features import EmbeddingLookupError
         from data_loading.splits import clean_text
 
@@ -389,7 +260,7 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
     def lookup_id_length(self, identifier: str) -> int:
         return int(self.lookup_id(identifier).shape[0])
 
-    def lookup_sequence(self, sequence: str) -> np.ndarray:
+    def lookup_sequence(self, sequence: str) -> torch.Tensor:
         from data_loading.features import EmbeddingLookupError
         from data_loading.splits import normalize_sequence as _ns
 
@@ -403,75 +274,15 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
         return int(self.lookup_sequence(sequence).shape[0])
 
 
-def _build_seq_to_h5key(
-    h5_path: str | Path,
-    needed_sequences: set[str],
-) -> dict[str, str]:
-    """Build normalized_sequence → H5_key mapping via sequence index or direct key match."""
-    import h5py
-    from data_loading.splits import clean_text, normalize_sequence as _ns
-
-    normalized_sequences = {_ns(s) for s in needed_sequences if _ns(s)}
-    seq_to_h5key: dict[str, str] = {}
-
-    seq_index_path = resolve_sequence_index_path()
-    if seq_index_path is not None and normalized_sequences:
-        import csv
-
-        with open(seq_index_path, newline="", encoding="utf-8") as fh:
-            for row in csv.DictReader(fh):
-                seq = _ns(row.get("protein_sequence", ""))
-                sid = clean_text(row.get("sequence_id", ""))
-                if seq in normalized_sequences and sid:
-                    seq_to_h5key[seq] = sid
-
-    with h5py.File(str(h5_path), "r") as handle:
-        for seq in normalized_sequences:
-            if seq not in seq_to_h5key and seq in handle:
-                seq_to_h5key[seq] = seq
-
-    return seq_to_h5key
-
-
-def load_lazy_embedding_store(
-    h5_path: str | Path,
-    needed_ids: set[str],
-    needed_sequences: set[str],
-) -> LazyResidueEmbeddingStore:
-    """Index only the H5 keys needed for a lazily loaded training run."""
-    import h5py
-    from data_loading.splits import clean_text
-
-    full_path = PROJECT_ROOT / h5_path
-
-    with h5py.File(str(full_path), "r") as handle:
-        h5_keys = {clean_text(k) for k in handle.keys()}
-
-    normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)} & h5_keys
-    seq_to_h5key = {
-        seq: key
-        for seq, key in _build_seq_to_h5key(full_path, needed_sequences).items()
-        if key in h5_keys
-    }
-
-    return LazyResidueEmbeddingStore(
-        h5_path=full_path,
-        available_ids=normalized_ids,
-        seq_to_h5key=seq_to_h5key,
-    )
-
-
 def load_lazy_safetensors_embedding_store(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-    *,
-    storage_format: str = "safetensors",
 ) -> LazySafetensorsResidueEmbeddingStore:
     """Index safetensors keys needed for lazy residue-embedding training."""
     from data_loading.splits import clean_text
 
-    source = resolve_embedding_source(source_path, storage_format=storage_format)
+    source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
     normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)} & available_keys
@@ -484,32 +295,15 @@ def load_lazy_safetensors_embedding_store(
     )
 
 
-def load_embedding_store_subset(
-    h5_path: str | Path,
-    needed_ids: set[str],
-    needed_sequences: set[str],
-) -> ResidueEmbeddingStore:
-    """Materialize only the embeddings required for a specific task split."""
-    sequence_index_path = resolve_sequence_index_path()
-    return ResidueEmbeddingStore.from_h5_subset(
-        PROJECT_ROOT / h5_path,
-        needed_ids=needed_ids,
-        needed_sequences=needed_sequences,
-        sequence_index_path=sequence_index_path,
-    )
-
-
 def load_safetensors_embedding_store_subset(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-    *,
-    storage_format: str = "safetensors",
 ) -> ResidueEmbeddingStore:
     """Materialize only the required residue embeddings from safetensors."""
     from data_loading.splits import clean_text
 
-    source = resolve_embedding_source(source_path, storage_format=storage_format)
+    source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
     normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)} & available_keys
@@ -529,14 +323,12 @@ def load_pooled_safetensors_subset(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-    *,
-    storage_format: str = "safetensors",
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Load needed safetensors embeddings and mean-pool per-residue tensors if needed."""
     from safetensors import safe_open
     from data_loading.splits import clean_text, normalize_sequence as _norm_seq
 
-    source = resolve_embedding_source(source_path, storage_format=storage_format)
+    source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
 
@@ -600,94 +392,9 @@ def load_pooled_embedding_subset(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-    *,
-    storage_format: str = "safetensors",
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Load pooled embeddings from the configured storage format."""
-    if storage_format == "h5":
-        return load_pooled_h5_subset(source_path, needed_ids, needed_sequences)
-    return load_pooled_safetensors_subset(
-        source_path,
-        needed_ids,
-        needed_sequences,
-        storage_format=storage_format,
-    )
-
-
-def load_pooled_h5_subset(
-    h5_path: str | Path,
-    needed_ids: set[str],
-    needed_sequences: set[str],
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Load only the needed H5 embeddings by key and mean-pool each one immediately."""
-    import h5py
-    from data_loading.splits import clean_text, normalize_sequence as _norm_seq
-
-    normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)}
-    normalized_sequences = {_norm_seq(v) for v in needed_sequences if _norm_seq(v)}
-    seq_to_h5key = _build_seq_to_h5key(PROJECT_ROOT / h5_path, normalized_sequences)
-
-    with h5py.File(str(PROJECT_ROOT / h5_path), "r") as handle:
-        h5_keys = {clean_text(key) for key in handle.keys()}
-
-    normalized_ids &= h5_keys
-    seq_to_h5key = {
-        seq: key
-        for seq, key in seq_to_h5key.items()
-        if key in h5_keys
-    }
-
-    keys_to_load: dict[str, tuple[str | None, str | None]] = {}
-    for id_key in normalized_ids:
-        entry = keys_to_load.get(id_key, (None, None))
-        keys_to_load[id_key] = (id_key, entry[1])
-    for seq, h5_key in seq_to_h5key.items():
-        entry = keys_to_load.get(h5_key, (None, None))
-        keys_to_load[h5_key] = (entry[0], seq)
-
-    log(f"      seq_index mapped {len(seq_to_h5key)}/{len(normalized_sequences)} seqs → H5 keys")
-    log(
-        f"      will load {len(keys_to_load)} unique H5 keys "
-        f"({len(normalized_ids)} by id, {len(seq_to_h5key)} by seq)"
-    )
-
-    by_id: dict[str, np.ndarray] = {}
-    by_seq: dict[str, np.ndarray] = {}
-    missing = 0
-    total = len(keys_to_load)
-    log_interval = max(1, total // 20)
-    t_load_start = time.time()
-    with h5py.File(str(PROJECT_ROOT / h5_path), "r") as handle:
-        log(f"      H5 file opened. Reading {total:,} embeddings...")
-        for i, (h5_key, (id_key, seq)) in enumerate(keys_to_load.items(), 1):
-            if h5_key not in handle:
-                missing += 1
-                continue
-            arr = np.asarray(handle[h5_key], dtype=np.float32)
-            if arr.ndim == 2:
-                pooled = arr.mean(axis=0)
-            elif arr.ndim == 1:
-                pooled = arr
-            else:
-                raise ValueError(
-                    f"Expected 1D or 2D embedding array for key '{h5_key}', got shape {arr.shape}."
-                )
-            if id_key is not None:
-                by_id[id_key] = pooled
-            if seq is not None:
-                by_seq[seq] = pooled
-            if i % log_interval == 0 or i == total:
-                elapsed = time.time() - t_load_start
-                rate = i / elapsed
-                eta = (total - i) / rate if rate > 0 else 0
-                log(
-                    f"      ... {i:,}/{total:,} ({100*i/total:.0f}%)  "
-                    f"{elapsed:.0f}s elapsed  ETA {eta:.0f}s"
-                )
-
-    if missing:
-        log(f"      {missing} keys not found in H5 (will be skipped)")
-    return by_id, by_seq
+    """Load mean-pooled embeddings from safetensors."""
+    return load_pooled_safetensors_subset(source_path, needed_ids, needed_sequences)
 
 
 def build_Xy_ligand_direct(
@@ -960,19 +667,26 @@ def build_mutation_delta_Xy_direct(
     )
 
 
+def _sample_emb_to_numpy(emb) -> np.ndarray:
+    """Materialize a per-sample embedding as a float32 NumPy array for pooling."""
+    if torch.is_tensor(emb):
+        return emb.float().cpu().numpy()
+    return np.asarray(emb, dtype=np.float32)
+
+
 def build_Xy_pooled(bundle, batch_kind: str):
     """Build mean-pooled X (N, emb_dim) and y by iterating samples one at a time."""
     X_list, y_list = [], []
     for i in range(len(bundle.dataset)):
         sample = bundle.dataset[i]
         if batch_kind == "protein_global":
-            x = sample["protein_emb"].mean(axis=0)
+            x = _sample_emb_to_numpy(sample["protein_emb"]).mean(axis=0)
         elif batch_kind == "mutation_delta_global":
-            x = sample["protein_delta_emb"].mean(axis=0)
+            x = _sample_emb_to_numpy(sample["protein_delta_emb"]).mean(axis=0)
         elif batch_kind == "protein_ligand_global":
             x = np.concatenate([
-                sample["protein_emb"].mean(axis=0),
-                sample["ligand_feat"],
+                _sample_emb_to_numpy(sample["protein_emb"]).mean(axis=0),
+                np.asarray(sample["ligand_feat"], dtype=np.float32),
             ])
         X_list.append(x)
         y_list.append(sample["target"])
@@ -1084,7 +798,6 @@ def get_target_payload(bundle):
 
 
 __all__ = [
-    "LazyResidueEmbeddingStore",
     "LazySafetensorsResidueEmbeddingStore",
     "build_Xy_ligand_direct",
     "build_Xy_pooled",
@@ -1096,10 +809,7 @@ __all__ = [
     "get_dataloader",
     "get_target_payload",
     "get_task_rows",
-    "load_embedding_store_subset",
-    "load_lazy_embedding_store",
     "load_lazy_safetensors_embedding_store",
-    "load_pooled_h5_subset",
     "load_pooled_embedding_subset",
     "load_pooled_safetensors_subset",
     "load_safetensors_embedding_store_subset",

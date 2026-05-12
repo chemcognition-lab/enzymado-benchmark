@@ -6,34 +6,39 @@ from typing import Any
 
 import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
+
+
+def _to_torch_residue_tensor(embedding: Any) -> torch.Tensor:
+    """Coerce a residue embedding to a 2D torch tensor (bfloat16 if available)."""
+    if torch.is_tensor(embedding):
+        return embedding
+    array = np.asarray(embedding)
+    return torch.from_numpy(array)
 
 
 def _pad_residue_embeddings(
-    embeddings: list[np.ndarray],
-) -> tuple[np.ndarray | torch.Tensor, np.ndarray]:
+    embeddings: list[Any],
+) -> tuple[torch.Tensor, np.ndarray]:
     """Pad variable-length residue embeddings and return a boolean residue mask.
 
-    When embeddings are stored as int16 (BF16 raw bits), the padded array is
-    viewed as torch.bfloat16 so the model receives true BF16 inputs.  int16
-    zeros are 0x0000 = +0.0 in BF16, so zero-padding is correct in both paths.
+    Embeddings arrive as ``torch.bfloat16`` tensors from the safetensors-backed
+    store, but plain numpy arrays (e.g. mutation deltas materialized as float32)
+    are also accepted.  Padding uses ``+0.0`` in the embedding dtype, which is
+    the correct fill for both bfloat16 and float32.
     """
     if not embeddings:
         raise ValueError("Cannot collate an empty batch.")
-    max_length = max(embedding.shape[0] for embedding in embeddings)
-    embedding_dim = embeddings[0].shape[1]
-    is_bf16 = embeddings[0].dtype == np.int16
+    tensors = [_to_torch_residue_tensor(emb) for emb in embeddings]
+    lengths = [tensor.shape[0] for tensor in tensors]
+    max_length = max(lengths)
 
-    dtype = np.int16 if is_bf16 else np.float32
-    batch = np.zeros((len(embeddings), max_length, embedding_dim), dtype=dtype)
-    mask = np.zeros((len(embeddings), max_length), dtype=bool)
-    for index, embedding in enumerate(embeddings):
-        length = embedding.shape[0]
-        batch[index, :length, :] = embedding
+    padded = pad_sequence(tensors, batch_first=True, padding_value=0.0)
+
+    mask = np.zeros((len(tensors), max_length), dtype=bool)
+    for index, length in enumerate(lengths):
         mask[index, :length] = True
-
-    if is_bf16:
-        return torch.from_numpy(batch).view(torch.bfloat16), mask
-    return batch, mask
+    return padded, mask
 
 
 def _pad_vectors(vectors: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
@@ -84,7 +89,7 @@ def _validate_residue_sample_lengths(samples: list[dict[str, Any]]) -> None:
 class ProteinGlobalBatch:
     """Padded batch for protein-level tasks without ligand features."""
     sample_id: list[str]
-    protein_emb: np.ndarray
+    protein_emb: torch.Tensor
     protein_mask: np.ndarray
     target: Any
     target_mask: Any | None = None
@@ -94,7 +99,7 @@ class ProteinGlobalBatch:
 class ProteinLigandGlobalBatch:
     """Padded batch for protein-ligand tasks."""
     sample_id: list[str]
-    protein_emb: np.ndarray
+    protein_emb: torch.Tensor
     protein_mask: np.ndarray
     ligand_feat: np.ndarray
     target: Any
@@ -105,7 +110,7 @@ class ProteinLigandGlobalBatch:
 class MutationDeltaGlobalBatch:
     """Padded batch for mutation-delta tasks."""
     sample_id: list[str]
-    protein_delta_emb: np.ndarray
+    protein_delta_emb: torch.Tensor
     protein_mask: np.ndarray
     target: Any
     target_mask: Any | None = None
@@ -115,7 +120,7 @@ class MutationDeltaGlobalBatch:
 class ProteinResidueBatch:
     """Padded batch for residue-wise supervision."""
     sample_id: list[str]
-    protein_emb: np.ndarray
+    protein_emb: torch.Tensor
     protein_mask: np.ndarray
     target_per_residue: np.ndarray
     target_mask: np.ndarray
@@ -125,7 +130,7 @@ class ProteinResidueBatch:
 class ProteinResidueConcatBatch:
     """Concatenated residue-wise batch without padding or masking."""
     sample_id: list[str]
-    protein_emb: np.ndarray
+    protein_emb: torch.Tensor
     target_per_residue: np.ndarray
     lengths: np.ndarray
 
@@ -233,13 +238,10 @@ class ProteinResidueConcatCollator:
                     f"sample_id='{sample.get('sample_id', '')}'."
                 )
 
-        embs = [sample["protein_emb"] for sample in samples]
-        if embs[0].dtype == np.int16:  # BF16 raw bits
-            protein_emb = torch.from_numpy(np.concatenate(embs, axis=0)).view(torch.bfloat16)
-        else:
-            protein_emb = np.concatenate(
-                [np.asarray(emb, dtype=np.float32) for emb in embs], axis=0
-            )
+        protein_emb = torch.cat(
+            [_to_torch_residue_tensor(sample["protein_emb"]) for sample in samples],
+            dim=0,
+        )
         return ProteinResidueConcatBatch(
             sample_id=[sample["sample_id"] for sample in samples],
             protein_emb=protein_emb,

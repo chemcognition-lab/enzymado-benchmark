@@ -187,18 +187,18 @@ class DatasetCardPopulator:
             "notes": joined_notes
         })
 
-    def _load_embeddings(self, sequences: list, uniprot_ids: list, h5_path: Path):
-        """Load mean-pooled embeddings from an H5 file.
+    def _load_embeddings(self, sequences: list, uniprot_ids: list, emb_path: Path):
+        """Load mean-pooled embeddings from a safetensors file.
         Returns (embeddings: np.ndarray of shape (n_found, dim), valid_indices: list[int]),
         or (None, []) on failure."""
         try:
-            import h5py
+            from safetensors import safe_open
         except ImportError:
-            print("  [UMAP] h5py not installed — skipping embedding load.")
+            print("  [UMAP] safetensors not installed — skipping embedding load.")
             return None, []
 
-        if not h5_path.exists():
-            print(f"  [UMAP] H5 file not found: {h5_path}")
+        if not emb_path.exists():
+            print(f"  [UMAP] safetensors file not found: {emb_path}")
             return None, []
 
         def _candidate_keys(seq, uid):
@@ -214,13 +214,14 @@ class DatasetCardPopulator:
         embeddings = []
         valid_indices = []
         n_missing = 0
-        with h5py.File(str(h5_path), "r") as hf:
-            available_keys = set(hf.keys())
+        with safe_open(str(emb_path), framework="pt", device="cpu") as handle:
+            available_keys = set(handle.keys())
             for i, (seq, uid) in enumerate(zip(sequences, uniprot_ids)):
                 emb_array = None
                 for key in _candidate_keys(seq, uid):
                     if key in available_keys:
-                        raw = np.asarray(hf[key], dtype=np.float32)
+                        tensor = handle.get_tensor(key)
+                        raw = tensor.float().cpu().numpy().astype(np.float32, copy=False)
                         emb_array = raw.mean(axis=0) if raw.ndim == 2 else raw
                         break
                 if emb_array is not None:
@@ -231,7 +232,7 @@ class DatasetCardPopulator:
 
         n_found = len(embeddings)
         if n_missing > 0:
-            print(f"  [UMAP] {n_found} embeddings found, {n_missing} missing in H5.")
+            print(f"  [UMAP] {n_found} embeddings found, {n_missing} missing in safetensors.")
         if n_found < 5:
             print(f"  [UMAP] Too few embeddings ({n_found}) — skipping UMAP.")
             return None, []
@@ -243,7 +244,7 @@ class DatasetCardPopulator:
         base_df: pd.DataFrame,
         prop_name: str,
         split_files: Dict[str, Path],
-        h5_path: Path,
+        emb_path: Path,
         emb_model: str,
         output_dir: Path,
     ) -> Optional[Dict[str, str]]:
@@ -267,8 +268,8 @@ class DatasetCardPopulator:
         sequences = base_df[seq_col].tolist() if seq_col else [None] * len(base_df)
         uniprot_ids = base_df[id_col].tolist() if id_col else [None] * len(base_df)
 
-        print(f"  [UMAP] Loading embeddings from {h5_path.name} for {len(base_df)} proteins...")
-        emb_matrix, valid_indices = self._load_embeddings(sequences, uniprot_ids, h5_path)
+        print(f"  [UMAP] Loading embeddings from {emb_path.name} for {len(base_df)} proteins...")
+        emb_matrix, valid_indices = self._load_embeddings(sequences, uniprot_ids, emb_path)
         if emb_matrix is None:
             return None
 
@@ -632,8 +633,8 @@ class DatasetCardPopulator:
         """Populate every dataset card below the configured base directory."""
         print("Starting Dataset Card Population Pipeline...\n")
 
-        # ── Resolve embedding H5 path if a model was specified ────────────────
-        emb_h5_path = None
+        # ── Resolve embedding safetensors path if a model was specified ──────
+        emb_path = None
         if self.emb_model:
             emb_json_path = self.embeddings_json or Path("embeddings_models_output.json")
             if emb_json_path.exists():
@@ -643,11 +644,11 @@ class DatasetCardPopulator:
                     model_entry = emb_registry[self.emb_model]
                     _pooled = model_entry.get("pooled_path")
                     if _pooled and Path(_pooled).exists():
-                        emb_h5_path = Path(_pooled)
-                        print(f"UMAP embeddings: {self.emb_model} → {emb_h5_path} (pre-pooled)\n")
+                        emb_path = Path(_pooled)
+                        print(f"UMAP embeddings: {self.emb_model} → {emb_path} (pre-pooled)\n")
                     else:
-                        emb_h5_path = Path(model_entry["path"])
-                        print(f"UMAP embeddings: {self.emb_model} → {emb_h5_path} (per-residue, will pool on-the-fly)\n")
+                        emb_path = Path(model_entry["path"])
+                        print(f"UMAP embeddings: {self.emb_model} → {emb_path} (per-residue, will pool on-the-fly)\n")
                 else:
                     print(f"Warning: embedding model '{self.emb_model}' not found in {emb_json_path}. "
                           f"Available: {', '.join(emb_registry)}. Skipping UMAP.\n")
@@ -710,12 +711,12 @@ class DatasetCardPopulator:
                     json.dump(card, f, indent=2)
 
             # ── UMAP generation (optional) ─────────────────────────────────
-            if emb_h5_path is not None:
+            if emb_path is not None:
                 umap_result = self.generate_umap(
                     base_df=base_df,
                     prop_name=prop_dir.name,
                     split_files=files["splits"],
-                    h5_path=emb_h5_path,
+                    emb_path=emb_path,
                     emb_model=self.emb_model,
                     output_dir=umap_output_dir,
                 )
