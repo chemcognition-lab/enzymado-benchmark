@@ -59,7 +59,6 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column="ec_number",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -88,7 +87,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertEqual(set(preds), {"level_1", "level_2", "level_3", "level_4"})
         self.assertEqual(preds["level_1"].shape, y_true["level_1"].shape)
         self.assertEqual(preds["level_4"].shape, y_true["level_4"].shape)
-        self.assertEqual(target_mask["level_2"].shape, (2,))
+        self.assertEqual(target_mask["level_2"].shape, (2, 2))
         self.assertIsNotNone(model.best_epoch_)
 
         run_dir = self.root / "ec_outputs"
@@ -118,11 +117,10 @@ class StructuredTrainingTests(unittest.TestCase):
             "level_4": np.asarray([[1], [0], [1], [0]], dtype=np.float32),
         }
         target_mask = {
-            "level_1": np.asarray([True, True, True, True], dtype=bool),
-            "level_2": np.asarray([True, True, True, True], dtype=bool),
-            "level_3": np.asarray([True, True, True, True], dtype=bool),
-            "level_4": np.asarray([True, True, True, True], dtype=bool),
+            level_name: np.ones_like(target, dtype=bool)
+            for level_name, target in y.items()
         }
+        target_mask["level_2"][1, 1] = False
 
         model = ECMultiHeadClassifierTorch(
             hidden_dims=(8,),
@@ -144,6 +142,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertEqual(set(preds), {"level_1", "level_2", "level_3", "level_4"})
         self.assertEqual(preds["level_1"].shape, y["level_1"].shape)
         self.assertEqual(preds["level_4"].shape, y["level_4"].shape)
+        self.assertEqual(target_mask["level_2"].shape, y["level_2"].shape)
         self.assertIsNotNone(model.best_epoch_)
 
     def test_build_protein_global_Xy_direct(self) -> None:
@@ -340,7 +339,6 @@ class StructuredTrainingTests(unittest.TestCase):
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         import torch
 
@@ -410,7 +408,6 @@ class StructuredTrainingTests(unittest.TestCase):
             target_column="binding",
             ligand_column="smiles",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -472,7 +469,6 @@ class StructuredTrainingTests(unittest.TestCase):
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -515,7 +511,6 @@ class StructuredTrainingTests(unittest.TestCase):
             target_column=None,
             residue_positions_column="binding_positions",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         import torch
 

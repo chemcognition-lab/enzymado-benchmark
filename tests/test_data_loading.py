@@ -12,7 +12,7 @@ import numpy as np
 
 from src.data_loading.collators import ProteinResidueCollator, ProteinResidueConcatCollator
 from src.data_loading.datasets import build_dataset_from_config
-from src.data_loading.labels import FlatECLabelBuilder, StandardScaler1D
+from src.data_loading.labels import FlatECLabelBuilder
 from src.data_loading.registry import TaskConfig
 from src.data_loading.features import ResidueEmbeddingStore
 
@@ -150,41 +150,6 @@ class DataLoadingTests(unittest.TestCase):
             np.full((4, 2), 3.0, dtype=np.float32),
         )
 
-    def test_regression_scaler_fits_only_on_train_rows(self) -> None:
-        dataset_path = self.root / "phopt_random_standardized.csv"
-        write_csv(
-            dataset_path,
-            ["uniprot_id", "protein_sequence", "phopt_median", "split"],
-            [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "phopt_median": "4.0", "split": "train"},
-                {"uniprot_id": "P2", "protein_sequence": "AAAAA", "phopt_median": "8.0", "split": "train"},
-                {"uniprot_id": "P3", "protein_sequence": "AAA", "phopt_median": "10.0", "split": "val"},
-            ],
-        )
-        config = TaskConfig(
-            name="phopt_test",
-            batch_kind="protein_global",
-            label_kind="scalar_regression",
-            dataset_paths={"random": dataset_path},
-            target_column="phopt_median",
-            sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
-        )
-        store = ResidueEmbeddingStore(
-            by_id={
-                "P1": np.ones((4, 2), dtype=np.float32),
-                "P2": np.ones((5, 2), dtype=np.float32),
-                "P3": np.ones((3, 2), dtype=np.float32),
-            }
-        )
-
-        train_bundle = build_dataset_from_config(config, store, split_name="train")
-        val_bundle = build_dataset_from_config(config, store, split_name="val")
-        scaler = StandardScaler1D.from_rows(train_bundle.rows, "phopt_median")
-        np.testing.assert_allclose(scaler.transform([4.0, 8.0]), np.array([-1.0, 1.0], dtype=np.float32))
-        np.testing.assert_allclose(scaler.transform([10.0]), np.array([2.0], dtype=np.float32))
-        self.assertEqual(len(val_bundle.dataset), 1)
-
     def test_mutation_delta_subset_loader_resolves_sequence_ids_for_wildtype(self) -> None:
         dataset_path = self.root / "ddg.csv"
         sequence_index_path = self.root / "protein_sequences_unique.csv"
@@ -288,7 +253,6 @@ class DataLoadingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column="ec_number",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -321,10 +285,10 @@ class DataLoadingTests(unittest.TestCase):
         np.testing.assert_array_equal(sample["target"]["level_2"], np.array([0.0, 0.0], dtype=np.float32))
         np.testing.assert_array_equal(sample["target"]["level_3"], np.array([0.0], dtype=np.float32))
         np.testing.assert_array_equal(sample["target"]["level_4"], np.array([0.0], dtype=np.float32))
-        np.testing.assert_array_equal(sample["target_mask"]["level_1"], np.array(False))
-        np.testing.assert_array_equal(sample["target_mask"]["level_2"], np.array(False))
-        np.testing.assert_array_equal(sample["target_mask"]["level_3"], np.array(False))
-        np.testing.assert_array_equal(sample["target_mask"]["level_4"], np.array(False))
+        np.testing.assert_array_equal(sample["target_mask"]["level_1"], np.array([True, True]))
+        np.testing.assert_array_equal(sample["target_mask"]["level_2"], np.array([True, True]))
+        np.testing.assert_array_equal(sample["target_mask"]["level_3"], np.array([True]))
+        np.testing.assert_array_equal(sample["target_mask"]["level_4"], np.array([True]))
 
         train_sample = train_bundle.dataset[0]
         np.testing.assert_array_equal(
@@ -343,10 +307,10 @@ class DataLoadingTests(unittest.TestCase):
             train_sample["target"]["level_4"],
             np.array([1.0], dtype=np.float32),
         )
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_1"], np.array(True))
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_2"], np.array(True))
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_3"], np.array(True))
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_4"], np.array(True))
+        np.testing.assert_array_equal(train_sample["target_mask"]["level_1"], np.array([True, True]))
+        np.testing.assert_array_equal(train_sample["target_mask"]["level_2"], np.array([True, True]))
+        np.testing.assert_array_equal(train_sample["target_mask"]["level_3"], np.array([True]))
+        np.testing.assert_array_equal(train_sample["target_mask"]["level_4"], np.array([True]))
 
         batch = train_bundle.collator([train_sample])
         np.testing.assert_array_equal(
@@ -355,7 +319,7 @@ class DataLoadingTests(unittest.TestCase):
         )
         np.testing.assert_array_equal(
             batch.target_mask["level_4"],
-            np.array([True]),
+            np.array([[True]]),
         )
 
     def test_protein_ligand_dataset_builds_ligand_features(self) -> None:
@@ -376,7 +340,6 @@ class DataLoadingTests(unittest.TestCase):
             target_column="binding",
             ligand_column="smiles",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -404,7 +367,7 @@ class DataLoadingTests(unittest.TestCase):
             np.array([[True, True, True, True], [True, True, False, False]]),
         )
 
-    def test_flat_ec_label_builder_marks_unknown_descendants_with_nan(self) -> None:
+    def test_flat_ec_label_builder_masks_unknown_descendants(self) -> None:
         builder = FlatECLabelBuilder().fit(
             [
                 {"ec_number": "1.2.3.4"},
@@ -424,8 +387,8 @@ class DataLoadingTests(unittest.TestCase):
             np.array([True, True, True, True, False, False, False, False]),
         )
         np.testing.assert_array_equal(
-            np.nan_to_num(payload["target"], nan=-1.0),
-            np.array([1.0, 0.0, 1.0, 0.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
+            payload["target"],
+            np.array([1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
         )
 
     def test_flat_ec_label_builder_allows_complete_label_to_override_unknown_branch(self) -> None:
@@ -442,8 +405,8 @@ class DataLoadingTests(unittest.TestCase):
             np.array([True, True, True, False, True, False], dtype=bool),
         )
         np.testing.assert_array_equal(
-            np.nan_to_num(payload["target"], nan=-1.0),
-            np.array([1.0, 1.0, 1.0, -1.0, 1.0, -1.0], dtype=np.float32),
+            payload["target"],
+            np.array([1.0, 1.0, 1.0, 0.0, 1.0, 0.0], dtype=np.float32),
         )
 
     def test_mutation_delta_dataset_builds_mut_minus_wt(self) -> None:
@@ -469,7 +432,6 @@ class DataLoadingTests(unittest.TestCase):
             target_column="ddg",
             wildtype_sequence_column="wildtype_sequence",
             sample_id_candidates=("dataset_id",),
-            split_id_candidates=("dataset_id",),
         )
         store = ResidueEmbeddingStore(
             by_sequence={
@@ -504,7 +466,6 @@ class DataLoadingTests(unittest.TestCase):
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -533,13 +494,11 @@ class DataLoadingTests(unittest.TestCase):
                     "sample_id": "P1",
                     "protein_emb": np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
                     "target_per_residue": np.asarray([1.0, 0.0], dtype=np.float32),
-                    "target_mask": np.asarray([True, True], dtype=bool),
                 },
                 {
                     "sample_id": "P2",
                     "protein_emb": np.asarray([[2.0, 2.0]], dtype=np.float32),
                     "target_per_residue": np.asarray([0.0], dtype=np.float32),
-                    "target_mask": np.asarray([True], dtype=bool),
                 },
             ]
         )
@@ -570,7 +529,6 @@ class DataLoadingTests(unittest.TestCase):
                         dtype=torch.bfloat16,
                     ).view(torch.int16).numpy(),
                     "target_per_residue": np.asarray([1.0, 0.0], dtype=np.float32),
-                    "target_mask": np.asarray([True, True], dtype=bool),
                 },
             ]
         )
@@ -636,7 +594,6 @@ class DataLoadingTests(unittest.TestCase):
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -673,7 +630,6 @@ class DataLoadingTests(unittest.TestCase):
             target_column=None,
             residue_positions_column="active_site",
             sample_id_candidates=("uniprot_id",),
-            split_id_candidates=("uniprot_id",),
         )
 
         class TrackingResidueEmbeddingStore(ResidueEmbeddingStore):
@@ -731,7 +687,6 @@ class DataLoadingTests(unittest.TestCase):
                         "sample_id": "bad_sample",
                         "protein_emb": np.ones((2, 2), dtype=np.float32),
                         "target_per_residue": np.array([1.0, 0.0, 1.0], dtype=np.float32),
-                        "target_mask": np.array([True, True, True], dtype=bool),
                     }
                 ]
             )

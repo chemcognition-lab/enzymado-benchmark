@@ -10,44 +10,7 @@ from .splits import clean_text, normalize_sequence
 
 
 @dataclass
-class StandardScaler1D:
-    """Minimal 1D standard scaler used for numeric targets."""
-    mean_: float | None = None
-    scale_: float | None = None
-
-    def fit(self, values: list[float] | np.ndarray) -> "StandardScaler1D":
-        """Estimate mean and scale from 1D numeric values."""
-        array = np.asarray(values, dtype=np.float32).reshape(-1)
-        if array.size == 0:
-            raise ValueError("Cannot fit StandardScaler1D on an empty array.")
-        self.mean_ = float(array.mean())
-        scale = float(array.std())
-        self.scale_ = 1.0 if scale == 0.0 else scale
-        return self
-
-    def transform(self, values: list[float] | np.ndarray) -> np.ndarray:
-        """Standardize values using the fitted statistics."""
-        if self.mean_ is None or self.scale_ is None:
-            raise ValueError("StandardScaler1D must be fit before calling transform().")
-        array = np.asarray(values, dtype=np.float32)
-        return (array - self.mean_) / self.scale_
-
-    def inverse_transform(self, values: list[float] | np.ndarray) -> np.ndarray:
-        """Undo standardization for model outputs or labels."""
-        if self.mean_ is None or self.scale_ is None:
-            raise ValueError("StandardScaler1D must be fit before calling inverse_transform().")
-        array = np.asarray(values, dtype=np.float32)
-        return (array * self.scale_) + self.mean_
-
-    @classmethod
-    def from_rows(cls, rows: list[dict[str, str]], target_column: str) -> "StandardScaler1D":
-        """Fit a scaler directly from a list of dataset rows."""
-        values = [float(clean_text(row.get(target_column))) for row in rows]
-        return cls().fit(values)
-
-
-@dataclass
-class ScalarRegressionLabelBuilder:
+class RegressionLabelBuilder:
     """Parse numeric regression targets from dataset rows."""
     target_column: str
 
@@ -100,105 +63,155 @@ class BinaryLabelBuilder:
 
 @dataclass
 class HierarchicalECLabelBuilder:
-    """Build level-wise multilabel EC targets from semicolon-separated labels."""
+    """Build non-cumulative hierarchical multi-label EC targets with masks."""
+
     target_column: str = "ec_number"
     separator: str = ";"
     vocabulary_by_level: dict[str, tuple[str, ...]] | None = None
     _index_by_level: dict[str, dict[str, int]] = field(default_factory=dict, init=False)
 
-    def fit(self, rows: list[dict[str, str]]) -> "HierarchicalECLabelBuilder":
-        """Fit the EC vocabulary from training rows only."""
-        labels_by_level = {
-            level_name: sorted(
-                {
-                    label
-                    for row in rows
-                    for label in self.extract_level_labels(row)[level_name]
-                }
-            )
-            for level_name in self.level_names()
-        }
-        self.vocabulary_by_level = {
-            level_name: tuple(labels)
-            for level_name, labels in labels_by_level.items()
-        }
-        self._index_by_level = {
-            level_name: {label: idx for idx, label in enumerate(vocabulary)}
-            for level_name, vocabulary in self.vocabulary_by_level.items()
-        }
-        return self
+    @staticmethod
+    def level_names() -> tuple[str, ...]:
+        return ("level_1", "level_2", "level_3", "level_4")
 
     def parse_labels(self, row: dict[str, str]) -> list[str]:
-        """Split the raw EC payload into individual EC labels."""
+        """Split semicolon-separated EC labels."""
         raw_value = clean_text(row.get(self.target_column))
         if not raw_value:
             return []
         return [label.strip() for label in raw_value.split(self.separator) if label.strip()]
 
-    @staticmethod
-    def level_names() -> tuple[str, ...]:
-        """Return the canonical EC hierarchy levels."""
-        return ("level_1", "level_2", "level_3", "level_4")
-
     def _parse_single_ec(self, ec_label: str) -> tuple[str, str, str, str]:
-        """Parse a four-level EC string into its hierarchy components."""
-        parts = [part.strip() for part in ec_label.split(".")]
+        """Parse one EC label into four levels."""
+        parts = tuple(part.strip() for part in ec_label.split("."))
         if len(parts) != 4:
-            raise ValueError(f"Invalid EC label '{ec_label}'. Expected four levels.")
-        return tuple(parts)  # type: ignore[return-value]
+            raise ValueError(f"Invalid EC label '{ec_label}'. Expected 4 levels.")
 
-    def extract_level_labels(self, row: dict[str, str]) -> dict[str, set[str]]:
-        """Expand EC labels into active targets for each hierarchy level."""
-        labels_by_level = {level_name: set() for level_name in self.level_names()}
+        seen_missing = False
+        for part in parts:
+            if part == "-":
+                seen_missing = True
+            elif seen_missing:
+                raise ValueError(
+                    f"Invalid EC label '{ec_label}'. Missing levels must be trailing."
+                )
+
+        return parts  # type: ignore[return-value]
+
+    def _positive_labels_and_unknown_prefixes(
+        self,
+        row: dict[str, str],
+    ) -> tuple[dict[str, set[str]], list[tuple[int, str]]]:
+        """Extract known positive EC labels and incomplete branches to mask."""
+        positives = {level: set() for level in self.level_names()}
+        unknown_prefixes: list[tuple[int, str]] = []
+
         for ec_label in self.parse_labels(row):
-            level_1, level_2, level_3, level_4 = self._parse_single_ec(ec_label)
-            if level_1 != "-":
-                labels_by_level["level_1"].add(level_1)
-            if level_1 != "-" and level_2 != "-":
-                labels_by_level["level_2"].add(f"{level_1}.{level_2}")
-            if level_1 != "-" and level_2 != "-" and level_3 != "-":
-                labels_by_level["level_3"].add(f"{level_1}.{level_2}.{level_3}")
-            if level_1 != "-" and level_2 != "-" and level_3 != "-" and level_4 != "-":
-                labels_by_level["level_4"].add(f"{level_1}.{level_2}.{level_3}.{level_4}")
-        return labels_by_level
+            parts = self._parse_single_ec(ec_label)
+            known_parts = []
+
+            for depth, part in enumerate(parts, start=1):
+                if part == "-":
+                    break
+
+                known_parts.append(part)
+                positives[f"level_{depth}"].add(".".join(known_parts))
+
+            if "-" in parts:
+                first_missing_depth = parts.index("-") + 1
+                prefix_depth = first_missing_depth - 1
+                prefix = ".".join(parts[:prefix_depth])
+                unknown_prefixes.append((prefix_depth, prefix))
+
+        return positives, unknown_prefixes
+
+    def fit(self, rows: list[dict[str, str]]) -> "HierarchicalECLabelBuilder":
+        """Build EC vocabulary from training rows only."""
+        labels_by_level = {level: set() for level in self.level_names()}
+
+        for row in rows:
+            positives, _ = self._positive_labels_and_unknown_prefixes(row)
+
+            for level_name in self.level_names():
+                labels_by_level[level_name].update(positives[level_name])
+
+        self.vocabulary_by_level = {
+            level_name: tuple(sorted(labels))
+            for level_name, labels in labels_by_level.items()
+        }
+
+        self._ensure_index_by_level()
+
+        return self
+
+    def _ensure_index_by_level(self) -> None:
+        """Build label-to-column maps when vocabulary is supplied directly."""
+        if self.vocabulary_by_level is None:
+            raise ValueError("Builder must be fit before calling build().")
+        if set(self._index_by_level) == set(self.vocabulary_by_level):
+            return
+
+        self._index_by_level = {
+            level_name: {label: idx for idx, label in enumerate(vocab)}
+            for level_name, vocab in self.vocabulary_by_level.items()
+        }
 
     def build(self, row: dict[str, str]) -> dict[str, dict[str, np.ndarray]]:
-        """Build per-level multilabel targets and their masks."""
+        """Build target and mask vectors for one protein."""
         if self.vocabulary_by_level is None:
-            raise ValueError("HierarchicalECLabelBuilder must be fit before calling build().")
-        if not self._index_by_level:
-            self._index_by_level = {
-                level_name: {label: idx for idx, label in enumerate(vocabulary)}
-                for level_name, vocabulary in self.vocabulary_by_level.items()
-            }
+            raise ValueError("Builder must be fit before calling build().")
+        self._ensure_index_by_level()
 
-        row_level_labels = self.extract_level_labels(row)
+        positives, unknown_prefixes = self._positive_labels_and_unknown_prefixes(row)
+
         targets: dict[str, np.ndarray] = {}
-        target_masks: dict[str, np.ndarray] = {}
-        for level_name in self.level_names():
-            vocabulary = self.vocabulary_by_level[level_name]
+        masks: dict[str, np.ndarray] = {}
+
+        has_any_ec = bool(self.parse_labels(row))
+
+        for depth, level_name in enumerate(self.level_names(), start=1):
+            vocab = self.vocabulary_by_level[level_name]
             index_by_label = self._index_by_level[level_name]
-            target = np.zeros(len(vocabulary), dtype=np.float32)
-            known_active_labels = [
-                label
-                for label in row_level_labels[level_name]
-                if label in index_by_label
-            ]
-            for label in known_active_labels:
-                target[index_by_label[label]] = 1.0
+
+            target = np.zeros(len(vocab), dtype=np.float32)
+            mask = (
+                np.ones(len(vocab), dtype=bool)
+                if has_any_ec
+                else np.zeros(len(vocab), dtype=bool)
+            )
+
+            # Mask unknown descendants from incomplete EC labels.
+            for prefix_depth, prefix in unknown_prefixes:
+                if depth <= prefix_depth:
+                    continue
+
+                for idx, label in enumerate(vocab):
+                    if not prefix or label.startswith(prefix + "."):
+                        mask[idx] = False
+
+            # Mark known positives; positives override masks.
+            for label in positives[level_name]:
+                if label in index_by_label:
+                    idx = index_by_label[label]
+                    target[idx] = 1.0
+                    mask[idx] = True
+
             targets[level_name] = target
-            target_masks[level_name] = np.asarray(bool(known_active_labels), dtype=bool)
+            masks[level_name] = mask
+
         return {
             "target": targets,
-            "target_mask": target_masks,
+            "target_mask": masks,
         }
 
     def validate_row(self, row: dict[str, str]) -> str | None:
-        """Validate EC labels without requiring a fitted vocabulary."""
+        """Validate EC format."""
         try:
-            self.extract_level_labels(row)
+            for ec_label in self.parse_labels(row):
+                self._parse_single_ec(ec_label)
         except ValueError as exc:
             return str(exc)
+
         return None
 
 
@@ -240,78 +253,25 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
         self._ensure_flat_index()
         return dict(self._offset_by_level)
 
-    def _analyze_label(
-        self,
-        ec_label: str,
-    ) -> tuple[list[tuple[str, str]], tuple[str, ...], int | None]:
-        """Resolve known EC prefixes and track the first unknown hierarchy level."""
-        level_names = self.level_names()
-        resolved_labels: list[tuple[str, str]] = []
-        resolved_prefix_parts: list[str] = []
-
-        for level_index, part in enumerate(self._parse_single_ec(ec_label), start=1):
-            if part == "-":
-                return resolved_labels, tuple(resolved_prefix_parts), level_index
-
-            level_name = level_names[level_index - 1]
-            candidate = ".".join((*resolved_prefix_parts, part))
-            if candidate not in self._index_by_level[level_name]:
-                return resolved_labels, tuple(resolved_prefix_parts), level_index
-
-            resolved_labels.append((level_name, candidate))
-            resolved_prefix_parts.append(part)
-
-        return resolved_labels, tuple(resolved_prefix_parts), None
-
-    def _mark_unknown_descendants(
-        self,
-        target_mask: np.ndarray,
-        resolved_prefix_parts: tuple[str, ...],
-        first_unknown_level: int,
-    ) -> None:
-        """Mask descendants beneath a partially known EC prefix."""
-        prefix = ".".join(resolved_prefix_parts)
-        for level_name in self.level_names()[first_unknown_level - 1:]:
-            offset = self._offset_by_level[level_name]
-            for label, index in self._index_by_level[level_name].items():
-                if not prefix or label.startswith(f"{prefix}."):
-                    target_mask[offset + index] = False
-
     def build(self, row: dict[str, str]) -> dict[str, np.ndarray]:
-        """Build a flat multilabel EC target with unknown descendants masked out."""
+        """Build a flat EC target by concatenating the per-level hierarchical payload."""
         self._ensure_flat_index()
-        total_dim = len(self.flat_vocabulary or ())
-        target = np.zeros(total_dim, dtype=np.float32)
-        target_mask = np.ones(total_dim, dtype=bool)
+        payload = super().build(row)
+        level_names = self.level_names()
 
-        parsed_labels = self.parse_labels(row)
-        if not parsed_labels:
-            target[:] = np.nan
-            target_mask[:] = False
-            return {
-                "target": target,
-                "target_mask": target_mask,
-            }
-
-        analyzed_labels = [self._analyze_label(ec_label) for ec_label in parsed_labels]
-        for _, resolved_prefix_parts, first_unknown_level in analyzed_labels:
-            if first_unknown_level is not None:
-                self._mark_unknown_descendants(
-                    target_mask,
-                    resolved_prefix_parts,
-                    first_unknown_level,
-                )
-
-        for resolved_labels, _, _ in analyzed_labels:
-            for level_name, label in resolved_labels:
-                flat_index = self._offset_by_level[level_name] + self._index_by_level[level_name][label]
-                target[flat_index] = 1.0
-                target_mask[flat_index] = True
-
-        target[~target_mask] = np.nan
         return {
-            "target": target,
-            "target_mask": target_mask,
+            "target": np.concatenate(
+                [
+                    np.asarray(payload["target"][level_name], dtype=np.float32)
+                    for level_name in level_names
+                ]
+            ),
+            "target_mask": np.concatenate(
+                [
+                    np.asarray(payload["target_mask"][level_name], dtype=bool)
+                    for level_name in level_names
+                ]
+            ),
         }
 
 
@@ -337,8 +297,8 @@ class ResidueBinaryVectorLabelBuilder:
     positions_column: str
     sequence_column: str = "protein_sequence"
 
-    def build(self, row: dict[str, str]) -> tuple[np.ndarray, np.ndarray]:
-        """Build residue targets and the matching residue mask for one row."""
+    def build(self, row: dict[str, str]) -> np.ndarray:
+        """Build residue targets for one row."""
         sequence = normalize_sequence(row.get(self.sequence_column))
         if not sequence:
             raise ValueError(
@@ -347,7 +307,6 @@ class ResidueBinaryVectorLabelBuilder:
             )
         positions = _parse_position_list(clean_text(row.get(self.positions_column)))
         target = np.zeros(len(sequence), dtype=np.float32)
-        target_mask = np.ones(len(sequence), dtype=bool)
 
         for position in positions:
             index = position - 1
@@ -357,7 +316,7 @@ class ResidueBinaryVectorLabelBuilder:
                     f"'{row.get('sample_id', '')}' with length {len(sequence)}."
                 )
             target[index] = 1.0
-        return target, target_mask
+        return target
 
     def validate_row(self, row: dict[str, str]) -> str | None:
         try:

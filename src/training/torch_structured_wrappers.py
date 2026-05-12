@@ -68,12 +68,14 @@ class ECMultiHeadClassifierTorch:
     def _compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
         loss_terms = []
         for level_name, logits in logits_by_level.items():
-            level_loss = criterion(logits, y_t[level_name]).mean(dim=1)
-            sample_mask = target_mask_t[level_name].float()
-            denom = sample_mask.sum()
+            level_loss = criterion(logits, y_t[level_name])
+            mask = target_mask_t[level_name].float()
+            if mask.ndim == 1:
+                mask = mask[:, None].expand_as(level_loss)
+            denom = mask.sum()
             if denom.item() == 0:
                 continue
-            loss_terms.append((level_loss * sample_mask).sum() / denom)
+            loss_terms.append((level_loss * mask).sum() / denom)
         if not loss_terms:
             return None
         return torch.stack(loss_terms).mean()

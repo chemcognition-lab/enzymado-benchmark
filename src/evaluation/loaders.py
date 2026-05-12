@@ -5,10 +5,9 @@ Per-residue runs store them as `test_predictions.npz`.
 
 Some attention-based EC runs use a multi-head schema where each of the four EC
 levels has its own `(y_true_level_k, predictions_level_k, target_mask_level_k)`
-trio (target mask is per-sample 1D for these). We unify those by horizontally
-concatenating the four levels into a single `(N, sum(C_k))` tensor and
-broadcasting each level's 1D mask across its own column block, so downstream
-code sees the same `(y_true, predictions, target_mask)` shape it always does.
+trio. We unify those by horizontally concatenating the four levels into a
+single `(N, sum(C_k))` tensor. Older payloads used a per-sample 1D mask per
+level; newer payloads may use a per-label 2D mask matching `y_true`.
 """
 
 from __future__ import annotations
@@ -70,13 +69,16 @@ def _unify_multi_head_levels(out: dict[str, np.ndarray]) -> PredictionPayload | 
                 f"Multi-head EC level {level}: y_true/predictions must be matching 2D arrays, "
                 f"got {y_k.shape} and {p_k.shape}."
             )
-        if m_k.ndim != 1 or m_k.shape[0] != y_k.shape[0]:
+        if m_k.ndim == 1 and m_k.shape[0] == y_k.shape[0]:
+            m_2d = np.broadcast_to(m_k.astype(bool)[:, None], y_k.shape)
+        elif m_k.ndim == 2 and m_k.shape == y_k.shape:
+            m_2d = m_k.astype(bool)
+        else:
             raise ValueError(
                 f"Multi-head EC level {level}: target_mask must be 1D with length "
-                f"{y_k.shape[0]}, got shape {m_k.shape}."
+                f"{y_k.shape[0]} or 2D matching y_true shape {y_k.shape}; "
+                f"got shape {m_k.shape}."
             )
-        # Broadcast the 1D sample mask across this level's columns.
-        m_2d = np.broadcast_to(m_k.astype(bool)[:, None], y_k.shape)
         y_blocks.append(y_k)
         p_blocks.append(p_k)
         m_blocks.append(m_2d)

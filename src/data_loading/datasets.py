@@ -11,13 +11,7 @@ except ModuleNotFoundError:
     class TorchDataset:  # type: ignore[no-redef]
         pass
 
-from .adapters import (
-    DatasetAdapter,
-    MutationDeltaAdapter,
-    ProteinGlobalAdapter,
-    ProteinLigandAdapter,
-    ProteinResidueAdapter,
-)
+from .adapters import DatasetAdapter
 from .collators import (
     MutationDeltaGlobalCollator,
     ProteinGlobalCollator,
@@ -34,7 +28,7 @@ from .labels import (
     BinaryLabelBuilder,
     HierarchicalECLabelBuilder,
     ResidueBinaryVectorLabelBuilder,
-    ScalarRegressionLabelBuilder,
+    RegressionLabelBuilder,
 )
 from .registry import TaskConfig, get_task_config
 
@@ -212,7 +206,7 @@ class ProteinResidueDataset(BaseComposableDataset):
             return errors
 
         try:
-            target_per_residue, target_mask = self.label_builder.build(row)
+            target_per_residue = self.label_builder.build(row)
             protein_length = self.protein_builder.lookup_length(row)
         except (KeyError, ValueError) as exc:
             return [str(exc)]
@@ -223,17 +217,11 @@ class ProteinResidueDataset(BaseComposableDataset):
                 f"'{row.get('sample_id', '')}': embedding={protein_length}, "
                 f"target={target_per_residue.shape[0]}."
             ]
-        if target_per_residue.shape != target_mask.shape:
-            return [
-                "Residue target and residue mask length mismatch for sample "
-                f"'{row.get('sample_id', '')}': target={target_per_residue.shape}, "
-                f"mask={target_mask.shape}."
-            ]
         return []
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
         """Build a residue-level sample and enforce length alignment."""
-        target_per_residue, target_mask = self.label_builder.build(row)
+        target_per_residue = self.label_builder.build(row)
         protein_emb = self.protein_builder.build(row)
         if protein_emb.shape[0] != target_per_residue.shape[0]:
             raise ValueError(
@@ -241,17 +229,10 @@ class ProteinResidueDataset(BaseComposableDataset):
                 f"'{row.get('sample_id', '')}': embedding={protein_emb.shape[0]}, "
                 f"target={target_per_residue.shape[0]}."
             )
-        if target_per_residue.shape != target_mask.shape:
-            raise ValueError(
-                "Residue target and residue mask length mismatch for sample "
-                f"'{row.get('sample_id', '')}': target={target_per_residue.shape}, "
-                f"mask={target_mask.shape}."
-            )
         return {
             "sample_id": row["sample_id"],
             "protein_emb": protein_emb,
             "target_per_residue": target_per_residue,
-            "target_mask": target_mask,
         }
 
 
@@ -278,25 +259,19 @@ def _build_adapter(
             f"Available variants: {available}"
         )
 
-    adapter_cls: type[DatasetAdapter]
-    if config.batch_kind == "protein_global":
-        adapter_cls = ProteinGlobalAdapter
-    elif config.batch_kind == "protein_ligand_global":
-        adapter_cls = ProteinLigandAdapter
-    elif config.batch_kind == "mutation_delta_global":
-        adapter_cls = MutationDeltaAdapter
-    elif config.batch_kind == "protein_residue":
-        adapter_cls = ProteinResidueAdapter
-    else:
+    if config.batch_kind not in {
+        "protein_global",
+        "protein_ligand_global",
+        "mutation_delta_global",
+        "protein_residue",
+    }:
         raise ValueError(f"Unsupported batch_kind '{config.batch_kind}'.")
 
-    return adapter_cls(
+    return DatasetAdapter(
         dataset_path=config.dataset_paths[split_variant],
         sample_id_candidates=config.sample_id_candidates,
         split_name=split_name,
         split_column=config.split_column,
-        split_path=None,
-        split_id_candidates=config.split_id_candidates,
     )
 
 
@@ -307,7 +282,7 @@ def _build_label_builder(
 ) -> Any:
     """Create the label builder required by the task configuration."""
     if config.label_kind == "scalar_regression":
-        return ScalarRegressionLabelBuilder(target_column=str(config.target_column))
+        return RegressionLabelBuilder(target_column=str(config.target_column))
     if config.label_kind == "binary":
         return BinaryLabelBuilder(target_column=str(config.target_column))
     if config.label_kind == "multilabel_ec":

@@ -1,8 +1,9 @@
 from __future__ import annotations
-"""Helpers for normalizing CSV rows and resolving split assignments."""
+"""Helpers for normalizing CSV rows and filtering inline split labels."""
 
-import csv
 from pathlib import Path
+
+import pandas as pd
 
 
 def clean_text(value: str | None) -> str:
@@ -25,85 +26,33 @@ def normalize_identifier(column_name: str, value: str | None) -> str:
 
 
 def read_csv_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    """Read a CSV file and eagerly strip whitespace from every field."""
-    with csv_path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = list(reader.fieldnames or [])
-        rows = [{key: clean_text(value) for key, value in row.items()} for row in reader]
-    return fieldnames, rows
-
-
-def detect_split_id_column(fieldnames: list[str]) -> str:
-    """Return the non-`split` column used to join a split assignment file."""
-    candidates = [fieldname for fieldname in fieldnames if fieldname != "split"]
-    if not candidates:
-        raise ValueError("Split assignment file must contain one id column besides 'split'.")
-    return candidates[0]
-
-
-def load_split_assignments(split_path: Path) -> tuple[str, dict[str, str]]:
-    """Load a split CSV into a normalized identifier-to-split mapping."""
-    fieldnames, rows = read_csv_rows(split_path)
-    id_column = detect_split_id_column(fieldnames)
-
-    assignments: dict[str, str] = {}
-    for row in rows:
-        key = normalize_identifier(id_column, row.get(id_column))
-        split_name = clean_text(row.get("split"))
-        if not key or not split_name:
-            continue
-        assignments[key] = split_name
-    return id_column, assignments
-
-
-def resolve_row_split(
-    row: dict[str, str],
-    split_column: str | None = None,
-    split_assignments: dict[str, str] | None = None,
-    split_id_candidates: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence"),
-) -> str:
-    """Resolve a row's split from an inline column or an external split table."""
-    if split_column and split_column in row and clean_text(row.get(split_column)):
-        return clean_text(row.get(split_column))
-
-    if split_assignments is None:
-        raise ValueError("No split column or split assignments were provided.")
-
-    for candidate in split_id_candidates:
-        if candidate not in row:
-            continue
-        key = normalize_identifier(candidate, row.get(candidate))
-        if key in split_assignments:
-            return split_assignments[key]
-
-    raise KeyError(
-        "Unable to resolve split assignment for row using candidates "
-        f"{split_id_candidates}. Row keys: {sorted(row)}"
-    )
+    """Read a CSV file as strings and eagerly strip whitespace from every field."""
+    frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    frame = frame.map(clean_text)
+    return list(frame.columns), frame.to_dict("records")
 
 
 def filter_rows_by_split(
     rows: list[dict[str, str]],
     split_name: str | None = None,
-    split_column: str | None = None,
-    split_assignments: dict[str, str] | None = None,
-    split_id_candidates: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence"),
+    split_column: str = "split",
 ) -> list[dict[str, str]]:
-    """Filter rows to a requested split while preserving the resolved split label."""
+    """Filter rows to a requested split while preserving the split label."""
     if split_name is None:
         return list(rows)
+    if not rows:
+        return []
 
-    filtered_rows: list[dict[str, str]] = []
-    for row in rows:
-        resolved_split = resolve_row_split(
-            row,
-            split_column=split_column,
-            split_assignments=split_assignments,
-            split_id_candidates=split_id_candidates,
+    frame = pd.DataFrame(rows)
+    if split_column not in frame.columns:
+        raise ValueError(
+            f"Missing split column '{split_column}'. Available columns: {list(frame.columns)}"
         )
-        if resolved_split != split_name:
-            continue
-        copied_row = dict(row)
-        copied_row["resolved_split"] = resolved_split
-        filtered_rows.append(copied_row)
-    return filtered_rows
+
+    split_values = frame[split_column].map(clean_text)
+    if split_values.eq("").any():
+        raise ValueError(f"Missing split value in column '{split_column}'.")
+
+    filtered = frame.loc[split_values == split_name].copy()
+    filtered["resolved_split"] = split_name
+    return filtered.to_dict("records")

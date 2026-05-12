@@ -19,22 +19,10 @@ class TaskConfig:
     sequence_column: str = "protein_sequence"
     sample_id_candidates: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence")
     split_column: str = "split"
-    split_id_candidates: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence")
     ligand_column: str | None = None
     wildtype_sequence_column: str | None = None
     residue_positions_column: str | None = None
     ec_separator: str = ";"
-
-
-def _standardized_path(directory: str, stem: str, mode: str) -> Path:
-    """Build the per-variant wide CSV path produced by `dataset_splitting.py`."""
-    if mode == "random":
-        suffix = "random_80_10_10"
-    elif mode == "similarity":
-        suffix = "similarity_mmseqs2_80_10_10"
-    else:
-        raise ValueError(f"Unsupported split mode: {mode}.")
-    return PROJECT_ROOT / directory / f"{stem}_{suffix}_standardized.csv"
 
 
 TASK_REGISTRY: dict[str, TaskConfig] = {
@@ -43,167 +31,137 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         batch_kind="protein_global",
         label_kind="binary",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/solubility", "proteinea_solubility", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/solubility", "proteinea_solubility", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/solubility/proteinea_solubility_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/solubility/proteinea_solubility_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="solubility",
         sample_id_candidates=("dataset_id", "uniprot_id"),
-        split_id_candidates=("dataset_id", "uniprot_id"),
     ),
     "ph_opt": TaskConfig(
         name="ph_opt",
         batch_kind="protein_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/ph_opt", "brenda_phopt", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/ph_opt", "brenda_phopt", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/ph_opt/brenda_phopt_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/ph_opt/brenda_phopt_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="phopt_median_standardized",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
     "ec_number": TaskConfig(
         name="ec_number",
         batch_kind="protein_global",
         label_kind="multilabel_ec",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/ec_number", "swissprot_ec", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/ec_number", "swissprot_ec", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/ec_number/swissprot_ec_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/ec_number/swissprot_ec_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="ec_number",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
     "kcat": TaskConfig(
         name="kcat",
         batch_kind="protein_ligand_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/kcat", "catpred_kcat", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/kcat", "catpred_kcat", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/kcat/catpred_kcat_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/kcat/catpred_kcat_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="kcat_standardized",
         ligand_column="smiles",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
     "km": TaskConfig(
         name="km",
         batch_kind="protein_ligand_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/km", "catpred_km", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/km", "catpred_km", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/km/catpred_km_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/km/catpred_km_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="km_standardized",
         ligand_column="smiles",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
     "binding": TaskConfig(
         name="binding",
         batch_kind="protein_ligand_global",
         label_kind="binary",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/binding", "biolip_binding", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/binding", "biolip_binding", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/binding/biolip_binding_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/binding/biolip_binding_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="binding",
         ligand_column="smiles",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("protein_sequence", "uniprot_id"),
     ),
     "dtm": TaskConfig(
         name="dtm",
         batch_kind="mutation_delta_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/dtm", "fireprotdb_dtm", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/dtm", "fireprotdb_dtm", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/dtm/fireprotdb_dtm_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/dtm/fireprotdb_dtm_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="dtm_standardized",
         wildtype_sequence_column="wildtype_sequence",
         sample_id_candidates=("dataset_id", "uniprot_id"),
-        split_id_candidates=("dataset_id", "uniprot_id"),
     ),
     "ddg": TaskConfig(
         name="ddg",
         batch_kind="mutation_delta_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/ddg_mut", "fireprotdb_ddg", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/ddg_mut", "fireprotdb_ddg", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/ddg_mut/fireprotdb_ddg_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/ddg_mut/fireprotdb_ddg_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="ddg_standardized",
         wildtype_sequence_column="wildtype_sequence",
         sample_id_candidates=("dataset_id", "uniprot_id"),
-        split_id_candidates=("dataset_id", "uniprot_id"),
     ),
     "active_sites": TaskConfig(
         name="active_sites",
         batch_kind="protein_residue",
         label_kind="residue_binary_vector",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/active_sites", "swissprot_active_site", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/active_sites", "swissprot_active_site", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/active_sites/swissprot_active_site_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/active_sites/swissprot_active_site_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column=None,
         residue_positions_column="active_site",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
     "binding_sites": TaskConfig(
         name="binding_sites",
         batch_kind="protein_residue",
         label_kind="residue_binary_vector",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/properties/binding_site", "swissprot_binding_site", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/properties/binding_site", "swissprot_binding_site", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/properties/binding_site/swissprot_binding_site_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/properties/binding_site/swissprot_binding_site_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column=None,
         residue_positions_column="binding_positions",
         sample_id_candidates=("uniprot_id", "protein_sequence"),
-        split_id_candidates=("uniprot_id", "protein_sequence"),
     ),
     "align_amylase_activity": TaskConfig(
         name="align_amylase_activity",
@@ -216,7 +174,6 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="specific_activity_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_amylase_expression": TaskConfig(
         name="align_amylase_expression",
@@ -229,7 +186,6 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="expression_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_amylase_stability": TaskConfig(
         name="align_amylase_stability",
@@ -242,7 +198,6 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="thermostability_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_glucosidase_activity": TaskConfig(
         name="align_glucosidase_activity",
@@ -255,7 +210,6 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="activity_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_glucosidase_expression": TaskConfig(
         name="align_glucosidase_expression",
@@ -268,7 +222,6 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="expression_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "align_glucosidase_melting": TaskConfig(
         name="align_glucosidase_melting",
@@ -281,40 +234,33 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="melting_point_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "cleeveland_galox": TaskConfig(
         name="cleeveland_galox",
         batch_kind="protein_ligand_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/real_case/cleeveland_galox", "cleeveland", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/real_case/cleeveland_galox", "cleeveland", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/real_case/cleeveland_galox/cleeveland_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="specific_activity_standardized",
         ligand_column="smiles",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
     "erickson_petase": TaskConfig(
         name="erickson_petase",
         batch_kind="protein_global",
         label_kind="scalar_regression",
         dataset_paths={
-            "random": _standardized_path(
-                "data/processed/real_case/erickson_petase", "erickson", "random"
-            ),
-            "similarity": _standardized_path(
-                "data/processed/real_case/erickson_petase", "erickson", "similarity"
-            ),
+            "random": PROJECT_ROOT
+            / "data/processed/real_case/erickson_petase/erickson_random_80_10_10_standardized.csv",
+            "similarity": PROJECT_ROOT
+            / "data/processed/real_case/erickson_petase/erickson_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="sum_aromatic_products_standardized",
         sample_id_candidates=("dataset_id", "protein_sequence"),
-        split_id_candidates=("dataset_id", "protein_sequence"),
     ),
 }
 

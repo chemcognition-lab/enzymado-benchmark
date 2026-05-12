@@ -1,12 +1,6 @@
 """Composable dataset, feature, label, and split-loading utilities."""
 
-from .adapters import (
-    DatasetAdapter,
-    MutationDeltaAdapter,
-    ProteinGlobalAdapter,
-    ProteinLigandAdapter,
-    ProteinResidueAdapter,
-)
+from .adapters import DatasetAdapter
 from .collators import (
     MutationDeltaGlobalBatch,
     MutationDeltaGlobalCollator,
@@ -40,8 +34,7 @@ from .labels import (
     FlatECLabelBuilder,
     HierarchicalECLabelBuilder,
     ResidueBinaryVectorLabelBuilder,
-    ScalarRegressionLabelBuilder,
-    StandardScaler1D,
+    RegressionLabelBuilder,
 )
 from .registry import TASK_REGISTRY, TaskConfig, get_task_config
 
@@ -51,20 +44,16 @@ __all__ = [
     "EmbeddingLookupError",
     "FlatECLabelBuilder",
     "HierarchicalECLabelBuilder",
-    "MutationDeltaAdapter",
     "MutationDeltaEmbeddingBuilder",
     "MutationDeltaGlobalBatch",
     "MutationDeltaGlobalCollator",
     "MutationDeltaGlobalDataset",
-    "ProteinGlobalAdapter",
     "ProteinGlobalBatch",
     "ProteinGlobalCollator",
     "ProteinGlobalDataset",
-    "ProteinLigandAdapter",
     "ProteinLigandGlobalBatch",
     "ProteinLigandGlobalCollator",
     "ProteinLigandGlobalDataset",
-    "ProteinResidueAdapter",
     "ProteinResidueBatch",
     "ProteinResidueConcatBatch",
     "ProteinResidueConcatCollator",
@@ -74,8 +63,7 @@ __all__ = [
     "RDKitLigandFeatureBuilder",
     "ResidueBinaryVectorLabelBuilder",
     "ResidueEmbeddingStore",
-    "ScalarRegressionLabelBuilder",
-    "StandardScaler1D",
+    "RegressionLabelBuilder",
     "TASK_REGISTRY",
     "TaskConfig",
     "TaskDatasetBundle",

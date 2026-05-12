@@ -14,14 +14,9 @@ from data_loading import (
     FlatECLabelBuilder,
     HierarchicalECLabelBuilder,
     ResidueEmbeddingStore,
-    ScalarRegressionLabelBuilder,
+    RegressionLabelBuilder,
 )
-from data_loading.adapters import (
-    MutationDeltaAdapter,
-    ProteinGlobalAdapter,
-    ProteinLigandAdapter,
-    ProteinResidueAdapter,
-)
+from data_loading.adapters import DatasetAdapter
 from training.train_common import PROJECT_ROOT, log, resolve_sequence_index_path
 
 
@@ -34,20 +29,11 @@ def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
             f"Available variants: {available}"
         )
 
-    adapter_cls = {
-        "protein_global": ProteinGlobalAdapter,
-        "protein_ligand_global": ProteinLigandAdapter,
-        "mutation_delta_global": MutationDeltaAdapter,
-        "protein_residue": ProteinResidueAdapter,
-    }[config.batch_kind]
-
-    return adapter_cls(
+    return DatasetAdapter(
         dataset_path=config.dataset_paths[split_variant],
         sample_id_candidates=config.sample_id_candidates,
         split_name=split_name,
         split_column=config.split_column,
-        split_path=None,
-        split_id_candidates=config.split_id_candidates,
     ).load_rows()
 
 
@@ -487,7 +473,7 @@ def build_multilabel_ec_direct(
                 np.asarray(label_payload["target"][level_name], dtype=np.float32)
             )
             target_masks[level_name].append(
-                bool(label_payload["target_mask"][level_name])
+                np.asarray(label_payload["target_mask"][level_name], dtype=bool)
             )
 
     if skipped:
@@ -502,7 +488,10 @@ def build_multilabel_ec_direct(
             for level_name in level_names
         }
         empty_target_masks = {
-            level_name: np.zeros((0,), dtype=bool)
+            level_name: np.zeros(
+                (0, len(label_builder.vocabulary_by_level[level_name])),
+                dtype=bool,
+            )
             for level_name in level_names
         }
         return np.empty((0, 0), dtype=np.float32), empty_targets, empty_target_masks
@@ -514,7 +503,7 @@ def build_multilabel_ec_direct(
             for level_name, level_targets in targets.items()
         },
         {
-            level_name: np.asarray(level_mask, dtype=bool)
+            level_name: np.stack(level_mask).astype(bool, copy=False)
             for level_name, level_mask in target_masks.items()
         },
     )
@@ -571,7 +560,7 @@ def build_protein_global_Xy_direct(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build pooled protein-only features for scalar or binary tasks."""
     if config.label_kind == "scalar_regression":
-        label_builder = ScalarRegressionLabelBuilder(target_column=str(config.target_column))
+        label_builder = RegressionLabelBuilder(target_column=str(config.target_column))
     elif config.label_kind == "binary":
         label_builder = BinaryLabelBuilder(target_column=str(config.target_column))
     else:
@@ -618,7 +607,7 @@ def build_mutation_delta_Xy_direct(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build pooled mutant-minus-wildtype features for mutation-effect tasks."""
     if config.label_kind == "scalar_regression":
-        label_builder = ScalarRegressionLabelBuilder(target_column=str(config.target_column))
+        label_builder = RegressionLabelBuilder(target_column=str(config.target_column))
     elif config.label_kind == "binary":
         label_builder = BinaryLabelBuilder(target_column=str(config.target_column))
     else:
@@ -760,11 +749,15 @@ def _build_label_only_payload(bundle):
             for level_name in level_names
         }
         target_masks = {
-            level_name: np.asarray(
+            level_name: np.stack(
                 [
-                    bool(payload["target_mask"][level_name])
+                    np.asarray(payload["target_mask"][level_name], dtype=bool)
                     for payload in label_payloads
-                ],
+                ]
+            ).astype(bool, copy=False)
+            if label_payloads
+            else np.zeros(
+                (0, len(label_builder.vocabulary_by_level[level_name])),
                 dtype=bool,
             )
             for level_name in level_names
@@ -776,14 +769,14 @@ def _build_label_only_payload(bundle):
         targets = _pad_1d_array_list(
             [
                 np.asarray(target_per_residue, dtype=np.float32)
-                for target_per_residue, _ in label_payloads
+                for target_per_residue in label_payloads
             ],
             dtype=np.float32,
         )
         target_masks = _pad_1d_array_list(
             [
-                np.asarray(target_mask, dtype=np.int8)
-                for _, target_mask in label_payloads
+                np.ones_like(np.asarray(target_per_residue, dtype=np.int8))
+                for target_per_residue in label_payloads
             ],
             dtype=np.int8,
         ).astype(bool, copy=False)
