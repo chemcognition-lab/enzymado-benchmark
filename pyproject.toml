@@ -82,7 +82,7 @@ src = ["src"]
 include = [
     "pyproject.toml",
     "src/**/*.py",
-    "models/**/*.py",
+    "src/models/**/*.py",
     "scripts/**/*.py",
     "embedding_scripts/**/*.py",
     "tests/**/*.py",

@@ -257,4 +257,4 @@ if [[ "${OVERWRITE_RESULTS}" == "1" || "${OVERWRITE_RESULTS}" == "true" || "${OV
     TRAIN_ARGS+=(--overwrite_results)
 fi
 
-python -u "${REPO}/models/train.py" "${TRAIN_ARGS[@]}"
+python -u "${REPO}/src/training/train.py" "${TRAIN_ARGS[@]}"

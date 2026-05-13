@@ -13,13 +13,16 @@ import tempfile
 import urllib.request
 import zipfile
 
+_DOWNLOAD_PAGE = "https://loschmidt.chemi.muni.cz/fireprotdb/download/"
+
+# FireProtDB v2 (2025+) ships a PostgreSQL SQL dump via a dated zip.
+# The CSV/TSV API endpoints (/api/search?format=csv) return only a header row
+# without a browser session cookie. Use --url to supply a direct CSV/TSV export
+# if you obtain one from the website manually, or wait for the API to support
+# unauthenticated bulk export again.
 DEFAULT_URLS = [
     "https://loschmidt.chemi.muni.cz/fireprotdb/api/search?format=csv&sort=",
     "https://loschmidt.chemi.muni.cz/fireprotdb/api/search?format=tsv&sort=",
-    "https://loschmidt.chemi.muni.cz/fireprotdb/download/FireProtDB.tsv",
-    "https://loschmidt.chemi.muni.cz/fireprotdb/download/FireProtDB.csv",
-    "https://loschmidt.chemi.muni.cz/fireprotdb/download/FireProtDB.tsv.gz",
-    "https://loschmidt.chemi.muni.cz/fireprotdb/download/FireProtDB.csv.gz",
 ]
 
 
@@ -44,6 +47,13 @@ def try_download(urls, timeout):
     raise RuntimeError(f"Failed to download from any URL: {last_err}")
 
 
+_SQL_DUMP_MSG = (
+    "The downloaded file is a PostgreSQL SQL dump (FireProtDB v2 format), "
+    "not a CSV/TSV. The script cannot parse it. "
+    "Visit {} to download a CSV/TSV export manually, then pass it with --url."
+).format(_DOWNLOAD_PAGE)
+
+
 def open_text_stream(path):
     with open(path, "rb") as fh:
         sig = fh.read(4)
@@ -55,6 +65,8 @@ def open_text_stream(path):
         if not members:
             raise RuntimeError("Zip archive is empty")
         member = members[0]
+        if member.endswith(".sql"):
+            raise RuntimeError(_SQL_DUMP_MSG)
         return io.TextIOWrapper(zf.open(member, "r"), encoding="utf-8", newline="")
     return open(path, "rt", encoding="utf-8", newline="")
 
@@ -155,6 +167,13 @@ def main():
 
         print(f"Downloaded from: {url_used}")
         print(f"Rows kept: {kept} of {total}")
+        if total == 0:
+            print(
+                "WARNING: No data rows were returned. The FireProtDB API (v2) may "
+                "require a browser session to stream data. Try downloading the CSV "
+                f"manually from {_DOWNLOAD_PAGE} and passing it with --url.",
+                file=sys.stderr,
+            )
         print(f"Output: {args.out}")
     finally:
         try:

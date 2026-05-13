@@ -1,0 +1,11 @@
+name: enzymado-download
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - curl  # download_biolip.sh, download_swissprot_ec.sh
+  - pip:
+      - datasets>=2.21.0  # download_proteinea_datasets.py (proteinea/fluorescence, proteinea/solubility)
+      # download_fireprotdb_ec.py uses Python stdlib only (urllib, csv, gzip, zipfile)
