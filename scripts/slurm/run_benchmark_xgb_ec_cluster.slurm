@@ -29,9 +29,16 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-# shellcheck disable=SC1091
-source "${REPO}/scripts/cluster_scratch_paths.sh"
-init_cluster_runtime_dirs
+: "${SCRATCH_ROOT:=/scratch/${USER}/enzymado}"
+: "${UV_CACHE_DIR:=${SCRATCH_ROOT}/uv-cache}"
+: "${HF_HOME:=${SCRATCH_ROOT}/hf-cache}"
+: "${TORCH_HOME:=${SCRATCH_ROOT}/torch-cache}"
+: "${XDG_CACHE_HOME:=${SCRATCH_ROOT}/xdg-cache}"
+: "${TMPDIR:=${SCRATCH_ROOT}/tmp}"
+: "${UV_LINK_MODE:=copy}"
+export SCRATCH_ROOT UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
+export PYTHONNOUSERSITE=1
+mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
 
 : "${EMB_NAME:=ankh3_large}"
 : "${MAX_TRAIN_ROWS:=10000}"
@@ -44,7 +51,12 @@ init_cluster_runtime_dirs
 : "${COMMON_IDS_PATH:=${REPO}/results/embedding_intersection/common_ids.txt}"
 
 if [[ -z "${CARD_PATH:-}" ]]; then
-    CARD_PATH="$(ensure_scratch_card "${REPO}/benchmark_card.json")"
+    _scratch_cards_dir="${SCRATCH_ROOT}/cards"
+    mkdir -p "${_scratch_cards_dir}"
+    CARD_PATH="${_scratch_cards_dir}/benchmark_card.json"
+    if [[ "${SYNC_CARD_FROM_REPO:-0}" == "1" || ! -f "${CARD_PATH}" ]]; then
+        cp "${REPO}/benchmark_card.json" "${CARD_PATH}"
+    fi
 fi
 
 if [[ -z "${EMBEDDINGS_JSON:-}" ]]; then

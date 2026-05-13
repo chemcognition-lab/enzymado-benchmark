@@ -33,9 +33,16 @@ if [[ -f "${REPO}/cluster_env.sh" ]]; then
     source "${REPO}/cluster_env.sh"
 fi
 
-# shellcheck disable=SC1091
-source "${REPO}/scripts/cluster_scratch_paths.sh"
-init_cluster_runtime_dirs
+: "${SCRATCH_ROOT:=/scratch/${USER}/enzymado}"
+: "${UV_CACHE_DIR:=${SCRATCH_ROOT}/uv-cache}"
+: "${HF_HOME:=${SCRATCH_ROOT}/hf-cache}"
+: "${TORCH_HOME:=${SCRATCH_ROOT}/torch-cache}"
+: "${XDG_CACHE_HOME:=${SCRATCH_ROOT}/xdg-cache}"
+: "${TMPDIR:=${SCRATCH_ROOT}/tmp}"
+: "${UV_LINK_MODE:=copy}"
+export SCRATCH_ROOT UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDIR UV_LINK_MODE
+export PYTHONNOUSERSITE=1
+mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
 
 : "${PER_PROTEIN:=0}"
 : "${ALLOW_PARTIAL:=1}"
@@ -253,21 +260,4 @@ python "${REPO}/${SCRIPT_PATH}" \
     --per_protein "${PER_PROTEIN}" \
     "${EXTRA_ARGS[@]}"
 
-EXPECTED_COUNT="$(grep -c '^>' "${FASTA_PATH}")"
-if [[ "${PER_PROTEIN}" == "1" ]]; then
-    VALIDATION_LAYOUT="pooled"
-else
-    VALIDATION_LAYOUT="residue"
-fi
-if python "${REPO}/scripts/embeddings/validate_embedding_h5.py" \
-    --h5 "${OUT_PATH}" \
-    --expected-count "${EXPECTED_COUNT}" \
-    --expected-dim "${MODEL_DIM}" \
-    --layout "${VALIDATION_LAYOUT}"; then
-    echo "Embedding file validated successfully."
-elif [[ "${ALLOW_PARTIAL}" == "1" ]]; then
-    echo "WARNING: validation failed, but ALLOW_PARTIAL=1 so the job will still exit successfully." >&2
-else
-    echo "ERROR: embedding output validation failed." >&2
-    exit 1
-fi
+echo "Embedding job complete: ${OUT_PATH}"

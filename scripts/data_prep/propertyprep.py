@@ -8,6 +8,9 @@ import time
 import requests
 import re
 
+from rdkit import Chem
+from rdkit import RDLogger as _RDLogger
+
 # Resolve root path correctly for a script inside the scripts/ directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -504,6 +507,32 @@ def parse_binding(v):
 
 
 
+def _canonicalize_smiles_column(
+    smiles_series: pd.Series,
+) -> tuple[pd.Series, pd.Series]:
+    """Validate and canonicalize a SMILES column.
+
+    Returns (canonical_series, is_valid_mask). Rows where is_valid is False
+    have SMILES that RDKit cannot parse and should be dropped.
+    """
+    _RDLogger.DisableLog("rdApp.*")
+    canonical = []
+    is_valid = []
+    for smi in smiles_series.astype(str):
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            canonical.append(smi)
+            is_valid.append(False)
+        else:
+            canonical.append(Chem.MolToSmiles(mol))
+            is_valid.append(True)
+    _RDLogger.EnableLog("rdApp.error")
+    return (
+        pd.Series(canonical, index=smiles_series.index),
+        pd.Series(is_valid, index=smiles_series.index),
+    )
+
+
 def main():
     print("Running Propertyprep Script...")
     
@@ -519,7 +548,7 @@ def main():
         len_before = len(biol)
         st = {"datapoints_before_cleaning": len_before, "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
 
-        biol["protein_sequence"] = biol["protein_sequence"].astype(str).str.strip()
+        biol["protein_sequence"] = biol["protein_sequence"].astype(str).str.strip().str.upper()
         biol["uniprot_id"] = biol["uniprot_id"].replace("", pd.NA)
 
         
@@ -548,6 +577,12 @@ def main():
         final_cols = ['uniprot_id', 'protein_sequence', 'ligand_id', 'ligand_name', 'smiles', 'label']
         if all(c in biol.columns for c in final_cols):
             biol_final = biol[final_cols].rename(columns={'label': 'binding'}).reset_index(drop=True)
+            canonical_smiles, valid_mask = _canonicalize_smiles_column(biol_final["smiles"])
+            n_invalid = int((~valid_mask).sum())
+            biol_final = biol_final[valid_mask].copy()
+            biol_final["smiles"] = canonical_smiles[valid_mask].values
+            st["smiles_invalid_removed"] = n_invalid
+            st["removed_by_reason"]["other"] += n_invalid
             biol_final.to_csv(_P.data_processed_properties / 'binding' / 'biolip_binding.csv', index=False)
             st["datapoints_after_cleaning"] = len(biol_final)
             st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
@@ -702,6 +737,16 @@ def main():
                 'ph': 'ph',
                 'log10kcat_max': 'kcat'
             })
+            kcat[_C.protein_sequence] = kcat[_C.protein_sequence].astype(str).str.strip().str.upper()
+            len_b = len(kcat)
+            kcat = kcat.dropna(subset=[_C.protein_sequence, _C.smiles, 'kcat'])
+            st["removed_by_reason"]["missing_values"] += len_b - len(kcat)
+            canonical_smiles, valid_mask = _canonicalize_smiles_column(kcat[_C.smiles])
+            n_invalid = int((~valid_mask).sum())
+            kcat = kcat[valid_mask].copy()
+            kcat[_C.smiles] = canonical_smiles[valid_mask].values
+            st["smiles_invalid_removed"] = n_invalid
+            st["removed_by_reason"]["other"] += n_invalid
             out_dir = _P.data_processed_properties / 'kcat'
             out_dir.mkdir(parents=True, exist_ok=True)
             kcat.to_csv(out_dir / 'catpred_kcat.csv', index=False)
@@ -730,6 +775,16 @@ def main():
                 'ph': 'ph',
                 'log10km_mean': 'km'
             })
+            km[_C.protein_sequence] = km[_C.protein_sequence].astype(str).str.strip().str.upper()
+            len_b = len(km)
+            km = km.dropna(subset=[_C.protein_sequence, _C.smiles, 'km'])
+            st["removed_by_reason"]["missing_values"] += len_b - len(km)
+            canonical_smiles, valid_mask = _canonicalize_smiles_column(km[_C.smiles])
+            n_invalid = int((~valid_mask).sum())
+            km = km[valid_mask].copy()
+            km[_C.smiles] = canonical_smiles[valid_mask].values
+            st["smiles_invalid_removed"] = n_invalid
+            st["removed_by_reason"]["other"] += n_invalid
             out_dir = _P.data_processed_properties / 'km'
             out_dir.mkdir(parents=True, exist_ok=True)
             km.to_csv(out_dir / 'catpred_km.csv', index=False)

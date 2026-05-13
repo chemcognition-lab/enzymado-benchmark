@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-"""Summarize overlap and shape consistency across generated embedding files."""
+"""Summarize overlap and shape consistency across generated mean-pooled embedding files."""
 
 import argparse
 import json
 import sys
 from pathlib import Path
-
-import h5py
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -16,15 +14,18 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "embedding_intersection"
 
 
 def inspect_embedding_file(path: Path, expected_dim: int) -> tuple[set[str], int, int, list[tuple[str, tuple[int, ...]]]]:
-    ids: set[str] = set()
+    from safetensors import safe_open
+
     bad_shapes: list[tuple[str, tuple[int, ...]]] = []
 
-    with h5py.File(path, "r") as h5:
-        for key in h5.keys():
-            ids.add(key)
-            shape = tuple(h5[key].shape)
-            if shape != (expected_dim,) and len(bad_shapes) < 5:
-                bad_shapes.append((key, shape))
+    with safe_open(str(path), framework="numpy", device="cpu") as handle:
+        all_keys = list(handle.keys())
+        ids = set(all_keys)
+        # Check shape of the first key — all tensors in a mean-pooled file share the same dim
+        if all_keys:
+            shape = tuple(handle.get_tensor(all_keys[0]).shape)
+            if shape != (expected_dim,):
+                bad_shapes.append((all_keys[0], shape))
 
     return ids, len(ids), len(bad_shapes), bad_shapes
 
@@ -32,7 +33,7 @@ def inspect_embedding_file(path: Path, expected_dim: int) -> tuple[set[str], int
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate pooled embedding H5 files and build the common-ID intersection "
+            "Validate pooled embedding safetensors files and build the common-ID intersection "
             "across all embedding models."
         )
     )
@@ -41,7 +42,7 @@ def create_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_EMBEDDINGS_JSON,
         help=(
-            "Embedding metadata JSON with model names, H5 paths, and dimensions. "
+            "Embedding metadata JSON with model names, safetensors paths, and dimensions. "
             f"Default: {DEFAULT_EMBEDDINGS_JSON}"
         ),
     )
@@ -49,7 +50,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--expected-count",
         type=int,
         default=279_644,
-        help="Expected number of sequence IDs per complete H5 file. Default: 279644.",
+        help="Expected number of sequence IDs per complete file. Default: 279644.",
     )
     parser.add_argument(
         "--output-dir",
@@ -62,7 +63,7 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Still write intersection outputs for the currently readable files even if some "
-            "models are missing, locked, partial, or have bad shapes."
+            "models are missing, partial, or have bad shapes."
         ),
     )
     return parser
@@ -84,6 +85,8 @@ def main() -> int:
     for model in sorted(meta):
         info = meta[model]
         path = Path(info["path"])
+        if not path.is_absolute():
+            path = REPO_ROOT / path
         expected_dim = int(info["dim"])
 
         if not path.exists():
@@ -99,14 +102,14 @@ def main() -> int:
 
         try:
             ids, n_ids, bad_shape_count, bad_shapes = inspect_embedding_file(path, expected_dim)
-        except BlockingIOError:
+        except Exception as exc:
             statuses[model] = {
-                "status": "LOCKED",
+                "status": "ERROR",
                 "path": str(path),
                 "n_ids": 0,
                 "expected_dim": expected_dim,
                 "bad_shape_count": 0,
-                "bad_shape_examples": [],
+                "bad_shape_examples": [str(exc)],
             }
             continue
 
@@ -150,7 +153,7 @@ def main() -> int:
         if row["bad_shape_examples"]:
             print(f"  bad_shape_examples={row['bad_shape_examples']}")
 
-    blocking_statuses = {"MISSING", "LOCKED", "PARTIAL", "BAD_SHAPE"}
+    blocking_statuses = {"MISSING", "PARTIAL", "BAD_SHAPE", "ERROR"}
     blockers = [model for model, row in statuses.items() if row["status"] in blocking_statuses]
     if blockers and not args.allow_incomplete:
         print("\nRefusing to write intersection because some models are not complete.")

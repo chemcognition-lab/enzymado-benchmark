@@ -188,7 +188,17 @@ def prep_biolip(p: Paths):
     is_ion = biol_smiles["smiles"].apply(is_ion_smiles)
     biol_filtered = biol_smiles[~is_ion].copy()
     stats["removed_by_reason"]["other"] += len_before - len(biol_filtered)
-    
+
+    from rdkit import RDLogger
+    RDLogger.DisableLog("rdApp.*")
+    len_before = len(biol_filtered)
+    parseable_mask = biol_filtered["smiles"].apply(lambda s: Chem.MolFromSmiles(str(s)) is not None)
+    biol_filtered = biol_filtered[parseable_mask].copy()
+    stats["removed_by_reason"]["other"] += len_before - len(biol_filtered)
+    stats.setdefault("smiles_invalid_removed", 0)
+    stats["smiles_invalid_removed"] += len_before - len(biol_filtered)
+    RDLogger.EnableLog("rdApp.error")
+
     len_before = len(biol_filtered)
     biol_filtered = biol_filtered.drop_duplicates(subset=["protein_sequence", "smiles"]).reset_index(drop=True)
     stats["removed_by_reason"]["duplicates"] += len_before - len(biol_filtered)

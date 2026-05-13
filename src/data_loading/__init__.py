@@ -36,7 +36,7 @@ from .labels import (
     ResidueBinaryVectorLabelBuilder,
     RegressionLabelBuilder,
 )
-from .registry import TASK_REGISTRY, TaskConfig, get_task_config
+from .registry import TASK_REGISTRY, TaskConfig, LabelType, TaskType, SplitType, get_task_config
 
 __all__ = [
     "BinaryLabelBuilder",
@@ -64,8 +64,11 @@ __all__ = [
     "ResidueBinaryVectorLabelBuilder",
     "ResidueEmbeddingStore",
     "RegressionLabelBuilder",
+    "LabelType",
+    "SplitType",
     "TASK_REGISTRY",
     "TaskConfig",
+    "TaskType",
     "TaskDatasetBundle",
     "build_dataset_from_config",
     "build_task_dataset",

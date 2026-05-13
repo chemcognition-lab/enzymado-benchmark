@@ -3,6 +3,7 @@
 venv/
 env/
 
+__pycache__
 __pycache__/
 *.py[cod]
 *.pyc
@@ -12,6 +13,7 @@ __pycache__/
 .mypy_cache/
 .ipynb_checkpoints/
 .cluster_runtime/
+.agents
 
 .env
 .env.*
