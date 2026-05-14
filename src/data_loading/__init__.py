@@ -36,7 +36,7 @@ from .labels import (
     ResidueBinaryVectorLabelBuilder,
     RegressionLabelBuilder,
 )
-from .registry import TASK_REGISTRY, TaskConfig, LabelType, TaskType, SplitType, get_task_config
+from .data_registry import TASK_REGISTRY, TaskConfig, LabelType, TaskType, SplitType, get_task_config
 
 __all__ = [
     "BinaryLabelBuilder",

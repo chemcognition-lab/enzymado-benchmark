@@ -149,7 +149,7 @@ def load_sequence_to_id_index(index_path: Path) -> dict[str, str]:
 def candidate_embedding_keys(
     row: dict[str, str],
     sequence_column: str,
-    id_columns: tuple[str, ...],
+    index_columns: tuple[str, ...],
     sequence_to_id: dict[str, str],
 ) -> set[str]:
     """Collect every embedding key that could match a dataset row."""
@@ -162,7 +162,7 @@ def candidate_embedding_keys(
             candidates.add(sequence_id)
         candidates.add(sequence)
 
-    for column in id_columns:
+    for column in index_columns:
         value = clean_text(row.get(column, ""))
         if value:
             candidates.add(value)
@@ -180,7 +180,7 @@ def row_matches_allowed_ids(
     main_candidates = candidate_embedding_keys(
         row,
         sequence_column=config.sequence_column,
-        id_columns=config.sample_id_candidates,
+        index_columns=config.index_columns,
         sequence_to_id=sequence_to_id,
     )
     if not main_candidates or not any(key in allowed_ids for key in main_candidates):
@@ -190,7 +190,7 @@ def row_matches_allowed_ids(
         wildtype_candidates = candidate_embedding_keys(
             row,
             sequence_column=config.wildtype_sequence_column,
-            id_columns=(),
+            index_columns=(),
             sequence_to_id=sequence_to_id,
         )
         if not wildtype_candidates or not any(key in allowed_ids for key in wildtype_candidates):

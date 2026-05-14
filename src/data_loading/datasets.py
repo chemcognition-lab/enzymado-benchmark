@@ -30,7 +30,7 @@ from .labels import (
     ResidueBinaryVectorLabelBuilder,
     RegressionLabelBuilder,
 )
-from .registry import TaskConfig, get_task_config
+from .data_registry import TaskConfig, get_task_config
 
 
 class BaseComposableDataset(TorchDataset):
@@ -269,7 +269,7 @@ def _build_adapter(
 
     return DatasetAdapter(
         dataset_path=config.dataset_paths[split_variant],
-        sample_id_candidates=config.sample_id_candidates,
+        index_columns=config.index_columns,
         split_name=split_name,
         split_column=config.split_column,
     )
@@ -327,6 +327,7 @@ def build_dataset_from_config(
     protein_builder = ProteinResidueEmbeddingBuilder(
         embedding_store=embedding_store,
         sequence_column=config.sequence_column,
+        index_columns=config.index_columns,
     )
 
     if config.batch_kind == "protein_global":
@@ -355,6 +356,7 @@ def build_dataset_from_config(
             embedding_store=embedding_store,
             mutation_sequence_column=config.sequence_column,
             wildtype_sequence_column=str(config.wildtype_sequence_column),
+            index_columns=config.index_columns,
         )
         dataset = MutationDeltaGlobalDataset(
             rows=rows,

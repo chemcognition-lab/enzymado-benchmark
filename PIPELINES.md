@@ -10,7 +10,7 @@ The training flow is split across four places:
    Defines the benchmark properties and their high-level `task_type` (`classification` or `regression`).
 2. `models/train.py`
    Orchestrates the end-to-end training loop, maps card names to registry names, and delegates each task to a training route with `prepare`, `train`, and `save_predictions` steps.
-3. `src/data_loading/registry.py`
+3. `src/data_loading/data_registry.py`
    Defines the dataset-level configuration for each task, especially `batch_kind` and `label_kind`.
 4. `models/models.py`
    Defines the available model families through `MODEL_MAP` and `STRUCTURED_MODEL_MAP`.
@@ -107,7 +107,7 @@ There are five training routes:
 
 If you want to inspect the exact code path for a task:
 
-1. Start in `src/data_loading/registry.py` to find `batch_kind` and `label_kind`.
+1. Start in `src/data_loading/data_registry.py` to find `batch_kind` and `label_kind`.
 2. Open `models/train.py` and look at the branch conditions in `main(...)`.
 3. Open `src/data_loading/datasets.py` to see how the dataset and builders are assembled.
 4. Open `models/models.py` to see which wrapper class each model name actually instantiates.

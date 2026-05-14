@@ -19,14 +19,8 @@ if ! type module >/dev/null 2>&1; then
     source /etc/profile
 fi
 
-if [[ -f "${REPO}/cluster_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${REPO}/cluster_env.sh"
-fi
-
 : "${CLUSTER_RUNTIME_ROOT:=${REPO}/.cluster_runtime}"
 : "${UV_LINK_MODE:=copy}"
-: "${EMBEDDINGS_DATA_ROOT:=${REPO}/data}"
 : "${AUTO_RELOCATE_EMBEDDINGS_JSON:=0}"
 if [[ -z "${UV_CACHE_DIR:-}" || "${UV_CACHE_DIR}" == /scratch/* ]]; then
     UV_CACHE_DIR="${CLUSTER_RUNTIME_ROOT}/uv-cache"
@@ -85,7 +79,7 @@ for _write_path in "${OUTPUT_DIR}" "${RESULTS_CARD_PATH}" "${CLUSTER_RUNTIME_ROO
     fi
 done
 
-export EMBEDDINGS_DATA_ROOT AUTO_RELOCATE_EMBEDDINGS_JSON
+export AUTO_RELOCATE_EMBEDDINGS_JSON
 
 EMB_MODELS=(
     ankh3_large

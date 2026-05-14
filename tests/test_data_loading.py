@@ -13,7 +13,7 @@ import numpy as np
 from src.data_loading.collators import ProteinResidueCollator, ProteinResidueConcatCollator
 from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.labels import FlatECLabelBuilder
-from src.data_loading.registry import TaskConfig
+from src.data_loading.data_registry import TaskConfig
 from src.data_loading.features import ResidueEmbeddingStore
 
 
@@ -87,7 +87,7 @@ class DataLoadingTests(unittest.TestCase):
             label_kind="binary",
             dataset_paths={"random": dataset_path},
             target_column="solubility",
-            sample_id_candidates=("dataset_id",),
+            index_columns=("dataset_id",),
         )
         store = ResidueEmbeddingStore(
             by_sequence={
@@ -212,7 +212,7 @@ class DataLoadingTests(unittest.TestCase):
             label_kind="scalar_regression",
             dataset_paths={"random": dataset_path},
             target_column="ddg",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
             wildtype_sequence_column="wildtype_sequence",
         )
 
@@ -252,7 +252,7 @@ class DataLoadingTests(unittest.TestCase):
             label_kind="multilabel_ec",
             dataset_paths={"random": dataset_path},
             target_column="ec_number",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -339,7 +339,7 @@ class DataLoadingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column="binding",
             ligand_column="smiles",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -431,7 +431,7 @@ class DataLoadingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column="ddg",
             wildtype_sequence_column="wildtype_sequence",
-            sample_id_candidates=("dataset_id",),
+            index_columns=("dataset_id",),
         )
         store = ResidueEmbeddingStore(
             by_sequence={
@@ -465,7 +465,7 @@ class DataLoadingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -563,7 +563,7 @@ class DataLoadingTests(unittest.TestCase):
             label_kind="binary",
             dataset_paths={"random": dataset_path},
             target_column="solubility",
-            sample_id_candidates=("dataset_id",),
+            index_columns=("dataset_id",),
         )
         store = ResidueEmbeddingStore(by_sequence={"AAAA": np.ones((4, 2), dtype=np.float32)})
 
@@ -593,7 +593,7 @@ class DataLoadingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -629,7 +629,7 @@ class DataLoadingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
 
         class TrackingResidueEmbeddingStore(ResidueEmbeddingStore):

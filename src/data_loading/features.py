@@ -161,13 +161,13 @@ class ProteinResidueEmbeddingBuilder:
     """Build residue embeddings for rows in protein-centric tasks."""
     embedding_store: ResidueEmbeddingStore
     sequence_column: str = "protein_sequence"
-    id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
+    index_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
     def build(self, row: dict[str, str]) -> torch.Tensor:
         """Materialize the residue embedding for one row."""
         return self.embedding_store.lookup_row(
             row,
-            id_columns=self.id_columns,
+            id_columns=self.index_columns,
             sequence_column=self.sequence_column,
         )
 
@@ -175,13 +175,13 @@ class ProteinResidueEmbeddingBuilder:
         """Resolve the residue length without materializing the full embedding tensor."""
         return self.embedding_store.lookup_row_length(
             row,
-            id_columns=self.id_columns,
+            id_columns=self.index_columns,
             sequence_column=self.sequence_column,
         )
 
     def validate_row(self, row: dict[str, str]) -> str | None:
         """Check lookup availability without forcing a full embedding read."""
-        for col in self.id_columns:
+        for col in self.index_columns:
             identifier = row.get(col, "").strip()
             if identifier and self.embedding_store.has_id(identifier):
                 return None
@@ -190,7 +190,7 @@ class ProteinResidueEmbeddingBuilder:
             return None
         return (
             f"Missing residue embedding for row. "
-            f"Tried columns: {list(self.id_columns) + [self.sequence_column]}. "
+            f"Tried columns: {list(self.index_columns) + [self.sequence_column]}. "
             f"sample_id={row.get('sample_id', '')}"
         )
 
@@ -265,13 +265,13 @@ class MutationDeltaEmbeddingBuilder:
     embedding_store: ResidueEmbeddingStore
     mutation_sequence_column: str = "protein_sequence"
     wildtype_sequence_column: str = "wildtype_sequence"
-    id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
+    index_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
     def build(self, row: dict[str, str]) -> np.ndarray:
         """Return the residue-wise embedding delta for a mutation row."""
         mutant_embedding = self.embedding_store.lookup_row(
             row,
-            id_columns=self.id_columns,
+            id_columns=self.index_columns,
             sequence_column=self.mutation_sequence_column,
         )
         wildtype_sequence = normalize_identifier(
@@ -307,7 +307,7 @@ class MutationDeltaEmbeddingBuilder:
     def validate_row(self, row: dict[str, str]) -> str | None:
         """Check that both mutant and wildtype embeddings can be resolved."""
         store = self.embedding_store
-        for col in self.id_columns:
+        for col in self.index_columns:
             identifier = row.get(col, "").strip()
             if identifier and store.has_id(identifier):
                 return None

@@ -13,7 +13,7 @@ import numpy as np
 from src.data_loading.collators import ProteinResidueConcatCollator
 from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.features import ResidueEmbeddingStore
-from src.data_loading.registry import TaskConfig
+from src.data_loading.data_registry import TaskConfig
 
 
 TORCH_AVAILABLE = importlib.util.find_spec("torch") is not None
@@ -58,7 +58,7 @@ class StructuredTrainingTests(unittest.TestCase):
             label_kind="multilabel_ec",
             dataset_paths={"random": dataset_path},
             target_column="ec_number",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -154,7 +154,7 @@ class StructuredTrainingTests(unittest.TestCase):
             label_kind="binary",
             dataset_paths={"random": self.root / "unused.csv"},
             target_column="solubility",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         rows = [
             {"uniprot_id": "P1", "protein_sequence": "AAAA", "solubility": "1"},
@@ -184,7 +184,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": self.root / "unused.csv"},
             target_column="dtm",
             wildtype_sequence_column="wildtype_sequence",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         rows = [
             {
@@ -227,7 +227,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": self.root / "unused.csv"},
             target_column=None,
             residue_positions_column="active_site",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         materialized_store = object()
 
@@ -260,7 +260,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": self.root / "unused.csv"},
             target_column=None,
             residue_positions_column="binding_positions",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         lazy_store = object()
 
@@ -292,7 +292,7 @@ class StructuredTrainingTests(unittest.TestCase):
             label_kind="binary",
             dataset_paths={"random": self.root / "unused.csv"},
             target_column="solubility",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         lazy_store = object()
 
@@ -338,7 +338,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         import torch
 
@@ -407,7 +407,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column="binding",
             ligand_column="smiles",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -468,7 +468,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="active_site",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
             by_id={
@@ -510,7 +510,7 @@ class StructuredTrainingTests(unittest.TestCase):
             dataset_paths={"random": dataset_path},
             target_column=None,
             residue_positions_column="binding_positions",
-            sample_id_candidates=("uniprot_id",),
+            index_columns=("uniprot_id",),
         )
         import torch
 

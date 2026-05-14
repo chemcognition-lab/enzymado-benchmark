@@ -24,10 +24,6 @@ if ! type module >/dev/null 2>&1; then
     source /etc/profile
 fi
 
-if [[ -f "${REPO}/cluster_env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${REPO}/cluster_env.sh"
-fi
 
 : "${SCRATCH_ROOT:=/scratch/${USER}/enzymado}"
 : "${UV_CACHE_DIR:=${SCRATCH_ROOT}/uv-cache}"

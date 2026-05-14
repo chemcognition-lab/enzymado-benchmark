@@ -31,7 +31,7 @@ def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
 
     return DatasetAdapter(
         dataset_path=config.dataset_paths[split_variant],
-        sample_id_candidates=config.sample_id_candidates,
+        index_columns=config.index_columns,
         split_name=split_name,
         split_column=config.split_column,
     ).load_rows()
@@ -42,7 +42,7 @@ def collect_needed_lookup_keys(rows: list[dict], config) -> tuple[set[str], set[
     ids = set()
     sequences = set()
     for row in rows:
-        for col in config.sample_id_candidates:
+        for col in config.index_columns:
             val = row.get(col, "").strip()
             if val:
                 ids.add(val)
@@ -439,7 +439,7 @@ def _lookup_pooled_embedding(
         if emb is not None:
             return emb
 
-    for col in config.sample_id_candidates:
+    for col in config.index_columns:
         key = clean_text(row.get(col, ""))
         if key and key in by_id:
             return by_id[key]
