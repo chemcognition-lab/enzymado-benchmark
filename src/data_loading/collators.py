@@ -84,136 +84,94 @@ def _validate_residue_sample_lengths(samples: list[dict[str, Any]]) -> None:
                 f"'{sample_id}': target={target_length}, mask={mask_length}."
             )
 
-
 @dataclass
-class ProteinGlobalBatch:
-    """Padded batch for protein-level tasks without ligand features."""
+class Batch:
+    """General padded batch for protein prediction tasks"""
     sample_id: list[str]
-    protein_emb: torch.Tensor
-    protein_mask: np.ndarray
-    target: Any
-    target_mask: Any | None = None
+
+    #Protein related
+    protein_emb: torch.Tensor | None = None
+    protein_mask: np.ndarray | None = None
+    protein_delta_emb: torch.Tensor | None = None
+
+    #Ligand related
+    ligand_feat: np.ndarray | None = None
+
+    #target related
+    target: Any | None = None
+    target_per_residue: np.ndarray | None = None
+    target_mask: np.ndarray | None = None
+
+    #Concat-related
+    lengths: np.ndarray | None = None
 
 
-@dataclass
-class ProteinLigandGlobalBatch:
-    """Padded batch for protein-ligand tasks."""
-    sample_id: list[str]
-    protein_emb: torch.Tensor
-    protein_mask: np.ndarray
-    ligand_feat: np.ndarray
-    target: Any
-    target_mask: Any | None = None
+class Collator:
+    def _extract(self, samples: list[dict[str, Any]], key: str) -> list[Any]:
+        return [sample[key] for sample in samples]
+
+    def _optional_target_mask(self, samples: list[dict[str, Any]]) -> np.ndarray | None:
+        if "target_mask" in samples[0]:
+            return _stack_targets(self._extract(samples, "target_mask"))
+        return None
 
 
-@dataclass
-class MutationDeltaGlobalBatch:
-    """Padded batch for mutation-delta tasks."""
-    sample_id: list[str]
-    protein_delta_emb: torch.Tensor
-    protein_mask: np.ndarray
-    target: Any
-    target_mask: Any | None = None
+class _GlobalCollatorBase(Collator):
+    def _global_batch_kwargs(self, samples: list[dict[str, Any]]) -> dict[str, Any]:
+        return dict(
+            sample_id=self._extract(samples, "sample_id"),
+            target=_stack_targets(self._extract(samples, "target")),
+            target_mask=self._optional_target_mask(samples),
+        )
 
 
-@dataclass
-class ProteinResidueBatch:
-    """Padded batch for residue-wise supervision."""
-    sample_id: list[str]
-    protein_emb: torch.Tensor
-    protein_mask: np.ndarray
-    target_per_residue: np.ndarray
-    target_mask: np.ndarray
-
-
-@dataclass
-class ProteinResidueConcatBatch:
-    """Concatenated residue-wise batch without padding or masking."""
-    sample_id: list[str]
-    protein_emb: torch.Tensor
-    target_per_residue: np.ndarray
-    lengths: np.ndarray
-
-
-class ProteinGlobalCollator:
+class ProteinGlobalCollator(_GlobalCollatorBase):
     """Collate global protein samples into a padded batch."""
-    def __call__(self, samples: list[dict[str, Any]]) -> ProteinGlobalBatch:
-        protein_emb, protein_mask = _pad_residue_embeddings(
-            [sample["protein_emb"] for sample in samples]
-        )
-        return ProteinGlobalBatch(
-            sample_id=[sample["sample_id"] for sample in samples],
-            protein_emb=protein_emb,
-            protein_mask=protein_mask,
-            target=_stack_targets([sample["target"] for sample in samples]),
-            target_mask=(
-                _stack_targets([sample["target_mask"] for sample in samples])
-                if "target_mask" in samples[0]
-                else None
-            ),
-        )
+    def __call__(self, samples: list[dict[str, Any]]) -> Batch:
+        protein_emb, protein_mask = _pad_residue_embeddings(self._extract(samples, "protein_emb"))
+        return Batch(protein_emb=protein_emb, protein_mask=protein_mask, **self._global_batch_kwargs(samples))
 
 
-class ProteinLigandGlobalCollator:
+class ProteinLigandGlobalCollator(_GlobalCollatorBase):
     """Collate protein and ligand features for joint prediction tasks."""
-    def __call__(self, samples: list[dict[str, Any]]) -> ProteinLigandGlobalBatch:
-        protein_emb, protein_mask = _pad_residue_embeddings(
-            [sample["protein_emb"] for sample in samples]
-        )
-        ligand_feat = np.stack([sample["ligand_feat"] for sample in samples]).astype(
-            np.float32,
-            copy=False,
-        )
-        return ProteinLigandGlobalBatch(
-            sample_id=[sample["sample_id"] for sample in samples],
+    def __call__(self, samples: list[dict[str, Any]]) -> Batch:
+        protein_emb, protein_mask = _pad_residue_embeddings(self._extract(samples, "protein_emb"))
+        ligand_feat = np.stack(self._extract(samples, "ligand_feat")).astype(np.float32, copy=False)
+        return Batch(
             protein_emb=protein_emb,
             protein_mask=protein_mask,
             ligand_feat=ligand_feat,
-            target=_stack_targets([sample["target"] for sample in samples]),
-            target_mask=(
-                _stack_targets([sample["target_mask"] for sample in samples])
-                if "target_mask" in samples[0]
-                else None
-            ),
+            **self._global_batch_kwargs(samples),
         )
 
 
-class MutationDeltaGlobalCollator:
+class MutationDeltaGlobalCollator(_GlobalCollatorBase):
     """Collate mutation-delta embeddings for regression or classification."""
-    def __call__(self, samples: list[dict[str, Any]]) -> MutationDeltaGlobalBatch:
-        protein_delta_emb, protein_mask = _pad_residue_embeddings(
-            [sample["protein_delta_emb"] for sample in samples]
-        )
-        return MutationDeltaGlobalBatch(
-            sample_id=[sample["sample_id"] for sample in samples],
-            protein_delta_emb=protein_delta_emb,
-            protein_mask=protein_mask,
-            target=_stack_targets([sample["target"] for sample in samples]),
-            target_mask=(
-                _stack_targets([sample["target_mask"] for sample in samples])
-                if "target_mask" in samples[0]
-                else None
-            ),
-        )
+    def __call__(self, samples: list[dict[str, Any]]) -> Batch:
+        protein_delta_emb, protein_mask = _pad_residue_embeddings(self._extract(samples, "protein_delta_emb"))
+        return Batch(protein_delta_emb=protein_delta_emb, protein_mask=protein_mask, **self._global_batch_kwargs(samples))
 
 
-class ProteinResidueCollator:
-    """Collate residue-level labels while preserving residue masks."""
-    def __call__(self, samples: list[dict[str, Any]]) -> ProteinResidueBatch:
+class _ResidueCollatorBase(Collator):
+    def __call__(self, samples: list[dict[str, Any]]) -> Batch:
         _validate_residue_sample_lengths(samples)
-        protein_emb, protein_mask = _pad_residue_embeddings(
-            [sample["protein_emb"] for sample in samples]
-        )
-        target_per_residue = _pad_vectors(
-            [sample["target_per_residue"] for sample in samples],
-            dtype=np.float32,
-        )
+        return self._collate(samples)
+
+    def _collate(self, samples: list[dict[str, Any]]) -> Batch:
+        raise NotImplementedError
+
+
+class ProteinResidueCollator(_ResidueCollatorBase):
+    """Collate residue-level labels while preserving residue masks."""
+    def _collate(self, samples: list[dict[str, Any]]) -> Batch:
+        protein_emb, protein_mask = _pad_residue_embeddings(self._extract(samples, "protein_emb"))
+        target_per_residue = _pad_vectors(self._extract(samples, "target_per_residue"), dtype=np.float32)
         target_mask = _pad_vectors(
             [sample["target_mask"].astype(np.int8, copy=False) for sample in samples],
             dtype=np.int8,
         ).astype(bool, copy=False)
-        return ProteinResidueBatch(
-            sample_id=[sample["sample_id"] for sample in samples],
+        return Batch(
+            sample_id=self._extract(samples, "sample_id"),
             protein_emb=protein_emb,
             protein_mask=protein_mask,
             target_per_residue=target_per_residue,
@@ -221,11 +179,9 @@ class ProteinResidueCollator:
         )
 
 
-class ProteinResidueConcatCollator:
+class ProteinResidueConcatCollator(_ResidueCollatorBase):
     """Collate residue-level labels by concatenating residues across proteins."""
-    def __call__(self, samples: list[dict[str, Any]]) -> ProteinResidueConcatBatch:
-        _validate_residue_sample_lengths(samples)
-
+    def _collate(self, samples: list[dict[str, Any]]) -> Batch:
         lengths = np.asarray([sample["protein_emb"].shape[0] for sample in samples], dtype=np.int32)
         if not np.all(lengths > 0):
             raise ValueError("ProteinResidueConcatCollator requires non-empty residue embeddings.")
@@ -242,8 +198,8 @@ class ProteinResidueConcatCollator:
             [_to_torch_residue_tensor(sample["protein_emb"]) for sample in samples],
             dim=0,
         )
-        return ProteinResidueConcatBatch(
-            sample_id=[sample["sample_id"] for sample in samples],
+        return Batch(
+            sample_id=self._extract(samples, "sample_id"),
             protein_emb=protein_emb,
             target_per_residue=np.concatenate(
                 [np.asarray(sample["target_per_residue"], dtype=np.int8) for sample in samples],
