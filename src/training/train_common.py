@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import json
+import os
 import time
 from pathlib import Path
 
@@ -18,10 +20,6 @@ from training.results_card import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKIP_LABEL_KINDS: set[str] = set()
-CARD_TO_REGISTRY: dict[str, str] = {
-    "phopt": "ph_opt",
-    "binding_site": "binding_sites",
-}
 PREFERRED_SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
 LEGACY_SEQUENCE_INDEX_PATH = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
 
@@ -82,8 +80,6 @@ def discover_embedding_names(result_root: Path) -> list[str]:
                             for emb_dir in task_dir.iterdir():
                                 if emb_dir.is_dir():
                                     discovered.add(emb_dir.name)
-                # Future-proof plain directory layout on disk where task folders
-                # sit directly under the model family.
                 for task_dir in model_dir.iterdir():
                     if not task_dir.is_dir() or task_dir.name in {"properties", "real_case"}:
                         continue
@@ -102,23 +98,22 @@ def resolve_sequence_index_path() -> Path | None:
     return None
 
 
-def resolve_registry_name(card_task_name: str) -> str | None:
-    """Map dataset-card task names onto the internal task registry when needed."""
-    name = CARD_TO_REGISTRY.get(card_task_name, card_task_name)
-    return name if name in TASK_REGISTRY else None
-
-
-def resolve_split_variant(default_split: str | None) -> str | None:
-    """Infer the split family from the card's default split filename."""
-    if not default_split:
-        return None
-    if "random" in default_split:
-        return "random"
-    if "similarity" in default_split:
-        return "similarity"
-    if "loco" in default_split:
-        return "loco"
-    return None
+def load_embeddings(embeddings_json: str) -> dict[str, dict]:
+    """Load embedding configs from JSON, resolving relative paths with EMBEDDINGS_ROOT if set."""
+    with open(embeddings_json, "r", encoding="utf-8") as fh:
+        embeddings = json.load(fh)
+    root = os.environ.get("EMBEDDINGS_ROOT")
+    if not root:
+        return embeddings
+    root_path = Path(root)
+    resolved = {}
+    for name, info in embeddings.items():
+        info = dict(info)
+        path = Path(info["path"])
+        if not path.is_absolute():
+            info["path"] = str(root_path / path)
+        resolved[name] = info
+    return resolved
 
 
 def load_allowed_ids(path: str | Path) -> set[str]:
@@ -221,10 +216,9 @@ __all__ = [
     "filter_rows_to_allowed_ids",
     "is_run_complete",
     "load_allowed_ids",
+    "load_embeddings",
     "load_sequence_to_id_index",
     "log",
-    "resolve_registry_name",
     "resolve_sequence_index_path",
-    "resolve_split_variant",
     "row_matches_allowed_ids",
 ]

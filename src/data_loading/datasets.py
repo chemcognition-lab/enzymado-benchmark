@@ -272,6 +272,7 @@ def _build_adapter(
         index_columns=config.index_columns,
         split_name=split_name,
         split_column=config.split_column,
+        sequence_column=config.sequence_column,
     )
 
 

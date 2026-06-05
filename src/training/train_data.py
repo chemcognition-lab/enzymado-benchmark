@@ -34,6 +34,7 @@ def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
         index_columns=config.index_columns,
         split_name=split_name,
         split_column=config.split_column,
+        sequence_column=config.sequence_column,
     ).load_rows()
 
 

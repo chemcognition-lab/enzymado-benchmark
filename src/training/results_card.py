@@ -10,6 +10,8 @@ from typing import Any
 
 RESULTS_CARD_VERSION = 2
 RESULTS_CARD_NAME = "enzymado_results"
+BENCHMARK_NAME = "enzymado"
+BENCHMARK_VERSION = "0.1.0"
 INVALIDATION_MARKER = "target_audit_invalid.json"
 PER_RESIDUE_TASKS = {"active_sites", "binding_site"}
 SPLIT_FAMILY_ALIASES = {
@@ -170,20 +172,18 @@ def find_model_artifact(run_dir: Path) -> Path | None:
     return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
 
 
-def build_results_card_skeleton(benchmark_card: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Create a fresh results card with lightweight dataset metadata."""
-    benchmark_card = benchmark_card or {}
-    property_names = sorted(
-        name for name in (benchmark_card.get("properties") or {}).keys()
-        if name != "fluorescence"
-    )
+def build_results_card_skeleton() -> dict[str, Any]:
+    """Create a fresh results card derived from the task registry."""
+    from data_loading import TASK_REGISTRY
+    properties = sorted(n for n, c in TASK_REGISTRY.items() if c.task_scope == "properties")
+    real_case = sorted(n for n, c in TASK_REGISTRY.items() if c.task_scope == "real_case")
     return {
         "results_card_name": RESULTS_CARD_NAME,
         "results_card_version": RESULTS_CARD_VERSION,
-        "benchmark_name": benchmark_card.get("benchmark_name"),
-        "benchmark_version": benchmark_card.get("benchmark_version"),
-        "properties": property_names,
-        "real_case": sorted((benchmark_card.get("real_case") or {}).keys()),
+        "benchmark_name": BENCHMARK_NAME,
+        "benchmark_version": BENCHMARK_VERSION,
+        "properties": properties,
+        "real_case": real_case,
         "predictions_root": "results/predictions",
         "predictions": {},
     }
@@ -237,12 +237,12 @@ def is_result_entry_complete(entry: dict[str, Any] | None) -> bool:
     return not (run_dir and (Path(run_dir) / INVALIDATION_MARKER).exists())
 
 
-def ensure_results_card(path: Path, benchmark_card: dict[str, Any] | None = None) -> None:
+def ensure_results_card(path: Path) -> None:
     """Create results_card.json if it does not yet exist."""
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = build_results_card_skeleton(benchmark_card)
+    payload = build_results_card_skeleton()
     path.write_text(json.dumps(payload, indent=4) + "\n", encoding="utf-8")
 
 
@@ -290,10 +290,9 @@ def update_results_card_locked(
     model_name: str,
     split_variant: str,
     result_entry: dict[str, Any],
-    benchmark_card: dict[str, Any] | None = None,
 ) -> None:
     """Thread/process-safe update of a single entry in results_card.json."""
-    ensure_results_card(results_card_path, benchmark_card=benchmark_card)
+    ensure_results_card(results_card_path)
     lock_path = results_card_path.with_suffix(".lock")
     with lock_path.open("w", encoding="utf-8") as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX)

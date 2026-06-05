@@ -36,10 +36,11 @@ class TaskConfig:
     label_kind: LabelType
     dataset_paths: dict[str, Path]
     target_column: str | None
+    task_scope: str = "properties"
     sequence_column: str = "protein_sequence"
     split_column: str = "split"
     ligand_column: str | None = None
-    index_columns: tuple[str, ...] = ("dataset_id", "uniprot_id", "protein_sequence")
+    index_columns: tuple[str, ...] = ("dataset_id", "uniprot_id")
     wildtype_sequence_column: str | None = None
     residue_positions_column: str | None = None
     ec_separator: str = ";"
@@ -69,7 +70,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.SIMILARITY: _DATA / "properties/ph_opt/brenda_phopt_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="phopt_median_standardized",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
     "ec_number": TaskConfig(
         name="ec_number",
@@ -80,7 +81,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.SIMILARITY: _DATA / "properties/ec_number/swissprot_ec_similarity_mmseqs2_80_10_10_standardized.csv",
         },
         target_column="ec_number",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
     "kcat": TaskConfig(
         name="kcat",
@@ -92,7 +93,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="kcat_standardized",
         ligand_column="smiles",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
     "km": TaskConfig(
         name="km",
@@ -104,7 +105,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="km_standardized",
         ligand_column="smiles",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
     "binding": TaskConfig(
         name="binding",
@@ -116,7 +117,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="binding",
         ligand_column="smiles",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
     "dtm": TaskConfig(
         name="dtm",
@@ -152,10 +153,10 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column=None,
         residue_positions_column="active_site",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
-    "binding_sites": TaskConfig(
-        name="binding_sites",
+    "binding_site": TaskConfig(
+        name="binding_site",
         batch_kind=TaskType.PROTEIN_RESIDUE,
         label_kind=LabelType.RESIDUE_BINARY_VECTOR,
         dataset_paths={
@@ -164,88 +165,96 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column=None,
         residue_positions_column="binding_positions",
-        index_columns=("uniprot_id", "protein_sequence"),
+        index_columns=("uniprot_id",),
     ),
     "align_amylase_activity": TaskConfig(
         name="align_amylase_activity",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/align_amylase_activity/alpha_amylase__specific_activity_random_80_10_10_standardized.csv",
         },
         target_column="specific_activity_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "align_amylase_expression": TaskConfig(
         name="align_amylase_expression",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/align_amylase_expression/alpha_amylase__expression_random_80_10_10_standardized.csv",
         },
         target_column="expression_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "align_amylase_stability": TaskConfig(
         name="align_amylase_stability",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/align_amylase_stability/alpha_amylase__thermostability_random_80_10_10_standardized.csv",
         },
         target_column="thermostability_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "align_glucosidase_activity": TaskConfig(
         name="align_glucosidase_activity",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/align_glucosidase_activity/b_glucosidase__activity_random_80_10_10_standardized.csv",
         },
         target_column="activity_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "align_glucosidase_expression": TaskConfig(
         name="align_glucosidase_expression",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/align_glucosidase_expression/b_glucosidase__expression_random_80_10_10_standardized.csv",
         },
         target_column="expression_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "align_glucosidase_melting": TaskConfig(
         name="align_glucosidase_melting",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/align_glucosidase_melting/b_glucosidase__melting_point_random_80_10_10_standardized.csv",
         },
         target_column="melting_point_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "cleeveland_galox": TaskConfig(
         name="cleeveland_galox",
         batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv",
         },
         target_column="specific_activity_standardized",
         ligand_column="smiles",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
     "erickson_petase": TaskConfig(
         name="erickson_petase",
         batch_kind=TaskType.PROTEIN_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
         dataset_paths={
             SplitType.RANDOM: _DATA / "real_case/erickson_petase/erickson_random_80_10_10_standardized.csv",
         },
         target_column="sum_aromatic_products_standardized",
-        index_columns=("dataset_id", "protein_sequence"),
+        index_columns=("dataset_id",),
     ),
 }
 

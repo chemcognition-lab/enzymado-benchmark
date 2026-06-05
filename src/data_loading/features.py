@@ -300,7 +300,7 @@ class MutationDeltaEmbeddingBuilder:
                 f"Delta embedding requires equal shapes. Mutant={tuple(mutant_embedding.shape)}, "
                 f"wildtype={tuple(wildtype_embedding.shape)} for sample '{row.get('sample_id', '')}'."
             )
-        # Arithmetic in float32 — bfloat16 has insufficient precision for the delta.
+        # Arithmetic in float32 — bfloat16 could not be the best precision for the delta.
         delta = mutant_embedding.float() - wildtype_embedding.float()
         return delta.cpu().numpy().astype(np.float32, copy=False)
 

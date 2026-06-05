@@ -19,6 +19,7 @@ class DatasetAdapter:
     index_columns: tuple[str, ...]
     split_name: str | None = None
     split_column: str | None = None
+    sequence_column: str = "protein_sequence"
 
     def load_rows(self) -> list[dict[str, str]]:
         """Read, normalize, filter, and tag rows with a stable row index."""
@@ -35,7 +36,7 @@ class DatasetAdapter:
     def _normalize_row(self, row: dict[str, str]) -> dict[str, str]:
         """Normalize text fields and uppercase sequence columns."""
         normalized = {key: clean_text(value) for key, value in row.items()}
-        for sequence_column in ("protein_sequence", "wildtype_sequence"):
+        for sequence_column in (self.sequence_column, "wildtype_sequence"):
             if sequence_column in normalized:
                 normalized[sequence_column] = normalize_sequence(normalized[sequence_column])
         return normalized
@@ -48,12 +49,16 @@ class DatasetAdapter:
         return normalized
 
     def _resolve_sample_id(self, row: dict[str, str]) -> str:
-        """Pick the first populated index column configured for the task."""
+        """Pick the first populated index column, falling back to the sequence column."""
         for candidate in self.index_columns:
             value = clean_text(row.get(candidate))
             if value:
                 return value
+        sequence = clean_text(row.get(self.sequence_column))
+        if sequence:
+            return sequence
         raise ValueError(
-            f"Unable to resolve sample_id using index columns {self.index_columns}. "
+            f"Unable to resolve sample_id using index columns {self.index_columns} "
+            f"or sequence column '{self.sequence_column}'. "
             f"Available columns: {sorted(row)}"
         )

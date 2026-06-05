@@ -17,6 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from data_loading import (
+    TASK_REGISTRY,
     FlatECLabelBuilder,
     HierarchicalECLabelBuilder,
     build_task_dataset,
@@ -28,11 +29,10 @@ from training.train_common import (
     build_result_run_dir,
     is_run_complete,
     load_allowed_ids,
+    load_embeddings,
     load_sequence_to_id_index,
     log,
-    resolve_registry_name,
     resolve_sequence_index_path,
-    resolve_split_variant,
 )
 from training.results_card import (
     build_artifact_stem,
@@ -993,7 +993,6 @@ def _run_task(
     *,
     task_scope: str,
     task_name: str,
-    prop: dict,
     emb_name: str,
     emb_info: dict,
     results_card_path: Path,
@@ -1006,20 +1005,12 @@ def _run_task(
     split_variant_filter: str | None,
     embedding_mode_filters: set[str],
     overwrite_results: bool,
-    benchmark_card: dict[str, Any] | None = None,
     results_card: dict[str, Any] | None = None,
 ) -> None:
     """Train all selected models for one task/embedding pair."""
-    task_type = prop.get("task_type")
-    if not task_type:
-        raise ValueError(f"'{task_name}' is missing 'task_type' in card")
+    config = get_task_config(task_name)
+    task_type = "classification" if config.label_kind == "binary" else "regression"
 
-    registry_name = resolve_registry_name(task_name)
-    if registry_name is None:
-        log(f"  Skipping '{task_name}' (not in TASK_REGISTRY)")
-        return
-
-    config = get_task_config(registry_name)
     if config.label_kind in skip_label_kinds:
         log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' filtered by CLI)")
         return
@@ -1027,13 +1018,8 @@ def _run_task(
         log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' not yet supported)")
         return
 
-    dataset_info = prop["datasets"][0]
-    default_split = dataset_info.get("splits", {}).get("default_split")
-    split_variant = split_variant_filter or resolve_split_variant(default_split)
-    if split_variant is None:
-        log(f"  Skipping '{task_name}' (no usable split defined in card)")
-        return
-    if split_variant_filter is not None and split_variant not in config.dataset_paths:
+    split_variant = split_variant_filter or "random"
+    if split_variant not in config.dataset_paths:
         available = ", ".join(sorted(config.dataset_paths)) or "<none>"
         log(
             f"  Skipping '{task_name}' (requested split '{split_variant}' is not available; "
@@ -1206,7 +1192,6 @@ def _run_task(
                 model_name=model_name,
                 split_variant=split_variant,
                 result_entry=result_entry,
-                benchmark_card=benchmark_card,
             )
             log(f"      Saved → {run_dir.relative_to(output_dir)} [{artifact_stem}]")
     except Exception as task_exc:
@@ -1217,7 +1202,6 @@ def _run_task(
 
 
 def main(
-    card_path: str,
     embeddings_json: str,
     output_dir: str,
     emb_name_filter: str | None = None,
@@ -1233,7 +1217,7 @@ def main(
     *,
     results_card_path: str,
 ):
-    """Train all selected embedding-model and task combinations described by the card."""
+    """Train all selected embedding-model and task combinations from the task registry."""
     log(f"[startup] Python started. emb_name={emb_name_filter}")
     if model_prefix_filter is not None:
         log(f"[startup] Filtering model names by prefix: {model_prefix_filter}")
@@ -1258,19 +1242,17 @@ def main(
         log(f"[startup] Restricting embedding modes to: {sorted(embedding_mode_filters)}")
     log(f"[startup] Overwrite results: {overwrite_results}")
 
-    card = read_json(card_path)
-    embeddings = read_json(embeddings_json)
-    selected_task_count = sum(
-        len(card.get(scope_name, {}) or {})
-        for scope_name in task_scope_filters
-    )
-    log(f"[startup] JSON loaded. {len(embeddings)} embedding models, {selected_task_count} tasks.")
+    embeddings = load_embeddings(embeddings_json)
+    selected_tasks = [
+        (name, cfg) for name, cfg in TASK_REGISTRY.items()
+        if cfg.task_scope in task_scope_filters
+    ]
+    log(f"[startup] Loaded. {len(embeddings)} embedding models, {len(selected_tasks)} tasks.")
 
-    card_path_obj = Path(card_path)
     results_card_path_obj = Path(results_card_path)
     output_dir_obj = Path(output_dir)
     output_dir_obj.mkdir(parents=True, exist_ok=True)
-    ensure_results_card(results_card_path_obj, benchmark_card=card)
+    ensure_results_card(results_card_path_obj)
     results_card = read_results_card(results_card_path_obj)
 
     allowed_ids: set[str] | None = None
@@ -1294,41 +1276,34 @@ def main(
 
         log(f"\n=== Embedding: {emb_name} (dim={emb_info['dim']}) ===")
 
-        for task_scope in ("properties", "real_case"):
-            if task_scope not in task_scope_filters:
+        for task_name, config in selected_tasks:
+            if task_name_filters and task_name not in task_name_filters:
+                log(f"  Skipping '{task_name}' (not selected by CLI task filter)")
                 continue
-            for task_name, prop in (card.get(task_scope, {}) or {}).items():
-                if task_name_filters and task_name not in task_name_filters:
-                    log(f"  Skipping '{task_name}' (not selected by CLI task filter)")
-                    continue
 
-                _run_task(
-                    task_scope=task_scope,
-                    task_name=task_name,
-                    prop=prop,
-                    emb_name=emb_name,
-                    emb_info=emb_info,
-                    results_card_path=results_card_path_obj,
-                    output_dir=output_dir_obj,
-                    model_prefix_filter=model_prefix_filter,
-                    allowed_ids=allowed_ids,
-                    sequence_to_id=sequence_to_id,
-                    skip_label_kinds=skip_label_kinds,
-                    residue_store_mode=residue_store_mode,
-                    split_variant_filter=split_variant_filter,
-                    embedding_mode_filters=embedding_mode_filters,
-                    overwrite_results=overwrite_results,
-                    benchmark_card=card,
-                    results_card=results_card,
-                )
+            _run_task(
+                task_scope=config.task_scope,
+                task_name=task_name,
+                emb_name=emb_name,
+                emb_info=emb_info,
+                results_card_path=results_card_path_obj,
+                output_dir=output_dir_obj,
+                model_prefix_filter=model_prefix_filter,
+                allowed_ids=allowed_ids,
+                sequence_to_id=sequence_to_id,
+                skip_label_kinds=skip_label_kinds,
+                residue_store_mode=residue_store_mode,
+                split_variant_filter=split_variant_filter,
+                embedding_mode_filters=embedding_mode_filters,
+                overwrite_results=overwrite_results,
+                results_card=results_card,
+            )
 
-    log(f"\nDone. Dataset card read from {card_path_obj}")
     log(f"Done. Results written to {results_card_path_obj}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("card_path", help="Path to the dataset card JSON")
     parser.add_argument("embeddings_json", help="Path to embeddings_models_output.json")
     parser.add_argument("output_dir", help="Directory to write prediction and model files")
     parser.add_argument("--emb_name", default=None, help="Train only this embedding (for SLURM arrays)")
@@ -1398,7 +1373,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(
-        args.card_path,
         args.embeddings_json,
         args.output_dir,
         args.emb_name,
