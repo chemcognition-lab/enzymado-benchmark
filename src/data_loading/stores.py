@@ -1,7 +1,10 @@
-"""Data loading and feature-building helpers for the non-attention pipeline."""
+"""Embedding store loaders: resolves safetensors paths, builds residue and pooled stores."""
 
 from __future__ import annotations
 
+import csv
+import json
+import os
 import time
 from pathlib import Path
 
@@ -9,15 +12,27 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from data_loading import (
-    BinaryLabelBuilder,
-    FlatECLabelBuilder,
-    HierarchicalECLabelBuilder,
-    ResidueEmbeddingStore,
-    RegressionLabelBuilder,
-)
 from data_loading.adapters import DatasetAdapter
-from training.train_common import PROJECT_ROOT, log, resolve_sequence_index_path
+from data_loading.features import PooledEmbeddingStore, ResidueEmbeddingStore
+from data_loading.labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
+from data_loading.splits import clean_text, normalize_sequence
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
+_LEGACY_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
+
+
+def log(msg: str) -> None:
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
+
+
+def resolve_sequence_index_path() -> Path | None:
+    if _PREFERRED_SEQ_INDEX.exists():
+        return _PREFERRED_SEQ_INDEX
+    if _LEGACY_SEQ_INDEX.exists():
+        return _LEGACY_SEQ_INDEX
+    return None
 
 
 def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
@@ -384,45 +399,14 @@ def load_pooled_embedding_subset(
     return load_pooled_safetensors_subset(source_path, needed_ids, needed_sequences)
 
 
-def build_Xy_ligand_direct(
-    rows: list[dict],
+def build_pooled_embedding_store(
     by_id: dict[str, np.ndarray],
     by_seq: dict[str, np.ndarray],
-    config,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Build pooled protein-plus-ligand features without constructing dataset objects."""
-    from data_loading.features import _default_rdkit_featurize
+) -> PooledEmbeddingStore:
+    """Wrap pre-loaded pooled embedding dicts into a PooledEmbeddingStore."""
+    return PooledEmbeddingStore(by_sequence=by_seq, by_id=by_id)
 
-    X_list: list[np.ndarray] = []
-    y_list: list[float] = []
-    skipped = 0
 
-    for row in rows:
-        emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
-        if emb is None:
-            skipped += 1
-            continue
-
-        smiles = (row.get(config.ligand_column) or "").strip()
-        try:
-            ligand_feat = _default_rdkit_featurize(smiles)
-        except (ValueError, ImportError):
-            skipped += 1
-            continue
-
-        target_str = (row.get(config.target_column) or "").strip()
-        if not target_str:
-            skipped += 1
-            continue
-
-        X_list.append(np.concatenate([emb, ligand_feat]))
-        y_list.append(float(target_str))
-
-    if skipped:
-        print(f"      Skipped {skipped} rows (missing embedding, ligand, or target)")
-    if not X_list:
-        return np.empty((0,), dtype=np.float32), np.empty((0,), dtype=np.float32)
-    return np.stack(X_list), np.array(y_list, dtype=np.float32)
 
 
 def _lookup_pooled_embedding(
@@ -447,7 +431,7 @@ def _lookup_pooled_embedding(
     return None
 
 
-def build_multilabel_ec_direct(
+def build_ec_arrays(
     rows: list[dict],
     by_id: dict[str, np.ndarray],
     by_seq: dict[str, np.ndarray],
@@ -510,7 +494,7 @@ def build_multilabel_ec_direct(
     )
 
 
-def build_flat_multilabel_ec_direct(
+def build_flat_ec_arrays(
     rows: list[dict],
     by_id: dict[str, np.ndarray],
     by_seq: dict[str, np.ndarray],
@@ -553,108 +537,6 @@ def build_flat_multilabel_ec_direct(
     )
 
 
-def build_protein_global_Xy_direct(
-    rows: list[dict],
-    by_id: dict[str, np.ndarray],
-    by_seq: dict[str, np.ndarray],
-    config,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Build pooled protein-only features for scalar or binary tasks."""
-    if config.label_kind == "scalar_regression":
-        label_builder = RegressionLabelBuilder(target_column=str(config.target_column))
-    elif config.label_kind == "binary":
-        label_builder = BinaryLabelBuilder(target_column=str(config.target_column))
-    else:
-        raise ValueError(
-            f"build_protein_global_Xy_direct does not support label_kind '{config.label_kind}'."
-        )
-
-    X_list: list[np.ndarray] = []
-    y_list: list[np.float32] = []
-    skipped = 0
-
-    for row in rows:
-        emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
-        if emb is None:
-            skipped += 1
-            continue
-
-        try:
-            target = label_builder.build(row)
-        except ValueError:
-            skipped += 1
-            continue
-
-        X_list.append(emb)
-        y_list.append(np.float32(target))
-
-    if skipped:
-        log(f"      Skipped {skipped} rows (missing embeddings or invalid targets)")
-
-    if not X_list:
-        return np.empty((0, 0), dtype=np.float32), np.empty((0,), dtype=np.float32)
-
-    return (
-        np.stack(X_list).astype(np.float32, copy=False),
-        np.asarray(y_list, dtype=np.float32),
-    )
-
-
-def build_mutation_delta_Xy_direct(
-    rows: list[dict],
-    by_id: dict[str, np.ndarray],
-    by_seq: dict[str, np.ndarray],
-    config,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Build pooled mutant-minus-wildtype features for mutation-effect tasks."""
-    if config.label_kind == "scalar_regression":
-        label_builder = RegressionLabelBuilder(target_column=str(config.target_column))
-    elif config.label_kind == "binary":
-        label_builder = BinaryLabelBuilder(target_column=str(config.target_column))
-    else:
-        raise ValueError(
-            f"build_mutation_delta_Xy_direct does not support label_kind '{config.label_kind}'."
-        )
-
-    if not config.wildtype_sequence_column:
-        raise ValueError("Mutation-delta tasks require 'wildtype_sequence_column'.")
-
-    from data_loading.splits import normalize_sequence as _norm_seq
-
-    X_list: list[np.ndarray] = []
-    y_list: list[np.float32] = []
-    skipped = 0
-
-    for row in rows:
-        mutant_emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
-        wildtype_seq = _norm_seq(row.get(config.wildtype_sequence_column, ""))
-        wildtype_emb = by_seq.get(wildtype_seq) if wildtype_seq else None
-        if mutant_emb is None or wildtype_emb is None:
-            skipped += 1
-            continue
-        if mutant_emb.shape != wildtype_emb.shape:
-            skipped += 1
-            continue
-
-        try:
-            target = label_builder.build(row)
-        except ValueError:
-            skipped += 1
-            continue
-
-        X_list.append((mutant_emb - wildtype_emb).astype(np.float32, copy=False))
-        y_list.append(np.float32(target))
-
-    if skipped:
-        log(f"      Skipped {skipped} rows (missing embeddings or invalid targets)")
-
-    if not X_list:
-        return np.empty((0, 0), dtype=np.float32), np.empty((0,), dtype=np.float32)
-
-    return (
-        np.stack(X_list).astype(np.float32, copy=False),
-        np.asarray(y_list, dtype=np.float32),
-    )
 
 
 def _sample_emb_to_numpy(emb) -> np.ndarray:
@@ -664,23 +546,31 @@ def _sample_emb_to_numpy(emb) -> np.ndarray:
     return np.asarray(emb, dtype=np.float32)
 
 
-def build_Xy_pooled(bundle, batch_kind: str):
-    """Build mean-pooled X (N, emb_dim) and y by iterating samples one at a time."""
-    X_list, y_list = [], []
+def build_xy_pooled(bundle, batch_kind: str):
+    """Build X (N, emb_dim) and y arrays from a dataset bundle.
+
+    Embeddings that are already 1D (pre-pooled) are used directly.
+    Embeddings that are 2D (residue-level) are mean-pooled on the fly.
+    """
+    x_list, y_list = [], []
     for i in range(len(bundle.dataset)):
         sample = bundle.dataset[i]
         if batch_kind == "protein_global":
-            x = _sample_emb_to_numpy(sample["protein_emb"]).mean(axis=0)
+            x = _sample_emb_to_numpy(sample["protein_emb"])
+            if x.ndim == 2:
+                x = x.mean(axis=0)
         elif batch_kind == "mutation_delta_global":
-            x = _sample_emb_to_numpy(sample["protein_delta_emb"]).mean(axis=0)
+            x = _sample_emb_to_numpy(sample["protein_delta_emb"])
+            if x.ndim == 2:
+                x = x.mean(axis=0)
         elif batch_kind == "protein_ligand_global":
-            x = np.concatenate([
-                _sample_emb_to_numpy(sample["protein_emb"]).mean(axis=0),
-                np.asarray(sample["ligand_feat"], dtype=np.float32),
-            ])
-        X_list.append(x)
+            protein = _sample_emb_to_numpy(sample["protein_emb"])
+            if protein.ndim == 2:
+                protein = protein.mean(axis=0)
+            x = np.concatenate([protein, np.asarray(sample["ligand_feat"], dtype=np.float32)])
+        x_list.append(x)
         y_list.append(sample["target"])
-    return np.stack(X_list), np.array(y_list, dtype=np.float32)
+    return np.stack(x_list), np.array(y_list, dtype=np.float32)
 
 
 def get_dataloader(
@@ -791,21 +681,110 @@ def get_target_payload(bundle):
     return _build_label_only_payload(bundle)
 
 
+def load_embeddings(embeddings_json: str) -> dict[str, dict]:
+    """Load embedding configs from JSON, resolving relative paths with EMBEDDINGS_ROOT if set."""
+    with open(embeddings_json, "r", encoding="utf-8") as fh:
+        embeddings = json.load(fh)
+    root = os.environ.get("EMBEDDINGS_ROOT")
+    if not root:
+        return embeddings
+    root_path = Path(root)
+    resolved = {}
+    for name, info in embeddings.items():
+        info = dict(info)
+        path = Path(info["path"])
+        if not path.is_absolute():
+            info["path"] = str(root_path / path)
+        resolved[name] = info
+    return resolved
+
+
+def load_allowed_ids(path: str | Path) -> set[str]:
+    """Load the optional allowlist used to restrict training to shared embeddings."""
+    allowed_ids: set[str] = set()
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            value = line.strip()
+            if value:
+                allowed_ids.add(value)
+    return allowed_ids
+
+
+def load_sequence_to_id_index(index_path: Path) -> dict[str, str]:
+    """Load a normalized sequence-to-sequence-id mapping for embedding filters."""
+    mapping: dict[str, str] = {}
+    with open(index_path, "r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            seq = normalize_sequence(row.get("protein_sequence", ""))
+            sid = clean_text(row.get("sequence_id", ""))
+            if seq and sid:
+                mapping[seq] = sid
+    return mapping
+
+
+def _candidate_embedding_keys(
+    row: dict[str, str],
+    sequence_column: str,
+    index_columns: tuple[str, ...],
+    sequence_to_id: dict[str, str],
+) -> set[str]:
+    candidates: set[str] = set()
+    seq = normalize_sequence(row.get(sequence_column, ""))
+    if seq:
+        sid = sequence_to_id.get(seq)
+        if sid:
+            candidates.add(sid)
+        candidates.add(seq)
+    for column in index_columns:
+        value = clean_text(row.get(column, ""))
+        if value:
+            candidates.add(value)
+    return candidates
+
+
+def filter_rows_to_allowed_ids(
+    rows: list[dict[str, str]],
+    config,
+    allowed_ids: set[str],
+    sequence_to_id: dict[str, str],
+) -> list[dict[str, str]]:
+    """Keep only rows whose embedding ids survive the optional allowlist filter."""
+    def _matches(row: dict[str, str]) -> bool:
+        main = _candidate_embedding_keys(
+            row, config.sequence_column, config.index_columns, sequence_to_id
+        )
+        if not main or not any(k in allowed_ids for k in main):
+            return False
+        if config.batch_kind == "mutation_delta_global" and config.wildtype_sequence_column:
+            wt = _candidate_embedding_keys(
+                row, config.wildtype_sequence_column, (), sequence_to_id
+            )
+            if not wt or not any(k in allowed_ids for k in wt):
+                return False
+        return True
+
+    return [row for row in rows if _matches(row)]
+
+
 __all__ = [
     "LazySafetensorsResidueEmbeddingStore",
-    "build_Xy_ligand_direct",
-    "build_Xy_pooled",
-    "build_flat_multilabel_ec_direct",
-    "build_multilabel_ec_direct",
-    "build_mutation_delta_Xy_direct",
-    "build_protein_global_Xy_direct",
+    "build_ec_arrays",
+    "build_flat_ec_arrays",
+    "build_pooled_embedding_store",
+    "build_xy_pooled",
     "collect_needed_lookup_keys",
+    "filter_rows_to_allowed_ids",
     "get_dataloader",
     "get_target_payload",
     "get_task_rows",
+    "load_allowed_ids",
+    "load_embeddings",
     "load_lazy_safetensors_embedding_store",
     "load_pooled_embedding_subset",
     "load_pooled_safetensors_subset",
     "load_safetensors_embedding_store_subset",
+    "load_sequence_to_id_index",
+    "log",
     "resolve_embedding_source",
+    "resolve_sequence_index_path",
 ]

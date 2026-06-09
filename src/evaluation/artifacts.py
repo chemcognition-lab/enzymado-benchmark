@@ -1,4 +1,4 @@
-"""Output and persistence helpers for the training pipelines."""
+"""Artifact persistence and evaluation helpers for trained models."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import joblib
 import numpy as np
 import torch
 
+from evaluation.metrics_registry import evaluate_predictions  # noqa: F401 — re-exported
 from training.results_card import (
     INVALIDATION_MARKER,
     build_prediction_artifact_path,
@@ -124,105 +125,6 @@ def _json_ready(value):
     return str(value)
 
 
-def _as_flat_known_arrays(y_true, pred, target_mask=None) -> tuple[np.ndarray, np.ndarray]:
-    """Flatten prediction payloads while dropping masked, NaN, and shape-mismatched values."""
-    if isinstance(y_true, dict):
-        y_chunks = []
-        pred_chunks = []
-        for key, y_value in y_true.items():
-            if not isinstance(pred, dict) or key not in pred:
-                continue
-            mask_value = target_mask.get(key) if isinstance(target_mask, dict) else None
-            y_flat, pred_flat = _as_flat_known_arrays(y_value, pred[key], mask_value)
-            if y_flat.size:
-                y_chunks.append(y_flat)
-                pred_chunks.append(pred_flat)
-        if not y_chunks:
-            return np.asarray([], dtype=np.float32), np.asarray([], dtype=np.float32)
-        return np.concatenate(y_chunks), np.concatenate(pred_chunks)
-
-    y_np = np.asarray(y_true)
-    pred_np = np.asarray(pred)
-    if y_np.shape != pred_np.shape:
-        return np.asarray([], dtype=np.float32), np.asarray([], dtype=np.float32)
-
-    known = np.ones(y_np.shape, dtype=bool)
-    if target_mask is not None:
-        mask_np = np.asarray(target_mask, dtype=bool)
-        if mask_np.shape == y_np.shape:
-            known &= mask_np
-        elif mask_np.ndim == 1 and y_np.ndim > 1 and mask_np.shape[0] == y_np.shape[0]:
-            reshape = (mask_np.shape[0],) + (1,) * (y_np.ndim - 1)
-            known &= np.broadcast_to(mask_np.reshape(reshape), y_np.shape)
-
-    y_flat = y_np[known].reshape(-1)
-    pred_flat = pred_np[known].reshape(-1)
-    finite = np.isfinite(y_flat.astype(np.float64, copy=False)) & np.isfinite(
-        pred_flat.astype(np.float64, copy=False)
-    )
-    return y_flat[finite], pred_flat[finite]
-
-
-def _kendall_tau(y_true: np.ndarray, pred: np.ndarray) -> float | None:
-    """Compute Kendall tau when SciPy is available and the split is non-degenerate."""
-    if y_true.size < 2 or np.unique(y_true).size < 2 or np.unique(pred).size < 2:
-        return None
-    try:
-        from scipy.stats import kendalltau
-    except ModuleNotFoundError:
-        return None
-    value = kendalltau(y_true, pred).statistic
-    if value is None or not np.isfinite(value):
-        return None
-    return float(value)
-
-
-def evaluate_predictions(
-    y_true,
-    pred,
-    task_type: str,
-    target_mask=None,
-    *,
-    split: str,
-) -> dict[str, Any]:
-    """Compute lightweight split metrics from saved prediction payloads."""
-    y_flat, pred_flat = _as_flat_known_arrays(y_true, pred, target_mask)
-    metrics: dict[str, Any] = {
-        "split": split,
-        "task_type": task_type,
-        "n": int(y_flat.size),
-    }
-    if y_flat.size == 0:
-        return metrics
-
-    if task_type == "regression":
-        y_float = y_flat.astype(np.float64, copy=False)
-        pred_float = pred_flat.astype(np.float64, copy=False)
-        residual = pred_float - y_float
-        metrics["mae"] = float(np.mean(np.abs(residual)))
-        metrics["rmse"] = float(np.sqrt(np.mean(residual**2)))
-        ss_tot = float(np.sum((y_float - np.mean(y_float)) ** 2))
-        metrics["r2"] = None if ss_tot == 0.0 else float(1.0 - np.sum(residual**2) / ss_tot)
-        metrics["kendall_tau"] = _kendall_tau(y_float, pred_float)
-        return metrics
-
-    y_label = np.rint(y_flat).astype(np.int8, copy=False)
-    pred_label = np.rint(pred_flat).astype(np.int8, copy=False)
-    del y_flat, pred_flat
-    metrics["accuracy"] = float(np.mean(y_label == pred_label))
-    try:
-        from sklearn.metrics import f1_score, precision_score, recall_score
-    except ModuleNotFoundError:
-        return metrics
-
-    labels = np.unique(np.concatenate([y_label, pred_label]))
-    average = "binary" if labels.size <= 2 and set(labels.tolist()) <= {0, 1} else "macro"
-    metrics["precision"] = float(
-        precision_score(y_label, pred_label, average=average, zero_division=0)
-    )
-    metrics["recall"] = float(recall_score(y_label, pred_label, average=average, zero_division=0))
-    metrics["f1"] = float(f1_score(y_label, pred_label, average=average, zero_division=0))
-    return metrics
 
 
 def write_hparams_file(

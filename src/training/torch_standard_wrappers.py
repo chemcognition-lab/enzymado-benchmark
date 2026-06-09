@@ -742,16 +742,9 @@ class MLPClassifierTorch:
         return np.concatenate(preds)
 
 
-# Backward-compatible aliases while we migrate away from the SGD naming.
-SGDRegressorTorch = LinearRegressorTorch
-SGDClassifierTorch = LinearClassifierTorch
-
-
 __all__ = [
     "LinearRegressorTorch",
     "LinearClassifierTorch",
     "MLPRegressorTorch",
     "MLPClassifierTorch",
-    "SGDRegressorTorch",
-    "SGDClassifierTorch",
 ]

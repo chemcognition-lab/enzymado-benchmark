@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from training.train_common import filter_rows_to_allowed_ids, log
-from training.train_data import collect_needed_lookup_keys, get_task_rows
+from data_loading.stores import (
+    collect_needed_lookup_keys,
+    filter_rows_to_allowed_ids,
+    get_task_rows,
+    log,
+)
 
 
 @dataclass

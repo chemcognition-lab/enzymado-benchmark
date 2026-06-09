@@ -21,6 +21,7 @@ from .datasets import (
 from .features import (
     EmbeddingLookupError,
     MutationDeltaEmbeddingBuilder,
+    PooledEmbeddingStore,
     ProteinResidueEmbeddingBuilder,
     RDKitLigandFeatureBuilder,
     ResidueEmbeddingStore,
@@ -51,6 +52,7 @@ __all__ = [
     "ProteinResidueConcatCollator",
     "ProteinResidueCollator",
     "ProteinResidueDataset",
+    "PooledEmbeddingStore",
     "ProteinResidueEmbeddingBuilder",
     "RDKitLigandFeatureBuilder",
     "ResidueBinaryVectorLabelBuilder",

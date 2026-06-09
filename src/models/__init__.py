@@ -27,8 +27,6 @@ from training.torch_standard_wrappers import (
     LinearRegressorTorch,
     MLPClassifierTorch,
     MLPRegressorTorch,
-    SGDClassifierTorch,
-    SGDRegressorTorch,
 )
 from training.torch_structured_wrappers import (
     ECMultiHeadClassifierTorch,
@@ -41,7 +39,7 @@ from training.xgb_wrappers import (
     XGBRegressor,
     XGBResidueBinaryClassifier,
 )
-from models.registry import MODEL_MAP, STRUCTURED_MODEL_MAP
+from models.registry import MODEL_MAP, STRUCTURED_MODEL_MAP, get_model_map, train_model, train_model_loader
 
 __all__ = [
     "DEVICE",
@@ -64,8 +62,6 @@ __all__ = [
     "MultiHeadMLPModel",
     "LinearRegressorTorch",
     "LinearClassifierTorch",
-    "SGDRegressorTorch",
-    "SGDClassifierTorch",
     "MLPRegressorTorch",
     "MLPClassifierTorch",
     "ECMultiHeadClassifierTorch",
@@ -77,4 +73,7 @@ __all__ = [
     "XGBResidueBinaryClassifier",
     "MODEL_MAP",
     "STRUCTURED_MODEL_MAP",
+    "get_model_map",
+    "train_model",
+    "train_model_loader",
 ]

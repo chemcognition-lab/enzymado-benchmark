@@ -26,8 +26,7 @@ MODEL_FAMILY_ALIASES = {
     "attention_mlp_regressor": "mlp",
     "linear_classification": "linear",
     "linear_regressor": "linear",
-    "sgd_classification": "linear",
-    "sgd_regressor": "linear",
+
     "mlp_classification": "mlp",
     "mlp_regressor": "mlp",
     "xgb_classification": "xgboost",
@@ -61,8 +60,7 @@ def canonical_model_family(model_name: str) -> str:
         return "mlp"
     if model_name.startswith("mlp_"):
         return "mlp"
-    if model_name.startswith("sgd_"):
-        return "linear"
+
     if model_name.startswith("xgb_"):
         return "xgboost"
     return _path_token(model_name)
@@ -237,6 +235,22 @@ def is_result_entry_complete(entry: dict[str, Any] | None) -> bool:
     return not (run_dir and (Path(run_dir) / INVALIDATION_MARKER).exists())
 
 
+def is_run_complete(run_dir: Path) -> bool:
+    """A run is complete when the current artifact set exists on disk."""
+    if (run_dir / INVALIDATION_MARKER).exists():
+        return False
+    has_predictions = (
+        find_prediction_artifact(run_dir, "train") is not None
+        and find_prediction_artifact(run_dir, "test") is not None
+    )
+    has_model = find_model_artifact(run_dir) is not None
+    has_metadata = all(
+        (run_dir / filename).is_file()
+        for filename in ("hparams.json", "metrics.json", "training_log.csv")
+    )
+    return has_predictions and has_model and has_metadata
+
+
 def ensure_results_card(path: Path) -> None:
     """Create results_card.json if it does not yet exist."""
     if path.exists():
@@ -326,6 +340,7 @@ __all__ = [
     "canonical_model_family",
     "canonical_split_family",
     "ensure_results_card",
+    "is_run_complete",
     "find_result_entry",
     "find_model_artifact",
     "find_prediction_artifact",

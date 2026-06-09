@@ -20,6 +20,7 @@ from .collators import (
 )
 from .features import (
     MutationDeltaEmbeddingBuilder,
+    PooledEmbeddingStore,
     ProteinResidueEmbeddingBuilder,
     RDKitLigandFeatureBuilder,
     ResidueEmbeddingStore,
@@ -305,7 +306,7 @@ def _build_label_builder(
 
 def build_dataset_from_config(
     config: TaskConfig,
-    embedding_store: ResidueEmbeddingStore,
+    embedding_store: ResidueEmbeddingStore | PooledEmbeddingStore,
     split_name: str | None = None,
     split_variant: str = "random",
     missing_policy: str = "raise",
@@ -388,7 +389,7 @@ def build_dataset_from_config(
 
 def build_task_dataset(
     task_name: str,
-    embedding_store: ResidueEmbeddingStore,
+    embedding_store: ResidueEmbeddingStore | PooledEmbeddingStore,
     split_name: str | None = None,
     split_variant: str = "random",
     missing_policy: str = "raise",

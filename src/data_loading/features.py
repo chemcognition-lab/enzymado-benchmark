@@ -260,9 +260,71 @@ class RDKitLigandFeatureBuilder:
 
 
 @dataclass
+class PooledEmbeddingStore:
+    """Lookup store for pre-pooled (1D) embeddings keyed by sequence and/or identifier."""
+    by_sequence: dict[str, np.ndarray] = field(default_factory=dict)
+    by_id: dict[str, np.ndarray] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.by_sequence = {
+            normalize_sequence(k): np.asarray(v, dtype=np.float32)
+            for k, v in self.by_sequence.items()
+        }
+        self.by_id = {
+            clean_text(k): np.asarray(v, dtype=np.float32)
+            for k, v in self.by_id.items()
+        }
+
+    def has_sequence(self, sequence: str) -> bool:
+        return normalize_sequence(sequence) in self.by_sequence
+
+    def has_id(self, identifier: str) -> bool:
+        return clean_text(identifier) in self.by_id
+
+    def lookup_sequence(self, sequence: str) -> np.ndarray:
+        normalized = normalize_sequence(sequence)
+        try:
+            return self.by_sequence[normalized]
+        except KeyError as exc:
+            raise EmbeddingLookupError(
+                f"Missing pooled embedding for sequence '{normalized[:20]}...'"
+            ) from exc
+
+    def lookup_id(self, identifier: str) -> np.ndarray:
+        normalized = clean_text(identifier)
+        try:
+            return self.by_id[normalized]
+        except KeyError as exc:
+            raise EmbeddingLookupError(
+                f"Missing pooled embedding for id '{normalized}'."
+            ) from exc
+
+    def lookup_row(
+        self,
+        row: dict[str, str],
+        id_columns: tuple[str, ...] = ("uniprot_id", "dataset_id"),
+        sequence_column: str = "protein_sequence",
+    ) -> np.ndarray:
+        sequence = normalize_sequence(row.get(sequence_column))
+        if sequence and self.has_sequence(sequence):
+            return self.lookup_sequence(sequence)
+        for id_column in id_columns:
+            if id_column not in row:
+                continue
+            identifier = clean_text(row.get(id_column))
+            if identifier and self.has_id(identifier):
+                return self.lookup_id(identifier)
+        tried = [c for c in (*id_columns, sequence_column) if c in row]
+        raise EmbeddingLookupError(
+            f"Missing pooled embedding for row. Tried columns: {tried}. "
+            f"sample_id={row.get('sample_id', '')}"
+        )
+
+
+@dataclass
 class MutationDeltaEmbeddingBuilder:
-    """Build mutant-minus-wildtype residue deltas for mutation-effect tasks."""
-    embedding_store: ResidueEmbeddingStore
+    """Build mutant-minus-wildtype embedding deltas for mutation-effect tasks."""
+    embedding_store: ResidueEmbeddingStore | PooledEmbeddingStore
     mutation_sequence_column: str = "protein_sequence"
     wildtype_sequence_column: str = "wildtype_sequence"
     index_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
@@ -285,24 +347,27 @@ class MutationDeltaEmbeddingBuilder:
             )
         wildtype_embedding = self.embedding_store.lookup_sequence(wildtype_sequence)
 
-        expected_mutant_length = len(normalize_sequence(row.get(self.mutation_sequence_column)))
-        expected_wildtype_length = len(normalize_sequence(row.get(self.wildtype_sequence_column)))
-        if expected_mutant_length and mutant_embedding.shape[0] != expected_mutant_length:
-            raise ValueError(
-                f"Mutant embedding length mismatch for sample '{row.get('sample_id', '')}'."
-            )
-        if expected_wildtype_length and wildtype_embedding.shape[0] != expected_wildtype_length:
-            raise ValueError(
-                f"Wildtype embedding length mismatch for sample '{row.get('sample_id', '')}'."
-            )
+        # Residue-length validation only applies to 2D (residue-level) embeddings.
+        if mutant_embedding.ndim == 2:
+            expected_mutant_length = len(normalize_sequence(row.get(self.mutation_sequence_column)))
+            expected_wildtype_length = len(normalize_sequence(row.get(self.wildtype_sequence_column)))
+            if expected_mutant_length and mutant_embedding.shape[0] != expected_mutant_length:
+                raise ValueError(
+                    f"Mutant embedding length mismatch for sample '{row.get('sample_id', '')}'."
+                )
+            if expected_wildtype_length and wildtype_embedding.shape[0] != expected_wildtype_length:
+                raise ValueError(
+                    f"Wildtype embedding length mismatch for sample '{row.get('sample_id', '')}'."
+                )
         if mutant_embedding.shape != wildtype_embedding.shape:
             raise ValueError(
                 f"Delta embedding requires equal shapes. Mutant={tuple(mutant_embedding.shape)}, "
                 f"wildtype={tuple(wildtype_embedding.shape)} for sample '{row.get('sample_id', '')}'."
             )
-        # Arithmetic in float32 — bfloat16 could not be the best precision for the delta.
-        delta = mutant_embedding.float() - wildtype_embedding.float()
-        return delta.cpu().numpy().astype(np.float32, copy=False)
+        if torch.is_tensor(mutant_embedding):
+            delta = mutant_embedding.float() - wildtype_embedding.float()
+            return delta.cpu().numpy().astype(np.float32, copy=False)
+        return np.asarray(mutant_embedding, dtype=np.float32) - np.asarray(wildtype_embedding, dtype=np.float32)
 
     def validate_row(self, row: dict[str, str]) -> str | None:
         """Check that both mutant and wildtype embeddings can be resolved."""
