@@ -10,7 +10,7 @@ from typing import Callable
 import numpy as np
 import torch
 
-from .splits import clean_text, normalize_identifier, normalize_sequence
+from .task_csv import clean_text, normalize_identifier, normalize_sequence
 
 
 class EmbeddingLookupError(KeyError):

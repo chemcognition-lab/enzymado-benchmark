@@ -1,6 +1,6 @@
 """Composable dataset, feature, label, and split-loading utilities."""
 
-from .adapters import DatasetAdapter
+from .task_csv import TaskCSVLoader
 from .collators import (
     Batch,
     MutationDeltaGlobalCollator,
@@ -37,7 +37,7 @@ from .data_registry import TASK_REGISTRY, TaskConfig, LabelType, TaskType, Split
 
 __all__ = [
     "BinaryLabelBuilder",
-    "DatasetAdapter",
+    "TaskCSVLoader",
     "EmbeddingLookupError",
     "FlatECLabelBuilder",
     "HierarchicalECLabelBuilder",

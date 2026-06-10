@@ -11,7 +11,7 @@ except ModuleNotFoundError:
     class TorchDataset:  # type: ignore[no-redef]
         pass
 
-from .adapters import DatasetAdapter
+from .task_csv import TaskCSVLoader
 from .collators import (
     MutationDeltaGlobalCollator,
     ProteinGlobalCollator,
@@ -251,7 +251,7 @@ def _build_adapter(
     config: TaskConfig,
     split_name: str | None = None,
     split_variant: str = "random",
-) -> DatasetAdapter:
+) -> TaskCSVLoader:
     """Instantiate the adapter configured for the task's batch type."""
     if split_variant not in config.dataset_paths:
         available = ", ".join(sorted(config.dataset_paths)) or "<none>"
@@ -268,7 +268,7 @@ def _build_adapter(
     }:
         raise ValueError(f"Unsupported batch_kind '{config.batch_kind}'.")
 
-    return DatasetAdapter(
+    return TaskCSVLoader(
         dataset_path=config.dataset_paths[split_variant],
         index_columns=config.index_columns,
         split_name=split_name,

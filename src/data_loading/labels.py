@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .splits import clean_text, normalize_sequence
+from .task_csv import clean_text, normalize_sequence
 
 
 @dataclass

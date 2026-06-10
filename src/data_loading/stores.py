@@ -12,10 +12,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from data_loading.adapters import DatasetAdapter
+from data_loading.task_csv import TaskCSVLoader, clean_text, normalize_sequence
 from data_loading.features import PooledEmbeddingStore, ResidueEmbeddingStore
 from data_loading.labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
-from data_loading.splits import clean_text, normalize_sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
@@ -44,7 +43,7 @@ def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
             f"Available variants: {available}"
         )
 
-    return DatasetAdapter(
+    return TaskCSVLoader(
         dataset_path=config.dataset_paths[split_variant],
         index_columns=config.index_columns,
         split_name=split_name,
@@ -168,9 +167,7 @@ def _load_sequence_key_map(
     available_keys: set[str],
 ) -> dict[str, str]:
     """Build normalized_sequence -> tensor key mapping via sequence index or direct key match."""
-    from data_loading.splits import clean_text, normalize_sequence as _ns
-
-    normalized_sequences = {_ns(s) for s in needed_sequences if _ns(s)}
+    normalized_sequences = {normalize_sequence(s) for s in needed_sequences if normalize_sequence(s)}
     seq_to_key: dict[str, str] = {}
 
     seq_index_path = resolve_sequence_index_path()
@@ -179,7 +176,7 @@ def _load_sequence_key_map(
 
         with open(seq_index_path, newline="", encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
-                seq = _ns(row.get("protein_sequence", ""))
+                seq = normalize_sequence(row.get("protein_sequence", ""))
                 sid = clean_text(row.get("sequence_id", ""))
                 if seq in normalized_sequences and sid in available_keys:
                     seq_to_key[seq] = sid
@@ -193,7 +190,6 @@ def _load_sequence_key_map(
 def _index_safetensors(source: Path) -> dict[str, Path]:
     """Index tensor keys to the safetensors file that stores them."""
     from safetensors import safe_open
-    from data_loading.splits import clean_text
 
     key_to_file: dict[str, Path] = {}
     for file_path in _safetensor_files(source):
@@ -241,18 +237,13 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
         return tensor
 
     def has_id(self, identifier: str) -> bool:
-        from data_loading.splits import clean_text
-
         return clean_text(identifier) in self._available_ids
 
     def has_sequence(self, sequence: str) -> bool:
-        from data_loading.splits import normalize_sequence as _ns
-
-        return _ns(sequence) in self._seq_to_key
+        return normalize_sequence(sequence) in self._seq_to_key
 
     def lookup_id(self, identifier: str) -> torch.Tensor:
         from data_loading.features import EmbeddingLookupError
-        from data_loading.splits import clean_text
 
         key = clean_text(identifier)
         if key not in self._available_ids:
@@ -264,9 +255,8 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
 
     def lookup_sequence(self, sequence: str) -> torch.Tensor:
         from data_loading.features import EmbeddingLookupError
-        from data_loading.splits import normalize_sequence as _ns
 
-        norm_seq = _ns(sequence)
+        norm_seq = normalize_sequence(sequence)
         key = self._seq_to_key.get(norm_seq)
         if key is None:
             raise EmbeddingLookupError("Missing residue embedding for sequence.")
@@ -282,8 +272,6 @@ def load_lazy_safetensors_embedding_store(
     needed_sequences: set[str],
 ) -> LazySafetensorsResidueEmbeddingStore:
     """Index safetensors keys needed for lazy residue-embedding training."""
-    from data_loading.splits import clean_text
-
     source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
@@ -303,8 +291,6 @@ def load_safetensors_embedding_store_subset(
     needed_sequences: set[str],
 ) -> ResidueEmbeddingStore:
     """Materialize only the required residue embeddings from safetensors."""
-    from data_loading.splits import clean_text
-
     source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
@@ -328,14 +314,13 @@ def load_pooled_safetensors_subset(
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Load needed safetensors embeddings and mean-pool per-residue tensors if needed."""
     from safetensors import safe_open
-    from data_loading.splits import clean_text, normalize_sequence as _norm_seq
 
     source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
 
     normalized_ids = {clean_text(v) for v in needed_ids if clean_text(v)} & available_keys
-    normalized_sequences = {_norm_seq(v) for v in needed_sequences if _norm_seq(v)}
+    normalized_sequences = {normalize_sequence(v) for v in needed_sequences if normalize_sequence(v)}
     seq_to_key = _load_sequence_key_map(normalized_sequences, available_keys)
 
     keys_to_load: dict[str, tuple[str | None, str | None]] = {}
@@ -416,9 +401,7 @@ def _lookup_pooled_embedding(
     config,
 ) -> np.ndarray | None:
     """Resolve a pooled embedding from sequence first, then fallback identifiers."""
-    from data_loading.splits import clean_text, normalize_sequence as _norm_seq
-
-    seq = _norm_seq(row.get(config.sequence_column, ""))
+    seq = normalize_sequence(row.get(config.sequence_column, ""))
     if seq:
         emb = by_seq.get(seq)
         if emb is not None:
