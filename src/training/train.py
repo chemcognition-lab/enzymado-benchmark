@@ -448,7 +448,7 @@ class GlobalRoute(TrainingRoute):
                     task_rows.test_rows, by_id, by_seq, config, flat_ec_label_builder
                 )
         else:
-            log("    Building task datasets...")
+            log("    Validating rows against embedding store...")
             store = build_pooled_embedding_store(by_id, by_seq)
             ec_vocabulary = None
             prepared.train_bundle = build_task_dataset(
@@ -595,7 +595,7 @@ class ResidueTasksRoute(TrainingRoute):
                 f"{len(prepared.store._available_ids)} ids, {len(prepared.store._seq_to_key)} seqs indexed"
             )
 
-        log("    Building task datasets...")
+        log("    Validating rows against embedding store...")
         t0 = time.time()
         prepared.train_bundle = build_task_dataset(
             registry_name,
@@ -623,7 +623,10 @@ class ResidueTasksRoute(TrainingRoute):
             missing_policy="skip",
             ec_vocabulary=ec_vocabulary,
         )
-        log(f"    Datasets built ({time.time()-t0:.1f}s)")
+        n_train = len(prepared.train_bundle.dataset)
+        n_val = len(prepared.val_bundle.dataset)
+        n_test = len(prepared.test_bundle.dataset)
+        log(f"    Row validation done ({time.time()-t0:.1f}s) — train={n_train:,} val={n_val:,} test={n_test:,}")
         return prepared
 
     def train(
@@ -784,7 +787,10 @@ class AttentionRoute(TrainingRoute):
             registry_name, store, split_name="test", split_variant=split_variant,
             missing_policy="skip", ec_vocabulary=ec_vocabulary,
         )
-        log(f"    Datasets built ({time.time()-t0:.1f}s)")
+        n_train = len(train_bundle.dataset)
+        n_val = len(val_bundle.dataset)
+        n_test = len(test_bundle.dataset)
+        log(f"    Row validation done ({time.time()-t0:.1f}s) — train={n_train:,} val={n_val:,} test={n_test:,}")
         return PreparedTaskData(
             route=TaskRoute(is_pooled_task=False),
             store=store,
@@ -805,12 +811,13 @@ class AttentionRoute(TrainingRoute):
         run_dir: Path,
     ) -> ModelRunOutputs:
         batch_size = int(model_info.get("loader_batch_size", 16))
-        train_loader = get_dataloader(prepared.train_bundle, batch_size=batch_size, shuffle=True)
-        train_predict_loader = get_dataloader(prepared.train_bundle, batch_size=batch_size)
+        num_workers = int(model_info.get("loader_num_workers", 4))
+        train_loader = get_dataloader(prepared.train_bundle, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        train_predict_loader = get_dataloader(prepared.train_bundle, batch_size=batch_size, num_workers=num_workers)
         val_loader = (
-            get_dataloader(prepared.val_bundle, batch_size=batch_size) if use_validation else None
+            get_dataloader(prepared.val_bundle, batch_size=batch_size, num_workers=num_workers) if use_validation else None
         )
-        test_loader = get_dataloader(prepared.test_bundle, batch_size=batch_size)
+        test_loader = get_dataloader(prepared.test_bundle, batch_size=batch_size, num_workers=num_workers)
 
         log("      Training attention model...")
         t0 = time.time()

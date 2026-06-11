@@ -48,7 +48,8 @@ def build_residue_aware_loaders(
 ) -> ResidueAwareLoaders:
     """Create loaders for residue-aware training and prediction."""
     residue_batch_size = int(model_info.get("loader_batch_size", 64))
-    log(f"      Using residue-aware loader batch_size={residue_batch_size}")
+    num_workers = int(model_info.get("loader_num_workers", 4))
+    log(f"      Using residue-aware loader batch_size={residue_batch_size} num_workers={num_workers}")
     residue_collate_fn = None
     if model_info.get("concat_residue_batch", False):
         log("      Using concatenated residue batches (sum of per-protein lengths per batch).")
@@ -59,17 +60,20 @@ def build_residue_aware_loaders(
         batch_size=residue_batch_size,
         collate_fn=residue_collate_fn,
         shuffle=True,
+        num_workers=num_workers,
     )
     train_predict_loader = get_dataloader(
         train_bundle,
         batch_size=residue_batch_size,
         collate_fn=residue_collate_fn,
+        num_workers=num_workers,
     )
     val_loader = (
         get_dataloader(
             val_bundle,
             batch_size=residue_batch_size,
             collate_fn=residue_collate_fn,
+            num_workers=num_workers,
         )
         if use_validation else None
     )
@@ -77,6 +81,7 @@ def build_residue_aware_loaders(
         test_bundle,
         batch_size=residue_batch_size,
         collate_fn=residue_collate_fn,
+        num_workers=num_workers,
     )
     return ResidueAwareLoaders(
         train_loader=train_loader,

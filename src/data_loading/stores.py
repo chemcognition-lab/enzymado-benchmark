@@ -216,6 +216,14 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
         self._seq_to_key = seq_to_key
         self._handles = {}
 
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        state["_handles"] = {}  # safe_open handles can't be pickled; workers re-open lazily
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+
     def _handle_for_key(self, key: str):
         from safetensors import safe_open
 
@@ -250,8 +258,17 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
             raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
         return self._lookup_key(key)
 
+    def _key_shape(self, key: str) -> int:
+        """Read sequence length from safetensors header without loading tensor data."""
+        return self._handle_for_key(key).get_slice(key).get_shape()[0]
+
     def lookup_id_length(self, identifier: str) -> int:
-        return int(self.lookup_id(identifier).shape[0])
+        from data_loading.features import EmbeddingLookupError
+
+        key = clean_text(identifier)
+        if key not in self._available_ids:
+            raise EmbeddingLookupError(f"Missing residue embedding for id '{key}'.")
+        return self._key_shape(key)
 
     def lookup_sequence(self, sequence: str) -> torch.Tensor:
         from data_loading.features import EmbeddingLookupError
@@ -263,7 +280,13 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
         return self._lookup_key(key)
 
     def lookup_sequence_length(self, sequence: str) -> int:
-        return int(self.lookup_sequence(sequence).shape[0])
+        from data_loading.features import EmbeddingLookupError
+
+        norm_seq = normalize_sequence(sequence)
+        key = self._seq_to_key.get(norm_seq)
+        if key is None:
+            raise EmbeddingLookupError("Missing residue embedding for sequence.")
+        return self._key_shape(key)
 
 
 def load_lazy_safetensors_embedding_store(
@@ -563,6 +586,7 @@ def get_dataloader(
     *,
     shuffle: bool = False,
     seed: int = 0,
+    num_workers: int = 4,
 ) -> DataLoader:
     """Build a DataLoader for one dataset bundle."""
     generator = None
@@ -575,7 +599,9 @@ def get_dataloader(
         collate_fn=collate_fn if collate_fn is not None else bundle.collator,
         shuffle=shuffle,
         generator=generator,
-        num_workers=0,
+        num_workers=num_workers,
+        prefetch_factor=2 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0,
     )
 
 

@@ -1,5 +1,6 @@
-from __future__ import annotations
 """Load, filter, and tag rows from a task CSV file."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
