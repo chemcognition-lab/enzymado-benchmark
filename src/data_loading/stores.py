@@ -157,11 +157,6 @@ def _safetensor_files(source: Path) -> list[Path]:
     raise FileNotFoundError(f"No .safetensors files found in '{source}'.")
 
 
-def _tensor_to_float32_numpy(tensor: torch.Tensor) -> np.ndarray:
-    """Convert a safetensors tensor to a float32 NumPy array for arithmetic models."""
-    return tensor.float().cpu().numpy().astype(np.float32, copy=False)
-
-
 def _load_sequence_key_map(
     needed_sequences: set[str],
     available_keys: set[str],
@@ -334,7 +329,7 @@ def load_pooled_safetensors_subset(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """Load needed safetensors embeddings and mean-pool per-residue tensors if needed."""
     from safetensors import safe_open
 
@@ -360,8 +355,8 @@ def load_pooled_safetensors_subset(
         f"({len(normalized_ids)} by id, {len(seq_to_key)} by seq)"
     )
 
-    by_id: dict[str, np.ndarray] = {}
-    by_seq: dict[str, np.ndarray] = {}
+    by_id: dict[str, torch.Tensor] = {}
+    by_seq: dict[str, torch.Tensor] = {}
     total = len(keys_to_load)
     log_interval = max(1, total // 20)
     t_load_start = time.time()
@@ -374,14 +369,14 @@ def load_pooled_safetensors_subset(
         if handle is None:
             handle = safe_open(str(file_path), framework="pt", device="cpu")
             handles[file_path] = handle
-        arr = _tensor_to_float32_numpy(handle.get_tensor(tensor_key))
-        if arr.ndim == 2:
-            pooled = arr.mean(axis=0)
-        elif arr.ndim == 1:
-            pooled = arr
+        t = handle.get_tensor(tensor_key).float()
+        if t.ndim == 2:
+            pooled = t.mean(dim=0)
+        elif t.ndim == 1:
+            pooled = t
         else:
             raise ValueError(
-                f"Expected 1D or 2D embedding array for key '{tensor_key}', got shape {arr.shape}."
+                f"Expected 1D or 2D embedding tensor for key '{tensor_key}', got shape {tuple(t.shape)}."
             )
         if id_key is not None:
             by_id[id_key] = pooled
@@ -402,14 +397,14 @@ def load_pooled_embedding_subset(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """Load mean-pooled embeddings from safetensors."""
     return load_pooled_safetensors_subset(source_path, needed_ids, needed_sequences)
 
 
 def build_pooled_embedding_store(
-    by_id: dict[str, np.ndarray],
-    by_seq: dict[str, np.ndarray],
+    by_id: dict[str, torch.Tensor],
+    by_seq: dict[str, torch.Tensor],
 ) -> PooledEmbeddingStore:
     """Wrap pre-loaded pooled embedding dicts into a PooledEmbeddingStore."""
     return PooledEmbeddingStore(by_sequence=by_seq, by_id=by_id)
@@ -419,10 +414,10 @@ def build_pooled_embedding_store(
 
 def _lookup_pooled_embedding(
     row: dict,
-    by_id: dict[str, np.ndarray],
-    by_seq: dict[str, np.ndarray],
+    by_id: dict[str, torch.Tensor],
+    by_seq: dict[str, torch.Tensor],
     config,
-) -> np.ndarray | None:
+) -> torch.Tensor | None:
     """Resolve a pooled embedding from sequence first, then fallback identifiers."""
     seq = normalize_sequence(row.get(config.sequence_column, ""))
     if seq:
@@ -439,16 +434,16 @@ def _lookup_pooled_embedding(
 
 def build_ec_arrays(
     rows: list[dict],
-    by_id: dict[str, np.ndarray],
-    by_seq: dict[str, np.ndarray],
+    by_id: dict[str, torch.Tensor],
+    by_seq: dict[str, torch.Tensor],
     config,
     label_builder: HierarchicalECLabelBuilder,
-) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """Build pooled EC features plus per-level targets and masks."""
     level_names = label_builder.level_names()
-    X_list: list[np.ndarray] = []
-    targets = {level_name: [] for level_name in level_names}
-    target_masks = {level_name: [] for level_name in level_names}
+    X_list: list[torch.Tensor] = []
+    targets: dict[str, list[torch.Tensor]] = {level_name: [] for level_name in level_names}
+    target_masks: dict[str, list[torch.Tensor]] = {level_name: [] for level_name in level_names}
     skipped = 0
 
     for row in rows:
@@ -461,10 +456,10 @@ def build_ec_arrays(
         X_list.append(emb)
         for level_name in level_names:
             targets[level_name].append(
-                np.asarray(label_payload["target"][level_name], dtype=np.float32)
+                torch.tensor(label_payload["target"][level_name], dtype=torch.float32)
             )
             target_masks[level_name].append(
-                np.asarray(label_payload["target_mask"][level_name], dtype=bool)
+                torch.tensor(label_payload["target_mask"][level_name], dtype=torch.bool)
             )
 
     if skipped:
@@ -472,46 +467,40 @@ def build_ec_arrays(
 
     if not X_list:
         empty_targets = {
-            level_name: np.zeros(
+            level_name: torch.zeros(
                 (0, len(label_builder.vocabulary_by_level[level_name])),
-                dtype=np.float32,
+                dtype=torch.float32,
             )
             for level_name in level_names
         }
         empty_target_masks = {
-            level_name: np.zeros(
+            level_name: torch.zeros(
                 (0, len(label_builder.vocabulary_by_level[level_name])),
-                dtype=bool,
+                dtype=torch.bool,
             )
             for level_name in level_names
         }
-        return np.empty((0, 0), dtype=np.float32), empty_targets, empty_target_masks
+        return torch.empty((0, 0), dtype=torch.float32), empty_targets, empty_target_masks
 
     return (
-        np.stack(X_list).astype(np.float32, copy=False),
-        {
-            level_name: np.stack(level_targets).astype(np.float32, copy=False)
-            for level_name, level_targets in targets.items()
-        },
-        {
-            level_name: np.stack(level_mask).astype(bool, copy=False)
-            for level_name, level_mask in target_masks.items()
-        },
+        torch.stack(X_list),
+        {level_name: torch.stack(level_targets) for level_name, level_targets in targets.items()},
+        {level_name: torch.stack(level_masks) for level_name, level_masks in target_masks.items()},
     )
 
 
 def build_flat_ec_arrays(
     rows: list[dict],
-    by_id: dict[str, np.ndarray],
-    by_seq: dict[str, np.ndarray],
+    by_id: dict[str, torch.Tensor],
+    by_seq: dict[str, torch.Tensor],
     config,
     label_builder: FlatECLabelBuilder,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Build pooled EC features using flattened targets for XGBoost models."""
     label_builder._ensure_flat_index()
-    X_list: list[np.ndarray] = []
-    targets: list[np.ndarray] = []
-    target_masks: list[np.ndarray] = []
+    X_list: list[torch.Tensor] = []
+    targets: list[torch.Tensor] = []
+    target_masks: list[torch.Tensor] = []
     skipped = 0
 
     for row in rows:
@@ -522,8 +511,8 @@ def build_flat_ec_arrays(
 
         label_payload = label_builder.build(row)
         X_list.append(emb)
-        targets.append(np.asarray(label_payload["target"], dtype=np.float32))
-        target_masks.append(np.asarray(label_payload["target_mask"], dtype=bool))
+        targets.append(torch.tensor(label_payload["target"], dtype=torch.float32))
+        target_masks.append(torch.tensor(label_payload["target_mask"], dtype=torch.bool))
 
     if skipped:
         log(f"      Skipped {skipped} rows (missing embeddings)")
@@ -531,52 +520,47 @@ def build_flat_ec_arrays(
     if not X_list:
         empty_dim = len(label_builder.flat_vocabulary or ())
         return (
-            np.empty((0, 0), dtype=np.float32),
-            np.empty((0, empty_dim), dtype=np.float32),
-            np.empty((0, empty_dim), dtype=bool),
+            torch.empty((0, 0), dtype=torch.float32),
+            torch.empty((0, empty_dim), dtype=torch.float32),
+            torch.empty((0, empty_dim), dtype=torch.bool),
         )
 
     return (
-        np.stack(X_list).astype(np.float32, copy=False),
-        np.stack(targets).astype(np.float32, copy=False),
-        np.stack(target_masks).astype(bool, copy=False),
+        torch.stack(X_list),
+        torch.stack(targets),
+        torch.stack(target_masks),
     )
 
 
 
 
-def _sample_emb_to_numpy(emb) -> np.ndarray:
-    """Materialize a per-sample embedding as a float32 NumPy array for pooling."""
-    if torch.is_tensor(emb):
-        return emb.float().cpu().numpy()
-    return np.asarray(emb, dtype=np.float32)
-
-
-def build_xy_pooled(bundle, batch_kind: str):
-    """Build X (N, emb_dim) and y arrays from a dataset bundle.
+def build_xy_pooled(bundle, batch_kind: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Build X (N, emb_dim) and y tensors from a dataset bundle.
 
     Embeddings that are already 1D (pre-pooled) are used directly.
     Embeddings that are 2D (residue-level) are mean-pooled on the fly.
     """
-    x_list, y_list = [], []
+    x_list: list[torch.Tensor] = []
+    y_list: list[float] = []
     for i in range(len(bundle.dataset)):
         sample = bundle.dataset[i]
         if batch_kind == "protein_global":
-            x = _sample_emb_to_numpy(sample["protein_emb"])
+            x = sample["protein_emb"].float()
             if x.ndim == 2:
-                x = x.mean(axis=0)
+                x = x.mean(dim=0)
         elif batch_kind == "mutation_delta_global":
-            x = _sample_emb_to_numpy(sample["protein_delta_emb"])
+            x = sample["protein_delta_emb"].float()
             if x.ndim == 2:
-                x = x.mean(axis=0)
+                x = x.mean(dim=0)
         elif batch_kind == "protein_ligand_global":
-            protein = _sample_emb_to_numpy(sample["protein_emb"])
+            protein = sample["protein_emb"].float()
             if protein.ndim == 2:
-                protein = protein.mean(axis=0)
-            x = np.concatenate([protein, np.asarray(sample["ligand_feat"], dtype=np.float32)])
+                protein = protein.mean(dim=0)
+            ligand = sample["ligand_feat"].float()
+            x = torch.cat([protein, ligand])
         x_list.append(x)
         y_list.append(sample["target"])
-    return np.stack(x_list), np.array(y_list, dtype=np.float32)
+    return torch.stack(x_list), torch.tensor(y_list, dtype=torch.float32)
 
 
 def get_dataloader(

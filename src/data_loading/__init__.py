@@ -20,6 +20,7 @@ from .datasets import (
 )
 from .features import (
     EmbeddingLookupError,
+    EmbeddingStore,
     MutationDeltaEmbeddingBuilder,
     PooledEmbeddingStore,
     ProteinResidueEmbeddingBuilder,
@@ -39,6 +40,7 @@ __all__ = [
     "BinaryLabelBuilder",
     "TaskCSVLoader",
     "EmbeddingLookupError",
+    "EmbeddingStore",
     "FlatECLabelBuilder",
     "HierarchicalECLabelBuilder",
     "MutationDeltaEmbeddingBuilder",
