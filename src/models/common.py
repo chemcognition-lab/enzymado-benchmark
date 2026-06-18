@@ -33,6 +33,35 @@ def make_optimizer(parameters, optimizer_name: str, lr: float, weight_decay: flo
     raise ValueError(f"Unsupported optimizer_name '{optimizer_name}'.")
 
 
+def fit_feature_scaler(X, mask=None) -> tuple[np.ndarray, np.ndarray]:
+    """Fit a simple per-feature standardizer for 2D or padded 3D inputs."""
+    X_np = np.asarray(X, dtype=np.float32)
+    if X_np.ndim == 2:
+        observed = X_np
+    elif X_np.ndim == 3:
+        if mask is None:
+            observed = X_np.reshape(-1, X_np.shape[-1])
+        else:
+            observed = X_np[np.asarray(mask, dtype=bool)]
+    else:
+        raise ValueError(f"X must be 2D or 3D, got shape {X_np.shape}")
+    mean = observed.mean(axis=0).astype(np.float32, copy=False)
+    scale = observed.std(axis=0).astype(np.float32, copy=False)
+    mean = np.nan_to_num(mean, nan=0.0, posinf=0.0, neginf=0.0)
+    scale = np.nan_to_num(scale, nan=1.0, posinf=1.0, neginf=1.0)
+    scale[scale == 0.0] = 1.0
+    return mean, scale
+
+
+def apply_feature_scaler(X, mean: np.ndarray, scale: np.ndarray) -> np.ndarray:
+    """Apply a fitted per-feature standardizer."""
+    return (np.asarray(X, dtype=np.float32) - mean) / scale
+
+
+def mean_losses(losses: list[float]) -> float:
+    return sum(losses) / max(len(losses), 1)
+
+
 def pad_1d_array_list(arrays: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
     """Pad variable-length 1D outputs into a rectangular NumPy array."""
     if not arrays:
@@ -52,8 +81,14 @@ def batch_to_input(batch, batch_kind: str, device: torch.device):
     elif batch_kind == "mutation_delta_global":
         X_t = torch.from_numpy(np.asarray(batch.protein_delta_emb, dtype=np.float32)).to(device)
         mask_t = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
+    elif batch_kind == "protein_ligand_global":
+        raise ValueError(
+            f"batch_kind='protein_ligand_global' is not supported by standard MLP/Linear wrappers "
+            f"because they cannot combine protein and ligand features. "
+            f"Use AttentionRegressorTorch or AttentionBinaryClassifierTorch instead."
+        )
     else:
-        raise ValueError(f"fit_loader does not support batch_kind='{batch_kind}'")
+        raise ValueError(f"Unrecognised batch_kind='{batch_kind}'.")
     y_np = np.asarray(batch.target, dtype=np.float32)
     return X_t, mask_t, y_np
 
@@ -212,10 +247,20 @@ def run_training_with_early_stopping(
     return best_epoch, best_val_loss
 
 
-# Backward-compatible aliases for modules that still import the underscored names.
-_masked_mean_pool = masked_mean_pool
-_make_optimizer = make_optimizer
-_pad_1d_array_list = pad_1d_array_list
-_batch_to_input = batch_to_input
-_prepare_inputs = prepare_inputs
-_run_training_with_early_stopping = run_training_with_early_stopping
+def compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
+    """Masked multi-head BCE loss for hierarchical EC targets."""
+    loss_terms = []
+    for level_name, logits in logits_by_level.items():
+        level_loss = criterion(logits.float(), y_t[level_name])
+        mask = target_mask_t[level_name].float()
+        if mask.ndim == 1:
+            mask = mask[:, None].expand_as(level_loss)
+        denom = mask.sum()
+        if denom.item() == 0:
+            continue
+        loss_terms.append((level_loss * mask).sum() / denom)
+    if not loss_terms:
+        return None
+    return torch.stack(loss_terms).mean()
+
+

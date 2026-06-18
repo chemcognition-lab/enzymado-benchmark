@@ -10,9 +10,13 @@ import torch.nn as nn
 
 from models.common import (
     DEVICE,
+    apply_feature_scaler,
+    compute_ec_batch_loss,
+    fit_feature_scaler,
     make_optimizer,
     make_torch_checkpoint_callback,
     maybe_resume_torch_wrapper,
+    mean_losses,
     pad_1d_array_list,
     run_training_with_early_stopping,
 )
@@ -51,6 +55,8 @@ class ECMultiHeadClassifierTorch:
         self.best_val_loss_ = None
         self.current_epoch_ = 0
         self.best_model_state_ = None
+        self.x_mean_ = None
+        self.x_scale_ = None
 
     @staticmethod
     def _targets_to_tensors(y, target_mask, device: torch.device):
@@ -64,22 +70,6 @@ class ECMultiHeadClassifierTorch:
         }
         return y_t, target_mask_t
 
-    @staticmethod
-    def _compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
-        loss_terms = []
-        for level_name, logits in logits_by_level.items():
-            level_loss = criterion(logits, y_t[level_name])
-            mask = target_mask_t[level_name].float()
-            if mask.ndim == 1:
-                mask = mask[:, None].expand_as(level_loss)
-            denom = mask.sum()
-            if denom.item() == 0:
-                continue
-            loss_terms.append((level_loss * mask).sum() / denom)
-        if not loss_terms:
-            return None
-        return torch.stack(loss_terms).mean()
-
     def _forward(self, X_t: torch.Tensor):
         if X_t.ndim != 2:
             raise ValueError(f"ECMultiHeadClassifierTorch expects pooled 2D inputs, got shape {tuple(X_t.shape)}")
@@ -92,6 +82,10 @@ class ECMultiHeadClassifierTorch:
         X_np = np.asarray(X, dtype=np.float32)
         if X_np.ndim != 2:
             raise ValueError(f"X must be pooled 2D, got shape {X_np.shape}")
+        self.x_mean_, self.x_scale_ = fit_feature_scaler(X_np)
+        X_np = apply_feature_scaler(X_np, self.x_mean_, self.x_scale_)
+        if X_val is not None:
+            X_val = apply_feature_scaler(np.asarray(X_val, dtype=np.float32), self.x_mean_, self.x_scale_)
         input_dim = X_np.shape[1]
 
         self.output_dims = {
@@ -126,7 +120,7 @@ class ECMultiHeadClassifierTorch:
             self.model.train()
             for X_t, y_t, target_mask_t in iter_minibatches(X_np, y, target_mask):
                 logits_by_level = self._forward(X_t)
-                loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
+                loss = compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
                 if loss is None:
                     continue
                 optimizer.zero_grad()
@@ -140,10 +134,10 @@ class ECMultiHeadClassifierTorch:
                 X_val_np, y_val_np, target_mask_val_np = val_payload
                 for X_t, y_t, target_mask_t in iter_minibatches(X_val_np, y_val_np, target_mask_val_np):
                     logits_by_level = self._forward(X_t)
-                    loss = self._compute_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
+                    loss = compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
                     if loss is not None:
                         losses.append(float(loss.item()))
-            return sum(losses) / max(len(losses), 1)
+            return mean_losses(losses)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
             self.model,
@@ -167,6 +161,8 @@ class ECMultiHeadClassifierTorch:
         X_np = np.asarray(X, dtype=np.float32)
         if X_np.ndim != 2:
             raise ValueError(f"X must be pooled 2D, got shape {X_np.shape}")
+        if self.x_mean_ is not None and self.x_scale_ is not None:
+            X_np = apply_feature_scaler(X_np, self.x_mean_, self.x_scale_)
         preds_by_level = {level_name: [] for level_name in self.output_dims}
 
         self.model.eval()
@@ -278,7 +274,7 @@ class ResidueBinaryClassifierTorch:
                     logits = forward_batch(X_t)
                     loss = compute_batch_loss(logits, y_t, target_mask_t)
                     losses.append(float(loss.item()))
-            return sum(losses) / max(len(losses), 1)
+            return mean_losses(losses)
 
         self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
             self.model,
