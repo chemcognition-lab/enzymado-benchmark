@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from data_loading.stores import (
+from data_loading import (
     collect_needed_lookup_keys,
     filter_rows_to_allowed_ids,
     get_task_rows,

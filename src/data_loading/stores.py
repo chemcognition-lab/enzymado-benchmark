@@ -77,17 +77,6 @@ def _as_project_path(path: str | Path) -> Path:
     return path_obj if path_obj.is_absolute() else PROJECT_ROOT / path_obj
 
 
-def _path_with_data_segment(path: Path, old: str, new: str) -> Path | None:
-    """Return a path with one directory component replaced, if present."""
-    parts = list(path.parts)
-    try:
-        index = parts.index(old)
-    except ValueError:
-        return None
-    parts[index] = new
-    return Path(*parts)
-
-
 def _project_data_equivalent(path: Path) -> Path | None:
     """Return the repo-local equivalent for an absolute path containing a data segment."""
     parts = list(path.parts)
@@ -101,9 +90,8 @@ def _project_data_equivalent(path: Path) -> Path | None:
 def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
     """Return plausible safetensors sources for a manifest path.
 
-    Manifests may reference a single mean-pooled file, a per-residue shard
-    directory named ``<model>_shards``, or a legacy ``.h5`` path whose
-    safetensors sibling should be used instead.
+    Manifests may reference a single mean-pooled file or a per-residue shard
+    directory named ``<model>_shards``.
     """
     full_path = _as_project_path(path)
     candidates: list[Path] = []
@@ -115,14 +103,6 @@ def _candidate_safetensor_sources(path: str | Path) -> list[Path]:
     for base_path in base_paths:
         if base_path.suffix == ".safetensors" or base_path.is_dir():
             candidates.append(base_path)
-        if base_path.suffix == ".h5":
-            candidates.append(base_path.with_suffix(".safetensors"))
-            candidates.append(base_path.with_name(f"{base_path.stem}_shards"))
-
-            swapped = _path_with_data_segment(base_path, "embeddings_mean_pooled", "embeddings")
-            if swapped is not None:
-                candidates.append(swapped.with_suffix(".safetensors"))
-                candidates.append(swapped.with_name(f"{swapped.stem}_shards"))
 
     seen: set[Path] = set()
     unique = []

@@ -12,12 +12,11 @@ from models.common import (
     batch_to_input,
     fit_feature_scaler,
     make_optimizer,
-    make_torch_checkpoint_callback,
     masked_mean_pool,
     maybe_resume_torch_wrapper,
     mean_losses,
     prepare_inputs,
-    run_training_with_early_stopping,
+    run_wrapper_training,
 )
 from models.nn_blocks import LinearModel, MLPModel
 
@@ -57,19 +56,7 @@ class _BaseStandardWrapper:
         return X
 
     def _run_training(self, train_epoch_fn, val_loss_fn, start_epoch, checkpoint_path):
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch_fn,
-            val_loss_fn=val_loss_fn,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
-        )
+        run_wrapper_training(self, train_epoch_fn, val_loss_fn, start_epoch, checkpoint_path)
 
 
 

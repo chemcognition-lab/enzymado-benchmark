@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from src.evaluation.discover import (
@@ -36,7 +36,7 @@ from src.evaluation.discover import (
     load_real_case_tasks,
 )
 from src.evaluation.loaders import read_metrics
-from src.evaluation.metrics import HIGHER_IS_BETTER, PRIMARY_METRIC
+from src.evaluation.metrics_registry import higher_is_better_for, primary_metric_for
 from src.evaluation.rating_lib import determine_outcome_raw, fit_batch_mle
 
 
@@ -179,8 +179,8 @@ def main() -> None:
             if task_type is None:
                 skipped_tasks.append({"task": task, "reason": "no_task_type"})
                 continue
-            primary_metric = PRIMARY_METRIC[task_type]
-            sign = HIGHER_IS_BETTER[primary_metric]
+            primary_metric = primary_metric_for(task_type)
+            sign = higher_is_better_for(task_type)[primary_metric]
 
             arrays: dict[str, np.ndarray] = {}
             for e in task_exps:

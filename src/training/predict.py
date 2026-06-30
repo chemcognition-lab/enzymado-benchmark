@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from data_loading.stores import get_dataloader, get_target_payload
+from data_loading import get_dataloader, get_target_payload
 from evaluation.artifacts import save_prediction_artifacts
 
 
@@ -156,7 +156,7 @@ def save_residue_predictions(
     task_type: str,
 ) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
     """Generate and save residue predictions split-by-split to manage memory."""
-    from data_loading.stores import log
+    from data_loading import log
 
     split_jobs = [
         ("train", prepared.train_bundle, trained_payload.loaders.train_loader),

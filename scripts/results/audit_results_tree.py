@@ -21,7 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from data_loading import TASK_REGISTRY  # noqa: E402
-from training.results_card import (  # noqa: E402
+from evaluation.results_layout import (  # noqa: E402
     INVALIDATION_MARKER,
     canonical_model_family,
     canonical_split_family,

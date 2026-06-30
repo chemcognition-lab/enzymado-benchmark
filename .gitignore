@@ -28,6 +28,8 @@ results/bootstrap/
 results/*_audit_report.json
 pytest-of-chemist/
 .claude
+Notebook_coding_style.md
+Project_coding_style.md
 
 data/embeddings_mean_pooled/
 *.h5

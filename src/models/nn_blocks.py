@@ -74,7 +74,3 @@ class MultiHeadMLPModel(nn.Module):
     def forward(self, X):
         features = self.backbone(X)
         return {head_name: head(features) for head_name, head in self.heads.items()}
-
-
-# Backward-compatible alias.
-SGDModel = LinearModel

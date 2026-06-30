@@ -14,11 +14,10 @@ from models.common import (
     compute_ec_batch_loss,
     fit_feature_scaler,
     make_optimizer,
-    make_torch_checkpoint_callback,
     maybe_resume_torch_wrapper,
     mean_losses,
     pad_1d_array_list,
-    run_training_with_early_stopping,
+    run_wrapper_training,
 )
 from models.nn_blocks import MLPModel, MultiHeadMLPModel
 
@@ -139,18 +138,8 @@ class ECMultiHeadClassifierTorch:
                         losses.append(float(loss.item()))
             return mean_losses(losses)
 
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_payload is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
+        run_wrapper_training(
+            self, train_epoch, val_loss if val_payload is not None else None, start_epoch, checkpoint_path
         )
         return self
 
@@ -276,18 +265,8 @@ class ResidueBinaryClassifierTorch:
                     losses.append(float(loss.item()))
             return mean_losses(losses)
 
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
+        run_wrapper_training(
+            self, train_epoch, val_loss if val_dataloader is not None else None, start_epoch, checkpoint_path
         )
         return self
 

@@ -247,6 +247,25 @@ def run_training_with_early_stopping(
     return best_epoch, best_val_loss
 
 
+def run_wrapper_training(wrapper, train_epoch_fn, val_loss_fn, start_epoch, checkpoint_path):
+    """Run the standard early-stopping training loop against any wrapper exposing
+    .model/.epochs/.early_stopping_patience/.early_stopping_min_delta/.best_model_state_/
+    .best_epoch_/.best_val_loss_, mutating .best_epoch_/.best_val_loss_ in place."""
+    wrapper.best_epoch_, wrapper.best_val_loss_ = run_training_with_early_stopping(
+        wrapper.model,
+        wrapper.epochs,
+        train_epoch_fn,
+        val_loss_fn=val_loss_fn,
+        patience=wrapper.early_stopping_patience,
+        min_delta=wrapper.early_stopping_min_delta,
+        start_epoch=start_epoch,
+        initial_best_state=wrapper.best_model_state_,
+        initial_best_epoch=wrapper.best_epoch_,
+        initial_best_val_loss=wrapper.best_val_loss_,
+        epoch_callback=make_torch_checkpoint_callback(wrapper, checkpoint_path),
+    )
+
+
 def compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
     """Masked multi-head BCE loss for hierarchical EC targets."""
     loss_terms = []

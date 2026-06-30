@@ -35,6 +35,25 @@ from .labels import (
     RegressionLabelBuilder,
 )
 from .data_registry import TASK_REGISTRY, TaskConfig, LabelType, TaskType, SplitType, get_task_config
+from .stores import (
+    build_ec_arrays,
+    build_flat_ec_arrays,
+    build_pooled_embedding_store,
+    build_xy_pooled,
+    collect_needed_lookup_keys,
+    filter_rows_to_allowed_ids,
+    get_dataloader,
+    get_target_payload,
+    get_task_rows,
+    load_allowed_ids,
+    load_embeddings,
+    load_lazy_safetensors_embedding_store,
+    load_pooled_embedding_subset,
+    load_safetensors_embedding_store_subset,
+    load_sequence_to_id_index,
+    log,
+    resolve_sequence_index_path,
+)
 
 __all__ = [
     "BinaryLabelBuilder",
@@ -69,4 +88,21 @@ __all__ = [
     "build_dataset_from_config",
     "build_task_dataset",
     "get_task_config",
+    "build_ec_arrays",
+    "build_flat_ec_arrays",
+    "build_pooled_embedding_store",
+    "build_xy_pooled",
+    "collect_needed_lookup_keys",
+    "filter_rows_to_allowed_ids",
+    "get_dataloader",
+    "get_target_payload",
+    "get_task_rows",
+    "load_allowed_ids",
+    "load_embeddings",
+    "load_lazy_safetensors_embedding_store",
+    "load_pooled_embedding_subset",
+    "load_safetensors_embedding_store_subset",
+    "load_sequence_to_id_index",
+    "log",
+    "resolve_sequence_index_path",
 ]

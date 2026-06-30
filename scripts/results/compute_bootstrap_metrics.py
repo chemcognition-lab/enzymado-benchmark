@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from src.evaluation.bootstrap import (
@@ -35,18 +35,13 @@ from src.evaluation.bootstrap import (
     n_resample_units,
     summarise_replicates,
 )
-from src.evaluation.bootstrap_fast import (
-    bootstrap_classification_fast,
-    is_fast_classification_eligible,
-    precompute_binary_micro_indicators,
-)
 from src.evaluation.discover import discover_experiments, task_signature
 from src.evaluation.loaders import (
     load_test_predictions,
     read_metrics,
     write_metrics,
 )
-from src.evaluation.metrics import PRIMARY_METRIC, metric_set_for
+from src.evaluation.metrics_registry import metric_set_for, primary_metric_for
 
 
 def _resolve_task_type(run_dir: Path) -> str | None:
@@ -157,17 +152,11 @@ def main() -> None:
                 continue
 
             metric_set = metric_set_for(task_type)
+            primary_metric = primary_metric_for(task_type)
             t0 = time.perf_counter()
-            if task_type == "classification" and is_fast_classification_eligible(payload):
-                # Pre-aggregate per-row TP/FP/FN/TN once, then each replicate is
-                # a single sum + four arithmetic ops. Bit-exact with the generic
-                # path for binary classification (incl. multilabel/per-residue).
-                precomputed = precompute_binary_micro_indicators(payload)
-                replicates = bootstrap_classification_fast(precomputed, indices)
-                fast_path = True
-            else:
-                replicates = bootstrap_replicates(payload, indices, metric_set)
-                fast_path = False
+            # bootstrap_replicates auto-selects the fast TP/FP/FN/TN path for
+            # binary classification internally; no separate call needed here.
+            replicates = bootstrap_replicates(payload, indices, metric_set)
             elapsed = time.perf_counter() - t0
             summary = summarise_replicates(replicates, confidence_level=args.confidence_level)
 
@@ -178,20 +167,19 @@ def main() -> None:
             md["test_bootstrap"] = {
                 "n_replicates": args.n_replicates,
                 "confidence_level": args.confidence_level,
-                "primary_metric": PRIMARY_METRIC[task_type],
+                "primary_metric": primary_metric,
                 "task_type": task_type,
                 "seed": seed,
                 "metrics": summary,
             }
             write_metrics(e.run_dir, md)
 
-            path_tag = "fast" if fast_path else "generic"
             print(
                 f"    {e.embedding_model}: {task_type} "
-                f"primary={PRIMARY_METRIC[task_type]}={summary[PRIMARY_METRIC[task_type]]['mean']:.4f} "
-                f"({summary[PRIMARY_METRIC[task_type]]['ci_lo']:.4f}, "
-                f"{summary[PRIMARY_METRIC[task_type]]['ci_hi']:.4f}) "
-                f"in {elapsed:.1f}s [{path_tag}]"
+                f"primary={primary_metric}={summary[primary_metric]['mean']:.4f} "
+                f"({summary[primary_metric]['ci_lo']:.4f}, "
+                f"{summary[primary_metric]['ci_hi']:.4f}) "
+                f"in {elapsed:.1f}s"
             )
 
     print("\nBootstrap complete.")

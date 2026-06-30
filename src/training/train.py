@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,23 +12,21 @@ import psutil
 from data_loading import (
     FlatECLabelBuilder,
     HierarchicalECLabelBuilder,
-    build_task_dataset,
-    get_task_config,
-)
-from data_loading.stores import (
     build_ec_arrays,
     build_flat_ec_arrays,
     build_pooled_embedding_store,
+    build_task_dataset,
     build_xy_pooled,
     get_dataloader,
+    get_task_config,
     load_lazy_safetensors_embedding_store,
     load_pooled_embedding_subset,
     load_safetensors_embedding_store_subset,
     log,
 )
 from evaluation.artifacts import save_model, save_model_safetensors
-from models.registry import get_model_map, train_model, train_model_loader
 from training.attention_wrappers import save_attention_checkpoint
+from training.model_registry import get_model_map, train_model, train_model_loader
 from training.predict import ResidueTrainingPayload
 from training.residue import build_residue_aware_loaders, train_residue_aware_model
 from training.task_rows import LoadedTaskRows
@@ -117,329 +116,325 @@ def _select_global_arrays(model_info: dict, prepared: PreparedTaskData) -> tuple
     )
 
 
-class TrainingRoute:
-    """Base interface for a task route inside the training pipeline."""
-
-    name = "base"
-
-    def prepare(self, config, registry_name: str, emb_path, split_variant: str, task_rows: LoadedTaskRows, **kwargs) -> PreparedTaskData:
-        raise NotImplementedError
-
-    def train(self, *, model_name: str, emb_name: str, model_info: dict, prepared: PreparedTaskData, config, use_validation: bool, run_dir: Path) -> Any:
-        raise NotImplementedError
-
-    def save_trained_model(self, trained, run_dir: Path, *, model_path: Path | None = None) -> Path:
-        return save_model(trained, run_dir)
-
-
-class GlobalRoute(TrainingRoute):
+def prepare_global(
+    config,
+    registry_name: str,
+    emb_path,
+    split_variant: str,
+    task_rows: LoadedTaskRows,
+    *,
+    residue_store_mode: str = "auto",
+    embedding_dim: int | None = None,
+    needs_hierarchical_ec: bool = True,
+    needs_flat_ec: bool = False,
+) -> PreparedTaskData:
     """Route for all non-residue tasks: loads pooled embeddings and builds x/y arrays."""
+    del residue_store_mode, embedding_dim
+    prepared = PreparedTaskData(route=_resolve_task_route(config))
 
-    name = "global"
+    log("    Loading pooled embeddings from safetensors...")
+    t0 = time.time()
+    by_id, by_seq = load_pooled_embedding_subset(
+        emb_path, task_rows.needed_ids, task_rows.needed_sequences,
+    )
+    log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
 
-    def prepare(
-        self,
-        config,
-        registry_name: str,
-        emb_path,
-        split_variant: str,
-        task_rows: LoadedTaskRows,
-        *,
-        residue_store_mode: str = "auto",
-        embedding_dim: int | None = None,
-        needs_hierarchical_ec: bool = True,
-        needs_flat_ec: bool = False,
-    ) -> PreparedTaskData:
-        del residue_store_mode, embedding_dim
-        prepared = PreparedTaskData(route=_resolve_task_route(config))
-
-        log("    Loading pooled embeddings from safetensors...")
-        t0 = time.time()
-        by_id, by_seq = load_pooled_embedding_subset(
-            emb_path, task_rows.needed_ids, task_rows.needed_sequences,
+    if config.label_kind == "multilabel_ec":
+        log("    Fitting EC vocabulary on train rows...")
+        ec_label_builder = HierarchicalECLabelBuilder(
+            target_column=str(config.target_column),
+            separator=config.ec_separator,
+        ).fit(task_rows.train_rows)
+        flat_ec_label_builder = FlatECLabelBuilder(
+            target_column=str(config.target_column),
+            separator=config.ec_separator,
+            vocabulary_by_level=ec_label_builder.vocabulary_by_level,
         )
-        log(f"    Loaded {len(by_id)} id + {len(by_seq)} seq pooled embeddings ({time.time()-t0:.1f}s)")
-
-        if config.label_kind == "multilabel_ec":
-            log("    Fitting EC vocabulary on train rows...")
-            ec_label_builder = HierarchicalECLabelBuilder(
-                target_column=str(config.target_column),
-                separator=config.ec_separator,
-            ).fit(task_rows.train_rows)
-            flat_ec_label_builder = FlatECLabelBuilder(
-                target_column=str(config.target_column),
-                separator=config.ec_separator,
-                vocabulary_by_level=ec_label_builder.vocabulary_by_level,
+        if needs_hierarchical_ec:
+            log("    Building pooled EC arrays...")
+            (prepared.x_train, prepared.y_train, prepared.target_mask_train) = build_ec_arrays(
+                task_rows.train_rows, by_id, by_seq, config, ec_label_builder
             )
-            if needs_hierarchical_ec:
-                log("    Building pooled EC arrays...")
-                (prepared.x_train, prepared.y_train, prepared.target_mask_train) = build_ec_arrays(
-                    task_rows.train_rows, by_id, by_seq, config, ec_label_builder
-                )
-                (prepared.x_val, prepared.y_val, prepared.target_mask_val) = build_ec_arrays(
-                    task_rows.val_rows, by_id, by_seq, config, ec_label_builder
-                )
-                (prepared.x_test, prepared.y_test, prepared.target_mask_test) = build_ec_arrays(
-                    task_rows.test_rows, by_id, by_seq, config, ec_label_builder
-                )
-            if needs_flat_ec:
-                log("    Building pooled flat EC arrays for XGBoost...")
-                (prepared.x_train_flat_ec, prepared.y_train_flat_ec, prepared.target_mask_train_flat_ec) = build_flat_ec_arrays(
-                    task_rows.train_rows, by_id, by_seq, config, flat_ec_label_builder
-                )
-                (prepared.x_val_flat_ec, prepared.y_val_flat_ec, prepared.target_mask_val_flat_ec) = build_flat_ec_arrays(
-                    task_rows.val_rows, by_id, by_seq, config, flat_ec_label_builder
-                )
-                (prepared.x_test_flat_ec, prepared.y_test_flat_ec, prepared.target_mask_test_flat_ec) = build_flat_ec_arrays(
-                    task_rows.test_rows, by_id, by_seq, config, flat_ec_label_builder
-                )
-        else:
-            log("    Validating rows against embedding store...")
-            store = build_pooled_embedding_store(by_id, by_seq)
-            prepared.train_bundle = build_task_dataset(
-                registry_name, store, split_name="train", split_variant=split_variant, missing_policy="skip",
+            (prepared.x_val, prepared.y_val, prepared.target_mask_val) = build_ec_arrays(
+                task_rows.val_rows, by_id, by_seq, config, ec_label_builder
             )
-            prepared.val_bundle = build_task_dataset(
-                registry_name, store, split_name="val", split_variant=split_variant, missing_policy="skip",
+            (prepared.x_test, prepared.y_test, prepared.target_mask_test) = build_ec_arrays(
+                task_rows.test_rows, by_id, by_seq, config, ec_label_builder
             )
-            prepared.test_bundle = build_task_dataset(
-                registry_name, store, split_name="test", split_variant=split_variant, missing_policy="skip",
+        if needs_flat_ec:
+            log("    Building pooled flat EC arrays for XGBoost...")
+            (prepared.x_train_flat_ec, prepared.y_train_flat_ec, prepared.target_mask_train_flat_ec) = build_flat_ec_arrays(
+                task_rows.train_rows, by_id, by_seq, config, flat_ec_label_builder
             )
-            log(f"    Pooling embeddings ({config.batch_kind})...")
-            prepared.x_train, prepared.y_train = build_xy_pooled(prepared.train_bundle, config.batch_kind)
-            if len(prepared.val_bundle.dataset) > 0:
-                prepared.x_val, prepared.y_val = build_xy_pooled(prepared.val_bundle, config.batch_kind)
-            prepared.x_test, prepared.y_test = build_xy_pooled(prepared.test_bundle, config.batch_kind)
-        return prepared
-
-    def train(
-        self,
-        *,
-        model_name: str,
-        emb_name: str,
-        model_info: dict,
-        prepared: PreparedTaskData,
-        config,
-        use_validation: bool,
-        run_dir: Path,
-    ) -> Any:
-        progress_label = f"{emb_name}/{config.name}/{model_name}"
-        checkpoint_path = run_dir / "training_checkpoint.bin"
-        t0 = time.time()
-
-        x_tr, y_tr, x_va, y_va, _, _, m_tr, m_va, _ = _select_global_arrays(model_info, prepared)
-
-        if model_info.get("flat_ec_labels"):
-            log("      Training on pooled flat EC embeddings for XGBoost...")
-            log(
-                f"      Flat EC tensors: x_train={x_tr.shape}, y_train={y_tr.shape}, "
-                f"known_train={int(m_tr.sum()):,}"
+            (prepared.x_val_flat_ec, prepared.y_val_flat_ec, prepared.target_mask_val_flat_ec) = build_flat_ec_arrays(
+                task_rows.val_rows, by_id, by_seq, config, flat_ec_label_builder
             )
-        elif config.label_kind == "multilabel_ec":
-            log("      Training on pooled EC embeddings...")
-        else:
-            log(f"      Training on pooled embeddings (train={x_tr.shape})...")
-
-        trained = _fit_arrays(
-            model_info=model_info,
-            x_train=x_tr,
-            y_train=y_tr,
-            x_val=x_va,
-            y_val=y_va,
-            use_validation=use_validation,
-            progress_label=progress_label,
-            checkpoint_path=checkpoint_path,
-            target_mask_train=m_tr,
-            target_mask_val=m_va,
-        )
-        log(f"      Training done ({time.time()-t0:.1f}s).")
-        return trained
-
-
-class ResidueTasksRoute(TrainingRoute):
-    """Route for protein_residue tasks: lazy or materialized residue store + DataLoaders."""
-
-    name = "residue"
-
-    def prepare(
-        self,
-        config,
-        registry_name: str,
-        emb_path,
-        split_variant: str,
-        task_rows: LoadedTaskRows,
-        *,
-        residue_store_mode: str = "auto",
-        embedding_dim: int | None = None,
-        needs_hierarchical_ec: bool = True,
-        needs_flat_ec: bool = False,
-    ) -> PreparedTaskData:
-        del needs_hierarchical_ec, needs_flat_ec
-        prepared = PreparedTaskData(route=_resolve_task_route(config))
-
-        if config.batch_kind == "protein_residue":
-            if residue_store_mode == "materialized":
-                log("    Materializing residue embedding subset into RAM...")
-            elif residue_store_mode == "lazy":
-                log("    Building lazy residue embedding store...")
-            else:
-                log("    Choosing residue embedding store strategy...")
-        else:
-            log("    Scanning safetensors keys for lazy store...")
-
-        t0 = time.time()
-        prepared.store, store_mode = load_task_embedding_store(
-            config,
-            emb_path,
-            task_rows.needed_ids,
-            task_rows.needed_sequences,
-            residue_store_mode=residue_store_mode,
-            embedding_dim=embedding_dim,
-        )
-        if store_mode == "materialized":
-            log(
-                f"    Materialized store ready ({time.time()-t0:.1f}s) — "
-                f"{len(prepared.store.by_id)} ids, {len(prepared.store.by_sequence)} seqs cached"
+            (prepared.x_test_flat_ec, prepared.y_test_flat_ec, prepared.target_mask_test_flat_ec) = build_flat_ec_arrays(
+                task_rows.test_rows, by_id, by_seq, config, flat_ec_label_builder
             )
-        else:
-            log(
-                f"    Lazy store ready ({time.time()-t0:.1f}s) — "
-                f"{len(prepared.store._available_ids)} ids, {len(prepared.store._seq_to_key)} seqs indexed"
-            )
-
+    else:
         log("    Validating rows against embedding store...")
-        t0 = time.time()
+        store = build_pooled_embedding_store(by_id, by_seq)
         prepared.train_bundle = build_task_dataset(
-            registry_name, prepared.store, split_name="train", split_variant=split_variant, missing_policy="skip",
-        )
-        ec_vocabulary = None
-        if config.label_kind == "multilabel_ec":
-            ec_vocabulary = prepared.train_bundle.label_builder.vocabulary_by_level
-        prepared.val_bundle = build_task_dataset(
-            registry_name, prepared.store, split_name="val", split_variant=split_variant,
-            missing_policy="skip", ec_vocabulary=ec_vocabulary,
-        )
-        prepared.test_bundle = build_task_dataset(
-            registry_name, prepared.store, split_name="test", split_variant=split_variant,
-            missing_policy="skip", ec_vocabulary=ec_vocabulary,
-        )
-        n_train = len(prepared.train_bundle.dataset)
-        n_val = len(prepared.val_bundle.dataset)
-        n_test = len(prepared.test_bundle.dataset)
-        log(f"    Row validation done ({time.time()-t0:.1f}s) — train={n_train:,} val={n_val:,} test={n_test:,}")
-        return prepared
-
-    def train(
-        self,
-        *,
-        model_name: str,
-        emb_name: str,
-        model_info: dict,
-        prepared: PreparedTaskData,
-        config,
-        use_validation: bool,
-        run_dir: Path,
-    ) -> ResidueTrainingPayload:
-        progress_label = f"{emb_name}/{config.name}/{model_name}"
-        checkpoint_path = run_dir / "training_checkpoint.bin"
-        t0 = time.time()
-
-        loaders = build_residue_aware_loaders(
-            model_info,
-            train_bundle=prepared.train_bundle,
-            val_bundle=prepared.val_bundle,
-            test_bundle=prepared.test_bundle,
-            use_validation=use_validation,
-        )
-        log("      Training (residue-aware)...")
-        trained = train_residue_aware_model(
-            model_info,
-            loaders,
-            batch_kind=config.batch_kind,
-            progress_label=progress_label,
-            checkpoint_path=checkpoint_path,
-        )
-        log(f"      Training done ({time.time()-t0:.1f}s).")
-        return ResidueTrainingPayload(trained=trained, loaders=loaders)
-
-
-class AttentionRoute(TrainingRoute):
-    """Route for attention-pooled models: lazy residue store + DataLoader-based training."""
-
-    name = "attention"
-
-    def prepare(
-        self,
-        config,
-        registry_name: str,
-        emb_path,
-        split_variant: str,
-        task_rows: LoadedTaskRows,
-        **kwargs,
-    ) -> PreparedTaskData:
-        del kwargs
-        t0 = time.time()
-        store = load_lazy_safetensors_embedding_store(
-            emb_path, task_rows.needed_ids, task_rows.needed_sequences
-        )
-        log(
-            f"    Lazy safetensors store ready ({time.time()-t0:.1f}s) — "
-            f"{len(store._available_ids)} ids, {len(store._seq_to_key)} seqs indexed"
-        )
-        t0 = time.time()
-        train_bundle = build_task_dataset(
             registry_name, store, split_name="train", split_variant=split_variant, missing_policy="skip",
         )
-        ec_vocabulary = (
-            train_bundle.label_builder.vocabulary_by_level
-            if config.label_kind == "multilabel_ec" else None
+        prepared.val_bundle = build_task_dataset(
+            registry_name, store, split_name="val", split_variant=split_variant, missing_policy="skip",
         )
-        val_bundle = build_task_dataset(
-            registry_name, store, split_name="val", split_variant=split_variant,
-            missing_policy="skip", ec_vocabulary=ec_vocabulary,
+        prepared.test_bundle = build_task_dataset(
+            registry_name, store, split_name="test", split_variant=split_variant, missing_policy="skip",
         )
-        test_bundle = build_task_dataset(
-            registry_name, store, split_name="test", split_variant=split_variant,
-            missing_policy="skip", ec_vocabulary=ec_vocabulary,
-        )
-        n_train, n_val, n_test = len(train_bundle.dataset), len(val_bundle.dataset), len(test_bundle.dataset)
-        log(f"    Row validation done ({time.time()-t0:.1f}s) — train={n_train:,} val={n_val:,} test={n_test:,}")
-        return PreparedTaskData(
-            route=TaskRoute(is_pooled_task=False),
-            store=store,
-            train_bundle=train_bundle,
-            val_bundle=val_bundle,
-            test_bundle=test_bundle,
-        )
+        log(f"    Pooling embeddings ({config.batch_kind})...")
+        prepared.x_train, prepared.y_train = build_xy_pooled(prepared.train_bundle, config.batch_kind)
+        if len(prepared.val_bundle.dataset) > 0:
+            prepared.x_val, prepared.y_val = build_xy_pooled(prepared.val_bundle, config.batch_kind)
+        prepared.x_test, prepared.y_test = build_xy_pooled(prepared.test_bundle, config.batch_kind)
+    return prepared
 
-    def train(
-        self,
-        *,
-        model_name: str,
-        emb_name: str,
-        model_info: dict,
-        prepared: PreparedTaskData,
+
+def train_global(
+    *,
+    model_name: str,
+    emb_name: str,
+    model_info: dict,
+    prepared: PreparedTaskData,
+    config,
+    use_validation: bool,
+    run_dir: Path,
+) -> Any:
+    progress_label = f"{emb_name}/{config.name}/{model_name}"
+    checkpoint_path = run_dir / "training_checkpoint.bin"
+    t0 = time.time()
+
+    x_tr, y_tr, x_va, y_va, _, _, m_tr, m_va, _ = _select_global_arrays(model_info, prepared)
+
+    if model_info.get("flat_ec_labels"):
+        log("      Training on pooled flat EC embeddings for XGBoost...")
+        log(
+            f"      Flat EC tensors: x_train={x_tr.shape}, y_train={y_tr.shape}, "
+            f"known_train={int(m_tr.sum()):,}"
+        )
+    elif config.label_kind == "multilabel_ec":
+        log("      Training on pooled EC embeddings...")
+    else:
+        log(f"      Training on pooled embeddings (train={x_tr.shape})...")
+
+    trained = _fit_arrays(
+        model_info=model_info,
+        x_train=x_tr,
+        y_train=y_tr,
+        x_val=x_va,
+        y_val=y_va,
+        use_validation=use_validation,
+        progress_label=progress_label,
+        checkpoint_path=checkpoint_path,
+        target_mask_train=m_tr,
+        target_mask_val=m_va,
+    )
+    log(f"      Training done ({time.time()-t0:.1f}s).")
+    return trained
+
+
+def prepare_residue(
+    config,
+    registry_name: str,
+    emb_path,
+    split_variant: str,
+    task_rows: LoadedTaskRows,
+    *,
+    residue_store_mode: str = "auto",
+    embedding_dim: int | None = None,
+    needs_hierarchical_ec: bool = True,
+    needs_flat_ec: bool = False,
+) -> PreparedTaskData:
+    """Route for protein_residue tasks: lazy or materialized residue store + DataLoaders."""
+    del needs_hierarchical_ec, needs_flat_ec
+    prepared = PreparedTaskData(route=_resolve_task_route(config))
+
+    if config.batch_kind == "protein_residue":
+        if residue_store_mode == "materialized":
+            log("    Materializing residue embedding subset into RAM...")
+        elif residue_store_mode == "lazy":
+            log("    Building lazy residue embedding store...")
+        else:
+            log("    Choosing residue embedding store strategy...")
+    else:
+        log("    Scanning safetensors keys for lazy store...")
+
+    t0 = time.time()
+    prepared.store, store_mode = load_task_embedding_store(
         config,
-        use_validation: bool,
-        run_dir: Path,
-    ) -> Any:
-        batch_size = int(model_info.get("loader_batch_size", 16))
-        num_workers = int(model_info.get("loader_num_workers", 4))
-        train_loader = get_dataloader(
-            prepared.train_bundle, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+        emb_path,
+        task_rows.needed_ids,
+        task_rows.needed_sequences,
+        residue_store_mode=residue_store_mode,
+        embedding_dim=embedding_dim,
+    )
+    if store_mode == "materialized":
+        log(
+            f"    Materialized store ready ({time.time()-t0:.1f}s) — "
+            f"{len(prepared.store.by_id)} ids, {len(prepared.store.by_sequence)} seqs cached"
         )
-        val_loader = (
-            get_dataloader(prepared.val_bundle, batch_size=batch_size, num_workers=num_workers)
-            if use_validation else None
+    else:
+        log(
+            f"    Lazy store ready ({time.time()-t0:.1f}s) — "
+            f"{len(prepared.store._available_ids)} ids, {len(prepared.store._seq_to_key)} seqs indexed"
         )
-        log("      Training attention model...")
-        t0 = time.time()
-        trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
-        log(f"      Training done ({time.time()-t0:.1f}s).")
-        return trained
 
-    def save_trained_model(self, trained, run_dir: Path, *, model_path: Path | None = None) -> Path:
-        return save_attention_checkpoint(trained, run_dir, checkpoint_path=model_path)
+    log("    Validating rows against embedding store...")
+    t0 = time.time()
+    prepared.train_bundle = build_task_dataset(
+        registry_name, prepared.store, split_name="train", split_variant=split_variant, missing_policy="skip",
+    )
+    ec_vocabulary = None
+    if config.label_kind == "multilabel_ec":
+        ec_vocabulary = prepared.train_bundle.label_builder.vocabulary_by_level
+    prepared.val_bundle = build_task_dataset(
+        registry_name, prepared.store, split_name="val", split_variant=split_variant,
+        missing_policy="skip", ec_vocabulary=ec_vocabulary,
+    )
+    prepared.test_bundle = build_task_dataset(
+        registry_name, prepared.store, split_name="test", split_variant=split_variant,
+        missing_policy="skip", ec_vocabulary=ec_vocabulary,
+    )
+    n_train = len(prepared.train_bundle.dataset)
+    n_val = len(prepared.val_bundle.dataset)
+    n_test = len(prepared.test_bundle.dataset)
+    log(f"    Row validation done ({time.time()-t0:.1f}s) — train={n_train:,} val={n_val:,} test={n_test:,}")
+    return prepared
+
+
+def train_residue(
+    *,
+    model_name: str,
+    emb_name: str,
+    model_info: dict,
+    prepared: PreparedTaskData,
+    config,
+    use_validation: bool,
+    run_dir: Path,
+) -> ResidueTrainingPayload:
+    progress_label = f"{emb_name}/{config.name}/{model_name}"
+    checkpoint_path = run_dir / "training_checkpoint.bin"
+    t0 = time.time()
+
+    loaders = build_residue_aware_loaders(
+        model_info,
+        train_bundle=prepared.train_bundle,
+        val_bundle=prepared.val_bundle,
+        test_bundle=prepared.test_bundle,
+        use_validation=use_validation,
+    )
+    log("      Training (residue-aware)...")
+    trained = train_residue_aware_model(
+        model_info,
+        loaders,
+        batch_kind=config.batch_kind,
+        progress_label=progress_label,
+        checkpoint_path=checkpoint_path,
+    )
+    log(f"      Training done ({time.time()-t0:.1f}s).")
+    return ResidueTrainingPayload(trained=trained, loaders=loaders)
+
+
+def prepare_attention(
+    config,
+    registry_name: str,
+    emb_path,
+    split_variant: str,
+    task_rows: LoadedTaskRows,
+    **kwargs,
+) -> PreparedTaskData:
+    """Route for attention-pooled models: lazy residue store + DataLoader-based training."""
+    del kwargs
+    t0 = time.time()
+    store = load_lazy_safetensors_embedding_store(
+        emb_path, task_rows.needed_ids, task_rows.needed_sequences
+    )
+    log(
+        f"    Lazy safetensors store ready ({time.time()-t0:.1f}s) — "
+        f"{len(store._available_ids)} ids, {len(store._seq_to_key)} seqs indexed"
+    )
+    t0 = time.time()
+    train_bundle = build_task_dataset(
+        registry_name, store, split_name="train", split_variant=split_variant, missing_policy="skip",
+    )
+    ec_vocabulary = (
+        train_bundle.label_builder.vocabulary_by_level
+        if config.label_kind == "multilabel_ec" else None
+    )
+    val_bundle = build_task_dataset(
+        registry_name, store, split_name="val", split_variant=split_variant,
+        missing_policy="skip", ec_vocabulary=ec_vocabulary,
+    )
+    test_bundle = build_task_dataset(
+        registry_name, store, split_name="test", split_variant=split_variant,
+        missing_policy="skip", ec_vocabulary=ec_vocabulary,
+    )
+    n_train, n_val, n_test = len(train_bundle.dataset), len(val_bundle.dataset), len(test_bundle.dataset)
+    log(f"    Row validation done ({time.time()-t0:.1f}s) — train={n_train:,} val={n_val:,} test={n_test:,}")
+    return PreparedTaskData(
+        route=TaskRoute(is_pooled_task=False),
+        store=store,
+        train_bundle=train_bundle,
+        val_bundle=val_bundle,
+        test_bundle=test_bundle,
+    )
+
+
+def train_attention(
+    *,
+    model_name: str,
+    emb_name: str,
+    model_info: dict,
+    prepared: PreparedTaskData,
+    config,
+    use_validation: bool,
+    run_dir: Path,
+) -> Any:
+    batch_size = int(model_info.get("loader_batch_size", 16))
+    num_workers = int(model_info.get("loader_num_workers", 4))
+    train_loader = get_dataloader(
+        prepared.train_bundle, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+    )
+    val_loader = (
+        get_dataloader(prepared.val_bundle, batch_size=batch_size, num_workers=num_workers)
+        if use_validation else None
+    )
+    log("      Training attention model...")
+    t0 = time.time()
+    trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
+    log(f"      Training done ({time.time()-t0:.1f}s).")
+    return trained
+
+
+def save_trained_model_default(trained, run_dir: Path, *, model_path: Path | None = None) -> Path:
+    return save_model(trained, run_dir)
+
+
+def save_trained_model_attention(trained, run_dir: Path, *, model_path: Path | None = None) -> Path:
+    return save_attention_checkpoint(trained, run_dir, checkpoint_path=model_path)
+
+
+@dataclass(frozen=True)
+class TrainingRouteSpec:
+    """Describe one training route as a bundle of plain functions."""
+
+    name: str  # "global" | "residue" | "attention"
+    prepare: Callable
+    train: Callable
+    save_trained_model: Callable
+
+
+GLOBAL_ROUTE = TrainingRouteSpec(
+    name="global", prepare=prepare_global, train=train_global, save_trained_model=save_trained_model_default,
+)
+RESIDUE_ROUTE = TrainingRouteSpec(
+    name="residue", prepare=prepare_residue, train=train_residue, save_trained_model=save_trained_model_default,
+)
+ATTENTION_ROUTE = TrainingRouteSpec(
+    name="attention", prepare=prepare_attention, train=train_attention, save_trained_model=save_trained_model_attention,
+)
 
 
 def load_task_embedding_store(
@@ -483,11 +478,11 @@ def load_task_embedding_store(
     return store, "lazy"
 
 
-def _select_training_route(config) -> TrainingRoute:
-    """Resolve a config into the route object that owns prepare and train."""
+def _select_training_route(config) -> TrainingRouteSpec:
+    """Resolve a config into the route spec that owns prepare and train."""
     if config.batch_kind == "protein_residue":
-        return ResidueTasksRoute()
-    return GlobalRoute()
+        return RESIDUE_ROUTE
+    return GLOBAL_ROUTE
 
 
 def _resolve_task_route(config) -> TaskRoute:

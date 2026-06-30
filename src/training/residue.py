@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from data_loading import ProteinResidueConcatCollator
-
-from data_loading.stores import get_dataloader, get_target_payload, log
-from models.registry import train_model_loader
+from data_loading import (
+    ProteinResidueConcatCollator,
+    get_dataloader,
+    get_target_payload,
+    log,
+)
+from training.model_registry import train_model_loader
 
 
 @dataclass

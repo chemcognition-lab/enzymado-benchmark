@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from evaluation.metrics_registry import evaluate_predictions  # noqa: F401 — re-exported
-from training.results_card import (
+from evaluation.results_layout import (
     INVALIDATION_MARKER,
     build_prediction_artifact_path,
     canonical_embedding_mode,

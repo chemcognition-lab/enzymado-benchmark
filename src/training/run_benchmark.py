@@ -15,9 +15,10 @@ _DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "results" / "predict
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from data_loading import TASK_REGISTRY, get_task_config
-from data_loading.stores import (
+from data_loading import (
+    TASK_REGISTRY,
     get_dataloader,
+    get_task_config,
     load_allowed_ids,
     load_embeddings,
     load_sequence_to_id_index,
@@ -31,8 +32,14 @@ from evaluation.artifacts import (
     write_metrics_file,
     write_training_log_file,
 )
-from models.attention_registry import get_attention_model_map
-from models.registry import get_model_map
+from evaluation.results_layout import (
+    build_artifact_stem,
+    build_model_artifact_path,
+    build_results_run_dir,
+    canonical_embedding_mode,
+    is_run_complete,
+)
+from training.model_registry import get_attention_model_map, get_model_map
 from training.predict import (
     SavedModelRun,
     predict_from_arrays,
@@ -40,20 +47,11 @@ from training.predict import (
     save_residue_predictions,
     save_split_predictions,
 )
-from training.results_card import (
-    build_artifact_stem,
-    build_model_artifact_path,
-    build_results_run_dir,
-    canonical_embedding_mode,
-    is_run_complete,
-)
 from training.task_rows import LoadedTaskRows, load_task_rows_bundle, log_loaded_data_summary
 from training.train import (
-    AttentionRoute,
-    GlobalRoute,
+    ATTENTION_ROUTE,
     PreparedTaskData,
-    ResidueTasksRoute,
-    TrainingRoute,
+    TrainingRouteSpec,
     _cleanup_prepared_task_data,
     _dataset_sizes,
     _resolve_task_route,
@@ -63,7 +61,7 @@ from training.train import (
 
 
 def run_model(
-    route: TrainingRoute,
+    route: TrainingRouteSpec,
     *,
     model_name: str,
     emb_name: str,
@@ -97,7 +95,7 @@ def run_model(
         use_validation=use_validation,
     )
 
-    if isinstance(route, ResidueTasksRoute):
+    if route.name == "residue":
         log("      Predicting and saving residue outputs split-by-split...")
         prediction_paths, metrics_by_split = save_residue_predictions(
             trained_payload,
@@ -108,7 +106,7 @@ def run_model(
         )
         trained = trained_payload.trained
 
-    elif isinstance(route, AttentionRoute):
+    elif route.name == "attention":
         log("      Predicting with attention model...")
         batch_size = int(model_info.get("loader_batch_size", 16))
         num_workers = int(model_info.get("loader_num_workers", 4))
@@ -221,7 +219,7 @@ def _run_task(
     split_variant_filter: str | None,
     embedding_mode_filters: set[str],
     overwrite_results: bool,
-    training_route_override: TrainingRoute | None = None,
+    training_route_override: TrainingRouteSpec | None = None,
     model_map_fn=None,
 ) -> None:
     """Train all selected models for one task/embedding pair."""
@@ -339,7 +337,7 @@ def _run_task(
                 emb_name=emb_name,
                 model_name=model_name,
                 split_variant=split_variant,
-                extension=".safetensors" if isinstance(training_route, AttentionRoute) else ".pt",
+                extension=".safetensors" if training_route.name == "attention" else ".pt",
             )
             training_route.save_trained_model(trained, run_dir, model_path=canonical_model_path)
             save_model_safetensors(
@@ -466,7 +464,7 @@ def main(
                 f"Available: {', '.join(attention_embeddings)}"
             )
         log(f"[attention] {len(attention_embeddings)} attention embedding models found.")
-        attention_route = AttentionRoute()
+        attention_route = ATTENTION_ROUTE
         for emb_name, emb_info in attention_embeddings.items():
             if emb_name_filter is not None and emb_name != emb_name_filter:
                 continue

@@ -1,4 +1,10 @@
-"""Public model exports used by the benchmark training pipeline."""
+"""Public model exports used by the benchmark training pipeline.
+
+models/ is a dependency-free leaf package: it exposes only stateless building
+blocks (optimizer/training-loop helpers, nn building blocks). Trainable model
+wrapper classes live in training/*_wrappers.py and are imported from there
+directly, not re-exported here, so models/ never depends on training/.
+"""
 
 from models.common import (
     DEVICE,
@@ -13,27 +19,8 @@ from models.nn_blocks import (
     LinearModel,
     MLPModel,
     MultiHeadMLPModel,
-    SGDModel,
     SharedMLPBackbone,
 )
-from training.torch_standard_wrappers import (
-    LinearClassifierTorch,
-    LinearRegressorTorch,
-    MLPClassifierTorch,
-    MLPRegressorTorch,
-)
-from training.torch_structured_wrappers import (
-    ECMultiHeadClassifierTorch,
-    ResidueBinaryClassifierTorch,
-)
-from training.xgb_wrappers import (
-    XGBClassifier,
-    XGBFlatECBlockClassifier,
-    XGBFlatECClassifier,
-    XGBRegressor,
-    XGBResidueBinaryClassifier,
-)
-from models.registry import MODEL_MAP, STRUCTURED_MODEL_MAP, get_model_map, train_model, train_model_loader
 
 __all__ = [
     "DEVICE",
@@ -44,24 +31,7 @@ __all__ = [
     "prepare_inputs",
     "run_training_with_early_stopping",
     "LinearModel",
-    "SGDModel",
     "MLPModel",
     "SharedMLPBackbone",
     "MultiHeadMLPModel",
-    "LinearRegressorTorch",
-    "LinearClassifierTorch",
-    "MLPRegressorTorch",
-    "MLPClassifierTorch",
-    "ECMultiHeadClassifierTorch",
-    "ResidueBinaryClassifierTorch",
-    "XGBClassifier",
-    "XGBRegressor",
-    "XGBFlatECBlockClassifier",
-    "XGBFlatECClassifier",
-    "XGBResidueBinaryClassifier",
-    "MODEL_MAP",
-    "STRUCTURED_MODEL_MAP",
-    "get_model_map",
-    "train_model",
-    "train_model_loader",
 ]
