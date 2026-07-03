@@ -35,6 +35,7 @@ from .labels import (
     RegressionLabelBuilder,
 )
 from .data_registry import TASK_REGISTRY, TaskConfig, LabelType, TaskType, SplitType, get_task_config
+from .task_data import load_task_data, load_loader_task_data, PooledTaskData, LoaderTaskData
 from .stores import (
     build_ec_arrays,
     build_flat_ec_arrays,
@@ -81,6 +82,10 @@ __all__ = [
     "RegressionLabelBuilder",
     "LabelType",
     "SplitType",
+    "LoaderTaskData",
+    "PooledTaskData",
+    "load_task_data",
+    "load_loader_task_data",
     "TASK_REGISTRY",
     "TaskConfig",
     "TaskType",

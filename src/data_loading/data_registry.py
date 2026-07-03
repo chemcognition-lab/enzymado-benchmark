@@ -2,8 +2,15 @@ from __future__ import annotations
 """Central task registry describing dataset paths, labels, and split files."""
 
 import enum
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+# enum.StrEnum was added in Python 3.11; provide a shim for 3.10
+if sys.version_info < (3, 11) and not hasattr(enum, "StrEnum"):
+    class _StrEnum(str, enum.Enum):
+        pass
+    enum.StrEnum = _StrEnum  # type: ignore[attr-defined]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

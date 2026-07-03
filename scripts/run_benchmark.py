@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import os
 import shutil
 import sys
@@ -10,24 +11,29 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "results" / "predictions"
-sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "predictions"
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from data_loading import (
+    LoaderTaskData,
+    PooledTaskData,
     TASK_REGISTRY,
     get_dataloader,
+    get_target_payload,
     get_task_config,
     load_allowed_ids,
     load_embeddings,
     load_sequence_to_id_index,
+    load_task_data,
     log,
     resolve_sequence_index_path,
 )
 from evaluation.artifacts import (
     read_json,
+    save_model,
     save_model_safetensors,
+    save_prediction_artifacts,
     write_hparams_file,
     write_metrics_file,
     write_training_log_file,
@@ -41,23 +47,107 @@ from evaluation.results_layout import (
 )
 from training.model_registry import get_attention_model_map, get_model_map
 from training.predict import (
+    ModelRunOutputs,
+    ResidueTrainingPayload,
     SavedModelRun,
     predict_from_arrays,
     predict_from_loaders,
-    save_residue_predictions,
-    save_split_predictions,
 )
-from training.task_rows import LoadedTaskRows, load_task_rows_bundle, log_loaded_data_summary
 from training.train import (
     ATTENTION_ROUTE,
-    PreparedTaskData,
+    GLOBAL_ROUTE,
+    RESIDUE_ROUTE,
     TrainingRouteSpec,
-    _cleanup_prepared_task_data,
     _dataset_sizes,
-    _resolve_task_route,
     _select_global_arrays,
     _select_training_route,
+    train_attention,
+    train_global,
+    train_residue,
 )
+
+
+def save_split_predictions(
+    outputs: ModelRunOutputs,
+    *,
+    run_dir: Path,
+    task_name: str,
+    emb_name: str,
+    model_name: str,
+    split_variant: str,
+    task_type: str,
+    use_validation: bool,
+) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
+    """Save predictions and compute metrics for each split."""
+    split_payloads = [("train", outputs.y_train, outputs.pred_train, outputs.target_mask_train)]
+    if use_validation:
+        split_payloads.append(("val", outputs.y_val, outputs.pred_val, outputs.target_mask_val))
+    split_payloads.append(("test", outputs.y_test, outputs.pred_test, outputs.target_mask_test))
+
+    saved_paths: dict[str, Path] = {}
+    metrics_by_split: dict[str, dict[str, Any]] = {}
+    for split_name, y_true, pred, target_mask in split_payloads:
+        prediction_path, metrics = save_prediction_artifacts(
+            y_true,
+            pred,
+            target_mask,
+            run_dir=run_dir,
+            task_name=task_name,
+            emb_name=emb_name,
+            model_name=model_name,
+            split_variant=split_variant,
+            split_name=split_name,
+            task_type=task_type,
+        )
+        saved_paths[split_name] = prediction_path
+        metrics_by_split[split_name] = metrics
+    return saved_paths, metrics_by_split
+
+
+def save_residue_predictions(
+    trained_payload: ResidueTrainingPayload,
+    *,
+    prepared,
+    use_validation: bool,
+    config,
+    run_dir: Path,
+    task_name: str,
+    emb_name: str,
+    model_name: str,
+    split_variant: str,
+    task_type: str,
+) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
+    """Generate and save residue predictions split-by-split to manage memory."""
+    split_jobs = [
+        ("train", prepared.train_bundle, trained_payload.loaders.train_predict_loader),
+        ("test", prepared.test_bundle, trained_payload.loaders.test_loader),
+    ]
+    if use_validation:
+        split_jobs.insert(1, ("val", prepared.val_bundle, trained_payload.loaders.val_loader))
+
+    saved_paths: dict[str, Path] = {}
+    metrics_by_split: dict[str, dict[str, Any]] = {}
+    for split_name, bundle, loader in split_jobs:
+        log(f"      Predicting/saving split='{split_name}'...")
+        y_true, target_mask = get_target_payload(bundle)
+        pred = trained_payload.trained.predict_loader(loader, batch_kind=config.batch_kind)
+        prediction_path, metrics = save_prediction_artifacts(
+            y_true,
+            pred,
+            target_mask,
+            run_dir=run_dir,
+            task_name=task_name,
+            emb_name=emb_name,
+            model_name=model_name,
+            split_variant=split_variant,
+            split_name=split_name,
+            task_type=task_type,
+        )
+        saved_paths[split_name] = prediction_path
+        metrics_by_split[split_name] = metrics
+        del y_true, target_mask, pred
+        gc.collect()
+    return saved_paths, metrics_by_split
 
 
 def run_model(
@@ -66,7 +156,7 @@ def run_model(
     model_name: str,
     emb_name: str,
     model_info: dict,
-    prepared: PreparedTaskData,
+    prepared: PooledTaskData | LoaderTaskData,
     config,
     use_validation: bool,
     run_dir: Path,
@@ -79,7 +169,7 @@ def run_model(
         model_name=model_name,
         emb_name=emb_name,
         model_info=model_info,
-        prepared=prepared,
+        data=prepared,
         config=config,
         use_validation=use_validation,
         run_dir=run_dir,
@@ -115,7 +205,7 @@ def run_model(
         )
         val_loader = (
             get_dataloader(prepared.val_bundle, batch_size=batch_size, num_workers=num_workers)
-            if use_validation else None
+            if use_validation and prepared.val_bundle is not None else None
         )
         test_loader = get_dataloader(
             prepared.test_bundle, batch_size=batch_size, num_workers=num_workers,
@@ -134,7 +224,7 @@ def run_model(
 
     else:  # GlobalRoute
         log("      Predicting with pooled model...")
-        (x_tr, y_tr, x_va, y_va, x_te, y_te, m_tr, m_va, m_te) = _select_global_arrays(
+        x_tr, y_tr, x_va, y_va, x_te, y_te, m_tr, m_va, m_te = _select_global_arrays(
             model_info, prepared
         )
         outputs = predict_from_arrays(
@@ -234,13 +324,13 @@ def _run_task(
     if split_variant not in config.dataset_paths:
         available = ", ".join(sorted(config.dataset_paths)) or "<none>"
         log(
-            f"  Skipping '{task_name}' (requested split '{split_variant}' is not available; "
-            f"available: {available})"
+            f"  Skipping '{task_name}' (requested split '{split_variant}' is not available;"
+            f" available: {available})"
         )
         return
 
     log(f"\n  Task: {task_name} | type: {task_type} | split: {split_variant}")
-    prepared: PreparedTaskData | None = None
+    prepared: PooledTaskData | LoaderTaskData | None = None
     try:
         if model_map_fn is not None:
             model_map = model_map_fn(task_type, config.label_kind, model_prefix_filter)
@@ -261,27 +351,32 @@ def _run_task(
         else:
             log("    Overwrite enabled: existing artifacts for selected models will be replaced.")
 
-        task_rows = load_task_rows_bundle(config, split_variant, allowed_ids, sequence_to_id)
-        if not task_rows.train_rows and not task_rows.val_rows and not task_rows.test_rows:
-            log("    Skipping task: allowed-id filtering left no rows in train/val/test.")
-            return
+        embedding_dim = int(emb_info["dim"]) if emb_info.get("dim") is not None else None
 
-        training_route = training_route_override or _select_training_route(config)
-        needs_flat_ec = any(info.get("flat_ec_labels", False) for info in model_map.values())
-        needs_hierarchical_ec = any(not info.get("flat_ec_labels", False) for info in model_map.values())
-        prepared = training_route.prepare(
-            config,
-            task_name,
-            emb_info["path"],
-            split_variant,
-            task_rows,
-            residue_store_mode=residue_store_mode,
-            embedding_dim=int(emb_info["dim"]) if emb_info.get("dim") is not None else None,
-            needs_hierarchical_ec=needs_hierarchical_ec,
-            needs_flat_ec=needs_flat_ec,
-        )
+        if training_route_override is ATTENTION_ROUTE:
+            prepared = ATTENTION_ROUTE.prepare(
+                config,
+                task_name,
+                emb_info["path"],
+                split_variant,
+                allowed_ids=allowed_ids,
+                sequence_to_id=sequence_to_id,
+                embedding_dim=embedding_dim,
+            )
+            training_route: TrainingRouteSpec = ATTENTION_ROUTE
+        else:
+            prepared = load_task_data(
+                task_name,
+                emb_info["path"],
+                split_variant,
+                allowed_ids=allowed_ids,
+                sequence_to_id=sequence_to_id,
+                residue_store_mode=residue_store_mode,
+                embedding_dim=embedding_dim,
+            )
+            training_route = GLOBAL_ROUTE if isinstance(prepared, PooledTaskData) else RESIDUE_ROUTE
+
         n_train, n_val, n_test = _dataset_sizes(prepared)
-        log_loaded_data_summary(task_rows, n_train, n_val, n_test)
 
         if n_train == 0 or n_test == 0:
             log(f"    Skipping '{task_name}': empty dataset after filtering.")
@@ -339,24 +434,27 @@ def _run_task(
                 split_variant=split_variant,
                 extension=".safetensors" if training_route.name == "attention" else ".pt",
             )
-            training_route.save_trained_model(trained, run_dir, model_path=canonical_model_path)
-            save_model_safetensors(
-                trained,
-                run_dir,
-                model_path=build_model_artifact_path(
+            if training_route.name == "attention":
+                save_model_safetensors(trained, run_dir, model_path=canonical_model_path)
+            else:
+                save_model(trained, run_dir)
+                save_model_safetensors(
+                    trained,
                     run_dir,
-                    task_name=task_name,
-                    emb_name=emb_name,
-                    model_name=model_name,
-                    split_variant=split_variant,
-                    extension=".safetensors",
-                ),
-            )
+                    model_path=build_model_artifact_path(
+                        run_dir,
+                        task_name=task_name,
+                        emb_name=emb_name,
+                        model_name=model_name,
+                        split_variant=split_variant,
+                        extension=".safetensors",
+                    ),
+                )
 
             if getattr(trained, "best_epoch_", None) is not None:
                 log(
-                    f"      Early stopping: best_epoch={trained.best_epoch_}, "
-                    f"best_val_loss={trained.best_val_loss_:.6f}"
+                    f"      Early stopping: best_epoch={trained.best_epoch_},"
+                    f" best_val_loss={trained.best_val_loss_:.6f}"
                 )
             log(f"      Saved → {run_dir.relative_to(output_dir)} [{artifact_stem}]")
 
@@ -364,7 +462,8 @@ def _run_task(
         log(f"  [ERROR] Task '{task_name}' failed: {task_exc}")
         log(traceback.format_exc())
     finally:
-        _cleanup_prepared_task_data(prepared)
+        if prepared is not None:
+            prepared.cleanup()
 
 
 def main(
@@ -425,8 +524,8 @@ def main(
         if sequence_index_path is not None:
             sequence_to_id = load_sequence_to_id_index(sequence_index_path)
         log(
-            f"[startup] Restricting training rows to {len(allowed_ids):,} embedding IDs "
-            f"from {allowed_ids_path}"
+            f"[startup] Restricting training rows to {len(allowed_ids):,} embedding IDs"
+            f" from {allowed_ids_path}"
         )
 
     if emb_name_filter is not None and emb_name_filter not in embeddings:
@@ -460,11 +559,10 @@ def main(
         attention_embeddings = load_embeddings(attention_embeddings_json)
         if emb_name_filter is not None and emb_name_filter not in attention_embeddings:
             raise ValueError(
-                f"Unknown attention embedding '{emb_name_filter}'. "
-                f"Available: {', '.join(attention_embeddings)}"
+                f"Unknown attention embedding '{emb_name_filter}'."
+                f" Available: {', '.join(attention_embeddings)}"
             )
         log(f"[attention] {len(attention_embeddings)} attention embedding models found.")
-        attention_route = ATTENTION_ROUTE
         for emb_name, emb_info in attention_embeddings.items():
             if emb_name_filter is not None and emb_name != emb_name_filter:
                 continue
@@ -486,7 +584,7 @@ def main(
                     split_variant_filter=split_variant_filter,
                     embedding_mode_filters=embedding_mode_filters,
                     overwrite_results=overwrite_results,
-                    training_route_override=attention_route,
+                    training_route_override=ATTENTION_ROUTE,
                     model_map_fn=_select_attention_model_map,
                 )
 

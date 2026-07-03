@@ -9,12 +9,11 @@ Tracks aggregate experiments for a single global leaderboard:
 
   - track="mean":      pool_type ∈ {mean, per_residue}, task is a benchmark property
   - track="attention": pool_type == "attention",       task is a benchmark property
-  - track="real_case": pool_type == "mean",            task is in benchmark_card.real_case
+  - track="real_case": pool_type == "mean",            task has task_scope=="real_case" in TASK_REGISTRY
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -123,13 +122,6 @@ def task_signature(exp: Experiment) -> tuple[str, str, str, str]:
     return (exp.pool_type, exp.split, exp.model_family, exp.task)
 
 
-def load_real_case_tasks(benchmark_card_path: Path) -> set[str]:
-    if not benchmark_card_path.exists():
-        return set()
-    card = json.loads(benchmark_card_path.read_text())
-    real_case = card.get("real_case") or {}
-    if isinstance(real_case, dict):
-        return set(real_case.keys())
-    if isinstance(real_case, list):
-        return set(real_case)
-    return set()
+def load_real_case_tasks() -> set[str]:
+    from data_loading import TASK_REGISTRY
+    return {name for name, cfg in TASK_REGISTRY.items() if cfg.task_scope == "real_case"}

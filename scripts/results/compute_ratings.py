@@ -118,7 +118,6 @@ def main() -> None:
     parser.add_argument("--predictions-root", type=Path, default=REPO / "results" / "predictions")
     parser.add_argument("--bootstrap-root", type=Path, default=REPO / "results" / "bootstrap")
     parser.add_argument("--ratings-root", type=Path, default=REPO / "results" / "ratings")
-    parser.add_argument("--benchmark-card", type=Path, default=REPO / "benchmark_card.json")
     parser.add_argument("--alpha", type=float, default=0.05)
     parser.add_argument("--anchor-rating", type=float, default=1500.0)
     parser.add_argument(
@@ -132,7 +131,7 @@ def main() -> None:
     expected_models = set(args.foundation_models)
     n_expected = len(expected_models)
 
-    real_case_tasks = load_real_case_tasks(args.benchmark_card)
+    real_case_tasks = load_real_case_tasks()
     experiments = discover_experiments(args.predictions_root)
     tracks = group_into_tracks(experiments, real_case_tasks)
     args.ratings_root.mkdir(parents=True, exist_ok=True)

@@ -63,4 +63,4 @@ if [[ "${OVERWRITE_RESULTS:-0}" == "1" || "${OVERWRITE_RESULTS:-0}" == "true" ||
     TRAIN_ARGS+=(--overwrite_results)
 fi
 
-conda run --no-capture-output -n prot5_blackwell python -u src/training/train.py "${TRAIN_ARGS[@]}"
+conda run --no-capture-output -n prot5_blackwell python -u scripts/run_benchmark.py "${TRAIN_ARGS[@]}"

@@ -1,13 +1,11 @@
-"""Prediction logic: generating and persisting model outputs for benchmark tasks."""
+"""Prediction logic: generating model outputs for benchmark tasks."""
 from __future__ import annotations
 
-import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from data_loading import get_dataloader, get_target_payload
-from evaluation.artifacts import save_prediction_artifacts
+from data_loading import get_target_payload
 
 
 @dataclass
@@ -103,88 +101,3 @@ def predict_from_loaders(
         target_mask_val=target_mask_val if use_validation else None,
         target_mask_test=target_mask_test,
     )
-
-
-def save_split_predictions(
-    outputs: ModelRunOutputs,
-    *,
-    run_dir: Path,
-    task_name: str,
-    emb_name: str,
-    model_name: str,
-    split_variant: str,
-    task_type: str,
-    use_validation: bool,
-) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
-    """Save predictions and compute metrics for each split."""
-    split_payloads = [("train", outputs.y_train, outputs.pred_train, outputs.target_mask_train)]
-    if use_validation:
-        split_payloads.append(("val", outputs.y_val, outputs.pred_val, outputs.target_mask_val))
-    split_payloads.append(("test", outputs.y_test, outputs.pred_test, outputs.target_mask_test))
-
-    saved_paths: dict[str, Path] = {}
-    metrics_by_split: dict[str, dict[str, Any]] = {}
-    for split_name, y_true, pred, target_mask in split_payloads:
-        prediction_path, metrics = save_prediction_artifacts(
-            y_true,
-            pred,
-            target_mask,
-            run_dir=run_dir,
-            task_name=task_name,
-            emb_name=emb_name,
-            model_name=model_name,
-            split_variant=split_variant,
-            split_name=split_name,
-            task_type=task_type,
-        )
-        saved_paths[split_name] = prediction_path
-        metrics_by_split[split_name] = metrics
-    return saved_paths, metrics_by_split
-
-
-def save_residue_predictions(
-    trained_payload: ResidueTrainingPayload,
-    *,
-    prepared,
-    use_validation: bool,
-    config,
-    run_dir: Path,
-    task_name: str,
-    emb_name: str,
-    model_name: str,
-    split_variant: str,
-    task_type: str,
-) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
-    """Generate and save residue predictions split-by-split to manage memory."""
-    from data_loading import log
-
-    split_jobs = [
-        ("train", prepared.train_bundle, trained_payload.loaders.train_loader),
-        ("test", prepared.test_bundle, trained_payload.loaders.test_loader),
-    ]
-    if use_validation:
-        split_jobs.insert(1, ("val", prepared.val_bundle, trained_payload.loaders.val_loader))
-
-    saved_paths: dict[str, Path] = {}
-    metrics_by_split: dict[str, dict[str, Any]] = {}
-    for split_name, bundle, loader in split_jobs:
-        log(f"      Predicting/saving split='{split_name}'...")
-        y_true, target_mask = get_target_payload(bundle)
-        pred = trained_payload.trained.predict_loader(loader, batch_kind=config.batch_kind)
-        prediction_path, metrics = save_prediction_artifacts(
-            y_true,
-            pred,
-            target_mask,
-            run_dir=run_dir,
-            task_name=task_name,
-            emb_name=emb_name,
-            model_name=model_name,
-            split_variant=split_variant,
-            split_name=split_name,
-            task_type=task_type,
-        )
-        saved_paths[split_name] = prediction_path
-        metrics_by_split[split_name] = metrics
-        del y_true, target_mask, pred
-        gc.collect()
-    return saved_paths, metrics_by_split
