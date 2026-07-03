@@ -18,9 +18,9 @@ from data_loading import (
     load_loader_task_data,
     log,
 )
-from training.model_registry import get_model_map, train_model, train_model_loader
-from training.predict import ResidueTrainingPayload
-from training.residue import build_residue_aware_loaders, train_residue_aware_model
+from .model_registry import get_model_map, train_model, train_model_loader
+from .predict import ResidueTrainingPayload
+from .residue import build_residue_aware_loaders, train_residue_aware_model
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models.nn_blocks import MLPModel, SharedMLPBackbone
+from .nn_blocks import MLPModel, SharedMLPBackbone
 
 
 def _seq_emb_to_tensor(protein_emb, device: torch.device) -> torch.Tensor:

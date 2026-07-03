@@ -955,7 +955,7 @@ class XGBResidueBinaryClassifier:
         X = _as_xgb_residue_features(batch.protein_emb)
         y = np.asarray(batch.target_per_residue, dtype=np.int8)
 
-        if hasattr(batch, "lengths"):
+        if batch.lengths is not None:
             lengths = np.asarray(batch.lengths, dtype=np.int32)
             if X.ndim != 2:
                 raise ValueError(

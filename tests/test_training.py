@@ -38,8 +38,8 @@ class StructuredTrainingTests(unittest.TestCase):
 
     def test_ec_multihead_training_and_prediction_serialization(self) -> None:
         from training.torch_structured_wrappers import ECMultiHeadClassifierTorch
-        from training.train import get_target_payload
-        from training.train_output import make_safetensors_predictions_file
+        from data_loading.stores import get_target_payload
+        from evaluation.artifacts import make_safetensors_predictions_file
         from safetensors.torch import load as load_tensors
 
         dataset_path = self.root / "ec_random_standardized.csv"
@@ -146,79 +146,107 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIsNotNone(model.best_epoch_)
 
     def test_build_protein_global_Xy_direct(self) -> None:
-        from training.train import build_protein_global_Xy_direct
+        from data_loading.features import PooledEmbeddingStore
+        from data_loading.stores import build_xy_pooled
 
+        dataset_path = self.root / "solubility_random_standardized.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "solubility", "split"],
+            [
+                {"uniprot_id": "P1", "protein_sequence": "AAAA", "solubility": "1", "split": "train"},
+                {"uniprot_id": "P2", "protein_sequence": "BBBB", "solubility": "0", "split": "train"},
+            ],
+        )
         config = TaskConfig(
             name="solubility_test",
             batch_kind="protein_global",
             label_kind="binary",
-            dataset_paths={"random": self.root / "unused.csv"},
+            dataset_paths={"random": dataset_path},
             target_column="solubility",
             index_columns=("uniprot_id",),
         )
-        rows = [
-            {"uniprot_id": "P1", "protein_sequence": "AAAA", "solubility": "1"},
-            {"uniprot_id": "P2", "protein_sequence": "BBBB", "solubility": "0"},
-        ]
-        by_id = {
-            "P1": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
-            "P2": np.asarray([4.0, 5.0, 6.0], dtype=np.float32),
-        }
-        by_seq: dict[str, np.ndarray] = {}
+        store = PooledEmbeddingStore(
+            by_id={
+                "P1": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
+                "P2": np.asarray([4.0, 5.0, 6.0], dtype=np.float32),
+            }
+        )
+        bundle = build_dataset_from_config(config, store, split_name="train")
 
-        X, y = build_protein_global_Xy_direct(rows, by_id, by_seq, config)
+        X, y = build_xy_pooled(bundle, config.batch_kind)
 
         np.testing.assert_array_equal(
-            X,
+            X.numpy(),
             np.asarray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32),
         )
-        np.testing.assert_array_equal(y, np.asarray([1.0, 0.0], dtype=np.float32))
+        np.testing.assert_array_equal(y.numpy(), np.asarray([1.0, 0.0], dtype=np.float32))
 
     def test_build_mutation_delta_Xy_direct(self) -> None:
-        from training.train import build_mutation_delta_Xy_direct
+        from data_loading.features import PooledEmbeddingStore
+        from data_loading.stores import build_xy_pooled
 
+        dataset_path = self.root / "dtm_random_standardized.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "wildtype_sequence", "dtm", "split"],
+            [
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "wildtype_sequence": "BBBB",
+                    "dtm": "1.5",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "P2",
+                    "protein_sequence": "CCCC",
+                    "wildtype_sequence": "DDDD",
+                    "dtm": "-0.5",
+                    "split": "train",
+                },
+            ],
+        )
         config = TaskConfig(
             name="dtm_test",
             batch_kind="mutation_delta_global",
             label_kind="scalar_regression",
-            dataset_paths={"random": self.root / "unused.csv"},
+            dataset_paths={"random": dataset_path},
             target_column="dtm",
             wildtype_sequence_column="wildtype_sequence",
             index_columns=("uniprot_id",),
         )
-        rows = [
-            {
-                "uniprot_id": "P1",
-                "protein_sequence": "AAAA",
-                "wildtype_sequence": "BBBB",
-                "dtm": "1.5",
+        store = PooledEmbeddingStore(
+            by_id={
+                "P1": np.asarray([3.0, 5.0, 7.0], dtype=np.float32),
+                "P2": np.asarray([0.0, 1.0, 2.0], dtype=np.float32),
             },
-            {
-                "uniprot_id": "P2",
-                "protein_sequence": "CCCC",
-                "wildtype_sequence": "DDDD",
-                "dtm": "-0.5",
+            by_sequence={
+                "BBBB": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
+                "DDDD": np.asarray([0.5, 0.5, 0.5], dtype=np.float32),
             },
-        ]
-        by_id = {
-            "P1": np.asarray([3.0, 5.0, 7.0], dtype=np.float32),
-            "P2": np.asarray([0.0, 1.0, 2.0], dtype=np.float32),
-        }
-        by_seq = {
-            "BBBB": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
-            "DDDD": np.asarray([0.5, 0.5, 0.5], dtype=np.float32),
-        }
+        )
+        bundle = build_dataset_from_config(config, store, split_name="train")
 
-        X, y = build_mutation_delta_Xy_direct(rows, by_id, by_seq, config)
+        X, y = build_xy_pooled(bundle, config.batch_kind)
 
         np.testing.assert_array_equal(
-            X,
+            X.numpy(),
             np.asarray([[2.0, 3.0, 4.0], [-0.5, 0.5, 1.5]], dtype=np.float32),
         )
-        np.testing.assert_array_equal(y, np.asarray([1.5, -0.5], dtype=np.float32))
+        np.testing.assert_array_equal(y.numpy(), np.asarray([1.5, -0.5], dtype=np.float32))
+
+    @staticmethod
+    def _fake_task_rows(needed_ids: set[str], needed_sequences: set[str]):
+        from data_loading.task_data import _TaskRows
+
+        return _TaskRows(
+            train_rows=[], val_rows=[], test_rows=[],
+            needed_ids=needed_ids, needed_sequences=needed_sequences,
+        )
 
     def test_load_task_embedding_store_materializes_small_protein_residue_tasks_in_auto_mode(self) -> None:
-        from training.train import load_task_embedding_store
+        from data_loading.task_data import _build_loader_data
 
         config = TaskConfig(
             name="active_sites_test",
@@ -229,29 +257,28 @@ class StructuredTrainingTests(unittest.TestCase):
             residue_positions_column="active_site",
             index_columns=("uniprot_id",),
         )
-        materialized_store = object()
+        materialized_store = types.SimpleNamespace(by_id={"P1": None}, by_sequence={})
+        fake_bundle = types.SimpleNamespace(dataset=[1], label_builder=None)
 
         with (
-            mock.patch("training.train.load_embedding_store_subset", return_value=materialized_store) as load_subset,
-            mock.patch("training.train.load_lazy_embedding_store") as load_lazy,
+            mock.patch(
+                "data_loading.task_data.load_safetensors_embedding_store_subset",
+                return_value=materialized_store,
+            ) as load_subset,
+            mock.patch("data_loading.task_data.load_lazy_safetensors_embedding_store") as load_lazy,
+            mock.patch("data_loading.task_data.build_task_dataset", return_value=fake_bundle),
         ):
-            store, mode = load_task_embedding_store(
-                config,
-                "fake_embeddings.h5",
-                {"P1"},
-                {"AAAA"},
-                residue_store_mode="auto",
-                embedding_dim=128,
-                embedding_storage_format="h5",
+            _build_loader_data(
+                config, "active_sites_test", "fake_embeddings.safetensors",
+                "random", self._fake_task_rows({"P1"}, {"AAAA"}),
+                residue_store_mode="auto", embedding_dim=128, sequence_to_id={},
             )
 
-        self.assertIs(store, materialized_store)
-        self.assertEqual(mode, "materialized")
-        load_subset.assert_called_once_with("fake_embeddings.h5", {"P1"}, {"AAAA"})
+        load_subset.assert_called_once_with("fake_embeddings.safetensors", {"P1"}, {"AAAA"})
         load_lazy.assert_not_called()
 
     def test_load_task_embedding_store_uses_lazy_for_large_protein_residue_tasks_in_auto_mode(self) -> None:
-        from training.train import load_task_embedding_store
+        from data_loading.task_data import _build_loader_data
 
         config = TaskConfig(
             name="binding_sites_test",
@@ -262,29 +289,31 @@ class StructuredTrainingTests(unittest.TestCase):
             residue_positions_column="binding_positions",
             index_columns=("uniprot_id",),
         )
-        lazy_store = object()
+        lazy_store = types.SimpleNamespace(_available_ids=["P1"], _seq_to_key={})
+        fake_bundle = types.SimpleNamespace(dataset=[1], label_builder=None)
+        huge_sequence = "A" * 10_000
 
         with (
-            mock.patch("training.train.load_embedding_store_subset") as load_subset,
-            mock.patch("training.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
+            mock.patch("data_loading.task_data.load_safetensors_embedding_store_subset") as load_subset,
+            mock.patch(
+                "data_loading.task_data.load_lazy_safetensors_embedding_store",
+                return_value=lazy_store,
+            ) as load_lazy,
+            mock.patch("data_loading.task_data.build_task_dataset", return_value=fake_bundle),
         ):
-            store, mode = load_task_embedding_store(
-                config,
-                "fake_embeddings.h5",
-                {"P1"},
-                {"A" * 10_000},
-                residue_store_mode="auto",
-                embedding_dim=2_000_000,
-                embedding_storage_format="h5",
+            # embedding_dim=2_000_000 over a 10k-residue sequence estimates ~74 GiB,
+            # comfortably over any real machine's available RAM -> forces "lazy".
+            _build_loader_data(
+                config, "binding_sites_test", "fake_embeddings.safetensors",
+                "random", self._fake_task_rows({"P1"}, {huge_sequence}),
+                residue_store_mode="auto", embedding_dim=2_000_000, sequence_to_id={},
             )
 
-        self.assertIs(store, lazy_store)
-        self.assertEqual(mode, "lazy")
-        load_lazy.assert_called_once_with("fake_embeddings.h5", {"P1"}, {"A" * 10_000})
+        load_lazy.assert_called_once_with("fake_embeddings.safetensors", {"P1"}, {huge_sequence})
         load_subset.assert_not_called()
 
     def test_load_task_embedding_store_keeps_lazy_strategy_for_non_residue_tasks(self) -> None:
-        from training.train import load_task_embedding_store
+        from data_loading.task_data import _build_loader_data
 
         config = TaskConfig(
             name="solubility_test",
@@ -294,31 +323,32 @@ class StructuredTrainingTests(unittest.TestCase):
             target_column="solubility",
             index_columns=("uniprot_id",),
         )
-        lazy_store = object()
+        lazy_store = types.SimpleNamespace(_available_ids=["P1"], _seq_to_key={})
+        fake_bundle = types.SimpleNamespace(dataset=[1], label_builder=None)
 
         with (
-            mock.patch("training.train.load_embedding_store_subset") as load_subset,
-            mock.patch("training.train.load_lazy_embedding_store", return_value=lazy_store) as load_lazy,
+            mock.patch("data_loading.task_data.load_safetensors_embedding_store_subset") as load_subset,
+            mock.patch(
+                "data_loading.task_data.load_lazy_safetensors_embedding_store",
+                return_value=lazy_store,
+            ) as load_lazy,
+            mock.patch("data_loading.task_data.build_task_dataset", return_value=fake_bundle),
         ):
-            store, mode = load_task_embedding_store(
-                config,
-                "fake_embeddings.h5",
-                {"P1"},
-                {"AAAA"},
-                embedding_storage_format="h5",
+            _build_loader_data(
+                config, "solubility_test", "fake_embeddings.safetensors",
+                "random", self._fake_task_rows({"P1"}, {"AAAA"}),
+                residue_store_mode="auto", embedding_dim=None, sequence_to_id={},
             )
 
-        self.assertIs(store, lazy_store)
-        self.assertEqual(mode, "lazy")
-        load_lazy.assert_called_once_with("fake_embeddings.h5", {"P1"}, {"AAAA"})
+        load_lazy.assert_called_once_with("fake_embeddings.safetensors", {"P1"}, {"AAAA"})
         load_subset.assert_not_called()
 
     def test_residue_binary_training_and_prediction_serialization(self) -> None:
         from torch.utils.data import DataLoader
 
         from training.torch_structured_wrappers import ResidueBinaryClassifierTorch
-        from training.train import get_target_payload
-        from training.train_output import make_safetensors_predictions_file
+        from data_loading.stores import get_target_payload
+        from evaluation.artifacts import make_safetensors_predictions_file
         from safetensors.torch import load as load_tensors
 
         dataset_path = self.root / "active_sites_random_standardized.csv"
@@ -449,7 +479,7 @@ class StructuredTrainingTests(unittest.TestCase):
         np.testing.assert_allclose(normalized.std(axis=0), np.ones(2, dtype=np.float32), atol=1e-6)
 
     def test_get_target_payload_for_residue_tasks_does_not_reload_embeddings(self) -> None:
-        from training.train import get_target_payload
+        from data_loading.stores import get_target_payload
 
         dataset_path = self.root / "active_sites_random_standardized.csv"
         write_csv(
@@ -491,7 +521,7 @@ class StructuredTrainingTests(unittest.TestCase):
         from torch.utils.data import DataLoader
 
         from training.xgb_wrappers import XGBResidueBinaryClassifier
-        from training.train import get_target_payload
+        from data_loading.stores import get_target_payload
 
         dataset_path = self.root / "binding_sites_random_standardized.csv"
         write_csv(
@@ -636,7 +666,7 @@ class StructuredTrainingTests(unittest.TestCase):
         np.testing.assert_array_equal(preds[:, 4], np.ones(4, dtype=np.float32))
 
     def test_train_model_loader_passes_supported_extra_kwargs(self) -> None:
-        from training.train_runtime import train_model_loader
+        from training.model_registry import train_model_loader
 
         calls: dict[str, object] = {}
 

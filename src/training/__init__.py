@@ -1,14 +1,14 @@
 """Training pipelines, wrappers, and output helpers."""
 
 from data_loading import LoaderTaskData, PooledTaskData
-from training.residue import (
+from .residue import (
     ResidueAwareLoaders,
     ResidueAwareOutputs,
     build_residue_aware_loaders,
     collect_residue_aware_outputs,
     train_residue_aware_model,
 )
-from training.train import (
+from .train import (
     ATTENTION_ROUTE,
     GLOBAL_ROUTE,
     RESIDUE_ROUTE,

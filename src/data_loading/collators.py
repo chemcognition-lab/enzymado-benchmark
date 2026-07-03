@@ -71,17 +71,11 @@ def _validate_residue_sample_lengths(samples: list[dict[str, Any]]) -> None:
         sample_id = sample.get("sample_id", "")
         embedding_length = sample["protein_emb"].shape[0]
         target_length = sample["target_per_residue"].shape[0]
-        mask_length = sample["target_mask"].shape[0]
 
         if embedding_length != target_length:
             raise ValueError(
                 "Protein embedding and residue target length mismatch for sample "
                 f"'{sample_id}': embedding={embedding_length}, target={target_length}."
-            )
-        if target_length != mask_length:
-            raise ValueError(
-                "Residue target and residue mask length mismatch for sample "
-                f"'{sample_id}': target={target_length}, mask={mask_length}."
             )
 
 @dataclass
@@ -166,16 +160,15 @@ class ProteinResidueCollator(_ResidueCollatorBase):
     def _collate(self, samples: list[dict[str, Any]]) -> Batch:
         protein_emb, protein_mask = _pad_residue_embeddings(self._extract(samples, "protein_emb"))
         target_per_residue = _pad_vectors(self._extract(samples, "target_per_residue"), dtype=np.float32)
-        target_mask = _pad_vectors(
-            [sample["target_mask"].astype(np.int8, copy=False) for sample in samples],
-            dtype=np.int8,
-        ).astype(bool, copy=False)
+        # Residue targets are padded to the same length as protein_emb (enforced by
+        # _validate_residue_sample_lengths), so protein_mask already flags which
+        # positions are real residues vs. padding for the target array too.
         return Batch(
             sample_id=self._extract(samples, "sample_id"),
             protein_emb=protein_emb,
             protein_mask=protein_mask,
             target_per_residue=target_per_residue,
-            target_mask=target_mask,
+            target_mask=protein_mask,
         )
 
 
@@ -185,14 +178,6 @@ class ProteinResidueConcatCollator(_ResidueCollatorBase):
         lengths = np.asarray([sample["protein_emb"].shape[0] for sample in samples], dtype=np.int32)
         if not np.all(lengths > 0):
             raise ValueError("ProteinResidueConcatCollator requires non-empty residue embeddings.")
-
-        for sample in samples:
-            target_mask = np.asarray(sample["target_mask"], dtype=bool)
-            if not np.all(target_mask):
-                raise ValueError(
-                    "ProteinResidueConcatCollator does not support masked residue labels within a sample. "
-                    f"sample_id='{sample.get('sample_id', '')}'."
-                )
 
         protein_emb = torch.cat(
             [_to_torch_residue_tensor(sample["protein_emb"]) for sample in samples],

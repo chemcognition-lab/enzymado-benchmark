@@ -20,23 +20,23 @@ from typing import Any
 import torch
 from torch.utils.data import DataLoader
 
-from training.attention_wrappers import (
+from .attention_wrappers import (
     AttentionBinaryClassifierTorch,
     AttentionECMultiHeadClassifierTorch,
     AttentionRegressorTorch,
     AttentionResidueBinaryClassifierTorch,
 )
-from training.torch_standard_wrappers import (
+from .torch_standard_wrappers import (
     LinearClassifierTorch,
     LinearRegressorTorch,
     MLPClassifierTorch,
     MLPRegressorTorch,
 )
-from training.torch_structured_wrappers import (
+from .torch_structured_wrappers import (
     ECMultiHeadClassifierTorch,
     ResidueBinaryClassifierTorch,
 )
-from training.xgb_wrappers import (
+from .xgb_wrappers import (
     XGBClassifier,
     XGBFlatECBlockClassifier,
     XGBFlatECClassifier,

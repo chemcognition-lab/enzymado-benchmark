@@ -9,15 +9,13 @@ from unittest import TestCase
 import numpy as np
 
 from src.evaluation.bootstrap import (
+    _bootstrap_binary_fast,
+    _is_binary_classification,
+    _precompute_binary_counts,
     bootstrap_replicates,
     make_resample_indices,
     n_resample_units,
     summarise_replicates,
-)
-from src.evaluation.bootstrap_fast import (
-    bootstrap_classification_fast,
-    is_fast_classification_eligible,
-    precompute_binary_micro_indicators,
 )
 from src.evaluation.discover import (
     Experiment,
@@ -27,11 +25,11 @@ from src.evaluation.discover import (
     group_into_tracks,
 )
 from src.evaluation.loaders import PredictionPayload
-from src.evaluation.metrics import (
-    HIGHER_IS_BETTER,
-    PRIMARY_METRIC,
+from src.evaluation.metrics_registry import (
     classification_f1,
+    higher_is_better_for,
     metric_set_for,
+    primary_metric_for,
     regression_mae,
 )
 from src.evaluation.rating_lib import (
@@ -60,10 +58,10 @@ class TestMetrics(TestCase):
             metric_set_for("nonsense")
 
     def test_primary_metric_table(self) -> None:
-        self.assertEqual(PRIMARY_METRIC["regression"], "mae")
-        self.assertEqual(PRIMARY_METRIC["classification"], "f1")
-        self.assertEqual(HIGHER_IS_BETTER["mae"], -1)
-        self.assertEqual(HIGHER_IS_BETTER["f1"], +1)
+        self.assertEqual(primary_metric_for("regression"), "mae")
+        self.assertEqual(primary_metric_for("classification"), "f1")
+        self.assertEqual(higher_is_better_for("regression")["mae"], -1)
+        self.assertEqual(higher_is_better_for("classification")["f1"], +1)
 
 
 class TestBootstrap(TestCase):
@@ -162,8 +160,8 @@ class TestBootstrapFast(TestCase):
 
         idx = make_resample_indices(n, 30, seed=42)
         generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
-        precomputed = precompute_binary_micro_indicators(payload)
-        fast = bootstrap_classification_fast(precomputed, idx)
+        counts = _precompute_binary_counts(payload)
+        fast = _bootstrap_binary_fast(counts, idx)
         self._assert_metrics_match(generic, fast)
 
     def test_fast_path_matches_generic_for_per_residue(self) -> None:
@@ -180,8 +178,8 @@ class TestBootstrapFast(TestCase):
 
         idx = make_resample_indices(n_proteins, 50, seed=7)
         generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
-        precomputed = precompute_binary_micro_indicators(payload)
-        fast = bootstrap_classification_fast(precomputed, idx)
+        counts = _precompute_binary_counts(payload)
+        fast = _bootstrap_binary_fast(counts, idx)
         self._assert_metrics_match(generic, fast)
 
     def test_fast_path_matches_generic_for_multilabel(self) -> None:
@@ -194,8 +192,8 @@ class TestBootstrapFast(TestCase):
 
         idx = make_resample_indices(n_rows, 40, seed=3)
         generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
-        precomputed = precompute_binary_micro_indicators(payload)
-        fast = bootstrap_classification_fast(precomputed, idx)
+        counts = _precompute_binary_counts(payload)
+        fast = _bootstrap_binary_fast(counts, idx)
         self._assert_metrics_match(generic, fast)
 
     def test_eligibility_detection(self) -> None:
@@ -204,14 +202,14 @@ class TestBootstrapFast(TestCase):
             predictions=np.array([1.0, 1.0, 0.0]),
             target_mask=None,
         )
-        self.assertTrue(is_fast_classification_eligible(binary))
+        self.assertTrue(_is_binary_classification(binary))
 
         multiclass = PredictionPayload(
             y_true=np.array([0.0, 1.0, 2.0]),
             predictions=np.array([1.0, 1.0, 2.0]),
             target_mask=None,
         )
-        self.assertFalse(is_fast_classification_eligible(multiclass))
+        self.assertFalse(_is_binary_classification(multiclass))
 
 
 class TestDiscover(TestCase):

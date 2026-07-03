@@ -12,9 +12,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from data_loading.task_csv import TaskCSVLoader, clean_text, normalize_sequence
-from data_loading.features import PooledEmbeddingStore, ResidueEmbeddingStore
-from data_loading.labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
+from .task_csv import TaskCSVLoader, clean_text, normalize_sequence
+from .features import PooledEmbeddingStore, ResidueEmbeddingStore
+from .labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"

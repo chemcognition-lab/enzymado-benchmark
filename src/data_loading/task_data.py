@@ -17,10 +17,10 @@ from pathlib import Path
 import psutil
 import torch
 
-from data_loading.data_registry import TaskConfig, TaskType, get_task_config
-from data_loading.datasets import TaskDatasetBundle, build_task_dataset
-from data_loading.labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
-from data_loading.stores import (
+from .data_registry import TaskConfig, TaskType, get_task_config
+from .datasets import TaskDatasetBundle, build_task_dataset
+from .labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
+from .stores import (
     build_ec_arrays,
     build_flat_ec_arrays,
     build_pooled_embedding_store,

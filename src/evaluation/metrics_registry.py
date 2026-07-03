@@ -56,7 +56,10 @@ def register_metric(
 
 def metric_set_for(task_type: str) -> dict[str, MetricFn]:
     """Return all registered metric functions for the given task type."""
-    return {entry.name: entry.fn for entry in _REGISTRY if entry.task_type == task_type}
+    metrics = {entry.name: entry.fn for entry in _REGISTRY if entry.task_type == task_type}
+    if not metrics:
+        raise ValueError(f"No metrics registered for task_type '{task_type}'.")
+    return metrics
 
 
 def higher_is_better_for(task_type: str) -> dict[str, int]:

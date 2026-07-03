@@ -12,7 +12,7 @@ from data_loading import (
     get_target_payload,
     log,
 )
-from training.model_registry import train_model_loader
+from .model_registry import train_model_loader
 
 
 @dataclass

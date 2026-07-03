@@ -6,7 +6,7 @@ wrapper classes live in training/*_wrappers.py and are imported from there
 directly, not re-exported here, so models/ never depends on training/.
 """
 
-from models.common import (
+from .common import (
     DEVICE,
     batch_to_input,
     make_optimizer,
@@ -15,7 +15,7 @@ from models.common import (
     prepare_inputs,
     run_training_with_early_stopping,
 )
-from models.nn_blocks import (
+from .nn_blocks import (
     LinearModel,
     MLPModel,
     MultiHeadMLPModel,
