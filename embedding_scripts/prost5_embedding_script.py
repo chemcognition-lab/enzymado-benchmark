@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Generate ProsT5 embeddings from a FASTA file and save them to an H5 store.
+Generate ProsT5 embeddings from a FASTA file and save them as safetensors shards.
 """
 
 import argparse
@@ -9,8 +9,9 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 import torch
-import h5py
 from transformers import T5EncoderModel, T5Tokenizer
+
+from shard_writer import SafetensorsPooledWriter, SafetensorsShardWriter
 
 if torch.cuda.is_available():
     device = torch.device('cuda:0')
@@ -89,8 +90,8 @@ def get_embeddings( seq_path, emb_path, model_dir, split_char, id_field,
     batch = list()
 
     with ExitStack() as stack:
-        hf = stack.enter_context(h5py.File(str(emb_path), "w"))
-        hf_pooled = stack.enter_context(h5py.File(str(mean_pooled_path), "w")) if mean_pooled_path is not None else None
+        hf = stack.enter_context(SafetensorsShardWriter(emb_path))
+        hf_pooled = stack.enter_context(SafetensorsPooledWriter(mean_pooled_path)) if mean_pooled_path is not None else None
 
         n_embeddings = sum(1 for pid, _ in seq_dict if pid in hf)
         seq_dict = [(pid, seq) for pid, seq in seq_dict if pid not in hf]
@@ -134,18 +135,12 @@ def get_embeddings( seq_path, emb_path, model_dir, split_char, id_field,
                     emb = embedding_repr.last_hidden_state[batch_idx, 1:s_len+1]
 
                     if mean_pooled_path is not None:
-                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds = hf.create_dataset(identifier, data=emb_np, compression="lzf")
-                        ds.attrs['dtype'] = 'bfloat16'
-                        pooled_np = emb.mean(dim=0).detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds_p = hf_pooled.create_dataset(identifier, data=pooled_np, compression="lzf")
-                        ds_p.attrs['dtype'] = 'bfloat16'
+                        hf.add(identifier, emb)
+                        hf_pooled.add(identifier, emb.mean(dim=0))
                     else:
                         if per_protein:
                             emb = emb.mean(dim=0)
-                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds = hf.create_dataset(identifier, data=emb_np, compression="lzf")
-                        ds.attrs['dtype'] = 'bfloat16'
+                        hf.add(identifier, emb)
                     n_embeddings += 1
                     if n_embeddings == 1:
                         print("Example: embedded protein {} with length {} to emb. of shape: {}".format(
@@ -170,15 +165,15 @@ def create_arg_parser():
     parser = argparse.ArgumentParser(description=( 
             'embed.py creates ProstT5-Encoder embeddings for a given text '+
             ' file containing sequence(s) in FASTA-format.' +
-            'Example: python embed.py --input /path/to/some_sequences.fasta --output /path/to/some_embeddings.h5 --half 1 --is_3Di 0 --per_protein 1' ) )
+            'Example: python embed.py --input /path/to/some_sequences.fasta --output /path/to/some_embeddings_shards --half 1 --is_3Di 0 --per_protein 1' ) )
     
     # Required positional argument
     parser.add_argument( '-i', '--input', required=True, type=str,
                     help='A path to a fasta-formatted text file containing protein sequence(s).')
 
     # Optional positional argument
-    parser.add_argument( '-o', '--output', required=True, type=str, 
-                    help='A path for saving the created embeddings as NumPy npz file.')
+    parser.add_argument( '-o', '--output', required=True, type=str,
+                    help='Directory for saving the embeddings as numbered bf16 safetensors shards.')
 
     
     # Required positional argument

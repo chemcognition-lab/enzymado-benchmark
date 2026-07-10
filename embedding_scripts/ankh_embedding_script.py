@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate per-sequence or pooled Ankh embeddings and store them in H5."""
+"""Generate per-sequence or pooled Ankh embeddings and store them as safetensors shards."""
 
 import argparse
 import time
@@ -7,9 +7,10 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import ankh
-import h5py
 import torch
 from transformers import T5EncoderModel, AutoTokenizer
+
+from shard_writer import SafetensorsPooledWriter, SafetensorsShardWriter
 
 if torch.cuda.is_available():
     device = torch.device('cuda:0')
@@ -70,8 +71,8 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
     batch = []
 
     with ExitStack() as stack:
-        hf = stack.enter_context(h5py.File(str(emb_path), "w"))
-        hf_pooled = stack.enter_context(h5py.File(str(mean_pooled_path), "w")) if mean_pooled_path is not None else None
+        hf = stack.enter_context(SafetensorsShardWriter(emb_path))
+        hf_pooled = stack.enter_context(SafetensorsPooledWriter(mean_pooled_path)) if mean_pooled_path is not None else None
 
         n_embeddings = sum(1 for pid, _ in seq_dict if pid in hf)
         seq_dict = [(pid, seq) for pid, seq in seq_dict if pid not in hf]
@@ -111,18 +112,12 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
                     emb = outputs.last_hidden_state[batch_idx, 0:s_len]  # strip EOS token
 
                     if mean_pooled_path is not None:
-                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds = hf.create_dataset(bid, data=emb_np, compression="lzf")
-                        ds.attrs['dtype'] = 'bfloat16'
-                        pooled_np = emb.mean(dim=0).detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds_p = hf_pooled.create_dataset(bid, data=pooled_np, compression="lzf")
-                        ds_p.attrs['dtype'] = 'bfloat16'
+                        hf.add(bid, emb)
+                        hf_pooled.add(bid, emb.mean(dim=0))
                     else:
                         if per_protein:
                             emb = emb.mean(dim=0)
-                        emb_np = emb.detach().cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds = hf.create_dataset(bid, data=emb_np, compression="lzf")
-                        ds.attrs['dtype'] = 'bfloat16'
+                        hf.add(bid, emb)
                     n_embeddings += 1
 
                     if n_embeddings == 1:
@@ -144,14 +139,14 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
 def create_arg_parser():
     parser = argparse.ArgumentParser(description=(
         'ankh_embedding_script.py creates Ankh embeddings for a given FASTA file '
-        'and saves them in HDF5 format. '
+        'and saves them as bf16 safetensors shards. '
         'Example: python ankh_embedding_script.py --input sequences.fasta '
-        '--output embeddings.h5 --model ankh_large --per_protein 1'
+        '--output embeddings_shards --model ankh_large --per_protein 1'
     ))
     parser.add_argument('-i', '--input', required=True, type=str,
                         help='Path to a FASTA file containing protein sequence(s).')
     parser.add_argument('-o', '--output', required=True, type=str,
-                        help='Path for saving the embeddings as an HDF5 (.h5) file.')
+                        help='Directory for saving the embeddings as numbered bf16 safetensors shards.')
     parser.add_argument('--model', required=False, type=str,
                         default='ankh_large',
                         help='Ankh model to use. Choices: ankh_base, ankh_large, ankh3_large, ankh3_xl. Default: ankh_large')

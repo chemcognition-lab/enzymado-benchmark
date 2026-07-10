@@ -106,7 +106,13 @@ class ResidueEmbeddingStore(EmbeddingStore):
 
     def _coerce(self, value, key: str) -> torch.Tensor:
         if not torch.is_tensor(value):
-            value = torch.as_tensor(value)
+            array = np.asarray(value)
+            # Raw BF16 bit patterns arrive as int16 since NumPy has no native bfloat16.
+            value = (
+                torch.from_numpy(array).view(torch.bfloat16)
+                if array.dtype == np.int16
+                else torch.as_tensor(array)
+            )
         return _ensure_2d_tensor(value, key)
 
     def lookup_sequence_length(self, sequence: str) -> int:

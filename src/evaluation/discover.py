@@ -7,9 +7,9 @@ An experiment is one trained model identified by the 5-tuple
 
 Tracks aggregate experiments for a single global leaderboard:
 
-  - track="mean":      pool_type ∈ {mean, per_residue}, task is a benchmark property
-  - track="attention": pool_type == "attention",       task is a benchmark property
-  - track="real_case": pool_type == "mean",            task has task_scope=="real_case" in TASK_REGISTRY
+  - track="no_attention": pool_type == "no_attention", task is a benchmark property
+  - track="attention":    pool_type == "attention",    task is a benchmark property
+  - track="real_case":    pool_type == "no_attention", task has task_scope=="real_case" in TASK_REGISTRY
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-POOL_TYPES = {"mean", "attention", "per_residue"}
+POOL_TYPES = {"attention", "no_attention"}
 
 
 @dataclass(frozen=True)
@@ -91,14 +91,14 @@ def discover_experiments(predictions_root: Path) -> list[Experiment]:
 def assign_track(exp: Experiment, real_case_tasks: set[str]) -> str | None:
     """Map an experiment to its leaderboard track or None if it does not fit."""
     if exp.task in real_case_tasks:
-        if exp.pool_type == "mean":
+        if exp.pool_type == "no_attention":
             return "real_case"
         # Attention real_case is not a planned track today; ignore.
         return None
     if exp.pool_type == "attention":
         return "attention"
-    if exp.pool_type in {"mean", "per_residue"}:
-        return "mean"
+    if exp.pool_type == "no_attention":
+        return "no_attention"
     return None
 
 

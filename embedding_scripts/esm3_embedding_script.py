@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Generate per-sequence or pooled ESM-3 embeddings and store them in H5."""
+"""Generate per-sequence or pooled ESM-3 embeddings and store them as safetensors shards."""
 
 import argparse
 import time
 from contextlib import ExitStack
 from pathlib import Path
 
-import h5py
 import torch
 from esm.models.esm3 import ESM3
 from esm.sdk.api import ESMProtein, SamplingConfig
+
+from shard_writer import SafetensorsPooledWriter, SafetensorsShardWriter
 
 if torch.cuda.is_available():
     device = torch.device('cuda:0')
@@ -47,8 +48,8 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
     start = time.time()
 
     with ExitStack() as stack:
-        hf = stack.enter_context(h5py.File(str(emb_path), "w"))
-        hf_pooled = stack.enter_context(h5py.File(str(mean_pooled_path), "w")) if mean_pooled_path is not None else None
+        hf = stack.enter_context(SafetensorsShardWriter(emb_path))
+        hf_pooled = stack.enter_context(SafetensorsPooledWriter(mean_pooled_path)) if mean_pooled_path is not None else None
 
         with torch.no_grad():
             for seq_idx, (identifier, seq) in enumerate(seq_dict.items(), 1):
@@ -65,23 +66,17 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
                     emb = output.per_residue_embedding[1:-1]  # strip BOS and EOS tokens
 
                     if mean_pooled_path is not None:
-                        emb_np = emb.cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds = hf.create_dataset(identifier, data=emb_np, compression="lzf")
-                        ds.attrs['dtype'] = 'bfloat16'
-                        pooled_np = emb.mean(dim=0).cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds_p = hf_pooled.create_dataset(identifier, data=pooled_np, compression="lzf")
-                        ds_p.attrs['dtype'] = 'bfloat16'
+                        hf.add(identifier, emb)
+                        hf_pooled.add(identifier, emb.mean(dim=0))
                     else:
                         if per_protein:
                             emb = emb.mean(dim=0)
-                        emb_np = emb.cpu().to(torch.bfloat16).view(torch.int16).numpy()
-                        ds = hf.create_dataset(identifier, data=emb_np, compression="lzf")
-                        ds.attrs['dtype'] = 'bfloat16'
+                        hf.add(identifier, emb)
                     n_embeddings += 1
 
                     if n_embeddings == 1:
                         print("Example: embedded {} with length {} to shape: {}".format(
-                            identifier, len(seq), emb_np.shape))
+                            identifier, len(seq), tuple(emb.shape)))
                 except Exception as e:
                     print(f"WARNING: skipping {identifier} (L={len(seq)}) — {type(e).__name__}: {e}")
                     n_skipped += 1
@@ -101,14 +96,14 @@ def get_embeddings(seq_path, emb_path, model_name, per_protein, split_char, id_f
 def create_arg_parser():
     parser = argparse.ArgumentParser(description=(
         'esm3_embedding_script.py creates ESM3 embeddings for a given FASTA file '
-        'and saves them in HDF5 format. '
+        'and saves them as bf16 safetensors shards. '
         'Example: python esm3_embedding_script.py --input sequences.fasta '
-        '--output embeddings.h5 --model esm3-open --per_protein 1'
+        '--output embeddings_shards --model esm3-open --per_protein 1'
     ))
     parser.add_argument('-i', '--input', required=True, type=str,
                         help='Path to a FASTA file containing protein sequence(s).')
     parser.add_argument('-o', '--output', required=True, type=str,
-                        help='Path for saving the embeddings as an HDF5 (.h5) file.')
+                        help='Directory for saving the embeddings as numbered bf16 safetensors shards.')
     parser.add_argument('--model', required=False, type=str,
                         default='esm3-open',
                         help='ESM3 model name. Default: esm3-open')

@@ -10,10 +10,16 @@ from torch.nn.utils.rnn import pad_sequence
 
 
 def _to_torch_residue_tensor(embedding: Any) -> torch.Tensor:
-    """Coerce a residue embedding to a 2D torch tensor (bfloat16 if available)."""
+    """Coerce a residue embedding to a 2D torch tensor (bfloat16 if available).
+
+    Embeddings from the safetensors-backed store arrive as np.ndarray with
+    dtype=int16 holding raw BF16 bits, since NumPy has no native bfloat16 type.
+    """
     if torch.is_tensor(embedding):
         return embedding
     array = np.asarray(embedding)
+    if array.dtype == np.int16:
+        return torch.from_numpy(array).view(torch.bfloat16)
     return torch.from_numpy(array)
 
 

@@ -218,41 +218,43 @@ class TestDiscover(TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "mean/random/linear/binding/ankh_base").mkdir(parents=True)
+            (root / "no_attention/random/linear/binding/ankh_base").mkdir(parents=True)
             (root / "attention/loco/mlp/kcat/esm2_650M").mkdir(parents=True)
-            (root / "per_residue/random/xgboost/active_sites/ankh_large").mkdir(parents=True)
+            (root / "no_attention/random/xgboost/active_sites/ankh_large").mkdir(parents=True)
             exps = discover_experiments(root)
             sigs = {(e.pool_type, e.split, e.model_family, e.task, e.embedding_model) for e in exps}
             self.assertEqual(len(exps), 3)
-            self.assertIn(("mean", "random", "linear", "binding", "ankh_base"), sigs)
+            self.assertIn(("no_attention", "random", "linear", "binding", "ankh_base"), sigs)
             self.assertIn(("attention", "loco", "mlp", "kcat", "esm2_650M"), sigs)
-            self.assertIn(("per_residue", "random", "xgboost", "active_sites", "ankh_large"), sigs)
+            self.assertIn(("no_attention", "random", "xgboost", "active_sites", "ankh_large"), sigs)
 
-    def test_assign_track_routes_per_residue_into_mean(self) -> None:
-        e_mean = Experiment("mean", "random", "linear", "binding", "ankh_base", Path("/tmp"))
+    def test_assign_track_routes_into_no_attention(self) -> None:
+        e_mean = Experiment("no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp"))
         e_residue = Experiment(
-            "per_residue", "random", "xgboost", "active_sites", "ankh_large", Path("/tmp")
+            "no_attention", "random", "xgboost", "active_sites", "ankh_large", Path("/tmp")
         )
         e_attn = Experiment("attention", "loco", "mlp", "kcat", "esm2_650M", Path("/tmp"))
-        e_real = Experiment("mean", "random", "linear", "align_amylase_activity", "ankh_base", Path("/tmp"))
+        e_real = Experiment(
+            "no_attention", "random", "linear", "align_amylase_activity", "ankh_base", Path("/tmp")
+        )
         rc = {"align_amylase_activity"}
-        self.assertEqual(assign_track(e_mean, rc), "mean")
-        self.assertEqual(assign_track(e_residue, rc), "mean")
+        self.assertEqual(assign_track(e_mean, rc), "no_attention")
+        self.assertEqual(assign_track(e_residue, rc), "no_attention")
         self.assertEqual(assign_track(e_attn, rc), "attention")
         self.assertEqual(assign_track(e_real, rc), "real_case")
 
     def test_group_into_tracks_buckets_by_split_and_family(self) -> None:
         exps = [
-            Experiment("mean", "random", "linear", "binding", "ankh_base", Path("/tmp/a")),
-            Experiment("per_residue", "random", "linear", "active_sites", "ankh_base", Path("/tmp/b")),
+            Experiment("no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp/a")),
+            Experiment("no_attention", "random", "linear", "active_sites", "ankh_base", Path("/tmp/b")),
             Experiment("attention", "random", "mlp", "kcat", "esm2_650M", Path("/tmp/c")),
         ]
         groups = group_into_tracks(exps, real_case_tasks=set())
         keys = sorted(groups.keys(), key=lambda k: (k.track, k.split, k.model_family))
         self.assertEqual(keys[0], TrackKey("attention", "random", "mlp"))
-        self.assertEqual(keys[1], TrackKey("mean", "random", "linear"))
-        # mean track should hold both the mean and per_residue experiments
-        self.assertEqual(len(groups[TrackKey("mean", "random", "linear")]), 2)
+        self.assertEqual(keys[1], TrackKey("no_attention", "random", "linear"))
+        # no_attention track should hold both experiments sharing (split, model_family)
+        self.assertEqual(len(groups[TrackKey("no_attention", "random", "linear")]), 2)
 
 
 class TestRatingLib(TestCase):

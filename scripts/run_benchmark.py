@@ -647,7 +647,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--embedding_mode",
         action="append",
-        choices=("mean", "per_residue", "attention"),
+        choices=("attention", "no_attention"),
         default=[],
         help="Train only model/task combinations in this results embedding mode.",
     )

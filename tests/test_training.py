@@ -466,7 +466,7 @@ class StructuredTrainingTests(unittest.TestCase):
             shuffle=False,
             num_workers=0,
         )
-        model = AttentionBinaryClassifierTorch(hidden_dims=(), lr=1e-3, epochs=1)
+        model = AttentionBinaryClassifierTorch(hidden_dims=(), lr=1e-3, epochs=1, optimizer_name="adamw")
         model._fit_extra_scaler(loader, "protein_ligand_global")
 
         normalized_chunks = []

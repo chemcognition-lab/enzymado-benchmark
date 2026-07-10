@@ -70,9 +70,7 @@ def canonical_embedding_mode(task_name: str, model_name: str) -> str:
     """Return the top-level results-card bucket for one run."""
     if model_name.startswith("attention_"):
         return "attention"
-    if task_name in PER_RESIDUE_TASKS:
-        return "per_residue"
-    return "mean"
+    return "no_attention"
 
 
 def build_results_run_dir(

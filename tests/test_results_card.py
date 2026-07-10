@@ -29,15 +29,15 @@ class ResultsCardTests(unittest.TestCase):
         root = Path("/tmp/results")
         self.assertEqual(
             build_result_run_dir(root, "random", "binding", "ankh_base", "linear_classification"),
-            root / "mean" / "random" / "linear" / "binding" / "ankh_base",
+            root / "no_attention" / "random" / "linear" / "binding" / "ankh_base",
         )
         self.assertEqual(
             build_result_run_dir(root, "random", "ddg", "ankh_base", "linear_regressor"),
-            root / "mean" / "random" / "linear" / "ddg" / "ankh_base",
+            root / "no_attention" / "random" / "linear" / "ddg" / "ankh_base",
         )
         self.assertEqual(
             build_result_run_dir(root, "random", "solubility", "ankh_base", "linear_classification"),
-            root / "mean" / "random" / "linear" / "solubility" / "ankh_base",
+            root / "no_attention" / "random" / "linear" / "solubility" / "ankh_base",
         )
         self.assertEqual(
             build_result_run_dir(root, "similarity", "kcat", "esm2_650M", "attention_mlp_regressor"),
@@ -45,12 +45,12 @@ class ResultsCardTests(unittest.TestCase):
         )
         self.assertEqual(
             build_result_run_dir(root, "random", "active_sites", "prot5_xl_uniref50", "xgb_classification"),
-            root / "per_residue" / "random" / "xgboost" / "active_sites" / "prot5_xl_uniref50",
+            root / "no_attention" / "random" / "xgboost" / "active_sites" / "prot5_xl_uniref50",
         )
 
     def test_artifact_paths_use_full_run_context(self) -> None:
         module = load_results_card_module()
-        run_dir = Path("/tmp/results/mean/random/mlp/binding/ankh_base")
+        run_dir = Path("/tmp/results/no_attention/random/mlp/binding/ankh_base")
         self.assertEqual(
             module.build_prediction_artifact_path(
                 run_dir,
@@ -61,7 +61,7 @@ class ResultsCardTests(unittest.TestCase):
                 split_name="test",
             ),
             run_dir
-            / "mlp_classification_ankh_base_binding_random_mean_test_predictions.safetensors.xz",
+            / "mlp_classification_ankh_base_binding_random_no_attention_test_predictions.safetensors.xz",
         )
         self.assertEqual(
             module.build_model_artifact_path(
@@ -72,13 +72,13 @@ class ResultsCardTests(unittest.TestCase):
                 split_variant="random",
                 extension=".joblib",
             ),
-            run_dir / "mlp_classification_ankh_base_binding_random_mean.joblib",
+            run_dir / "mlp_classification_ankh_base_binding_random_no_attention.joblib",
         )
 
     def test_named_artifact_helpers_accept_canonical_filenames(self) -> None:
         results_card_module = load_results_card_module()
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = Path(tmp) / "results" / "predictions" / "mean" / "random" / "xgboost" / "ec_number" / "ankh_base"
+            run_dir = Path(tmp) / "results" / "predictions" / "no_attention" / "random" / "xgboost" / "ec_number" / "ankh_base"
             write_file(
                 results_card_module.build_model_artifact_path(
                     run_dir,
@@ -105,7 +105,7 @@ class ResultsCardTests(unittest.TestCase):
     def test_result_entry_complete_requires_current_artifact_set(self) -> None:
         results_card_module = load_results_card_module()
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = Path(tmp) / "results" / "predictions" / "per_residue" / "random" / "linear" / "active_sites" / "ankh_base"
+            run_dir = Path(tmp) / "results" / "predictions" / "no_attention" / "random" / "linear" / "active_sites" / "ankh_base"
             legacy_entry = {
                 "model_file": str(run_dir / "model.pt"),
                 "test_pred_file": str(run_dir / "test_predictions.npz"),
@@ -115,9 +115,9 @@ class ResultsCardTests(unittest.TestCase):
             self.assertFalse(results_card_module.is_result_entry_complete(legacy_entry))
 
             current_entry = {
-                "model_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_per_residue.pt"),
-                "train_pred_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_per_residue_train_predictions.safetensors.xz"),
-                "test_pred_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_per_residue_test_predictions.safetensors.xz"),
+                "model_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_no_attention.pt"),
+                "train_pred_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_no_attention_train_predictions.safetensors.xz"),
+                "test_pred_file": str(run_dir / "linear_classification_ankh_base_active_sites_random_no_attention_test_predictions.safetensors.xz"),
                 "metrics_file": str(run_dir / "metrics.json"),
                 "hparams_file": str(run_dir / "hparams.json"),
                 "training_log_file": str(run_dir / "training_log.csv"),

@@ -207,7 +207,7 @@ else
     OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings/protein_sequences_unique"
 fi
 
-OUT_PATH="${OUT_DIR}/${MODEL_NAME}.h5"
+OUT_PATH="${OUT_DIR}/${MODEL_NAME}_shards"
 
 mkdir -p "${OUT_DIR}"
 
@@ -242,7 +242,7 @@ echo "Save mean-pooled: ${SAVE_MEAN_POOLED}"
 
 EXTRA_ARGS=()
 if [[ "${SAVE_MEAN_POOLED}" == "1" ]]; then
-    MEAN_POOLED_OUT="${MEAN_POOLED_ROOT}/protein_sequences_unique/${MODEL_NAME}.h5"
+    MEAN_POOLED_OUT="${MEAN_POOLED_ROOT}/protein_sequences_unique/${MODEL_NAME}.safetensors"
     mkdir -p "$(dirname "${MEAN_POOLED_OUT}")"
     EXTRA_ARGS+=(--mean_pooled_output "${MEAN_POOLED_OUT}")
     echo "Mean-pooled output: ${MEAN_POOLED_OUT}"
