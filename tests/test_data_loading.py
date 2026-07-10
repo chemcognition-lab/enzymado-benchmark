@@ -376,10 +376,12 @@ class DataLoadingTests(unittest.TestCase):
             [
                 {
                     "sample_id": "P1",
+                    # Real embedding stores hand back native bfloat16 tensors
+                    # (safetensors decodes bf16 directly); no int16 bitcast involved.
                     "protein_emb": torch.tensor(
                         [[1.0, 0.0], [0.0, 1.0]],
                         dtype=torch.bfloat16,
-                    ).view(torch.int16).numpy(),
+                    ),
                     "target_per_residue": np.asarray([1.0, 0.0], dtype=np.float32),
                 },
             ]

@@ -372,13 +372,12 @@ class StructuredTrainingTests(unittest.TestCase):
         )
         import torch
 
-        def bf16_raw(values: list[list[float]]) -> np.ndarray:
-            return torch.tensor(values, dtype=torch.bfloat16).view(torch.int16).numpy()
-
+        # Real embedding stores always hold native bfloat16 tensors (safetensors
+        # decodes bf16 directly); no int16 bitcast reinterpretation ever happens.
         store = ResidueEmbeddingStore(
             by_id={
-                "P1": bf16_raw([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]),
-                "P2": bf16_raw([[1.0, 1.0], [1.0, 1.0]]),
+                "P1": torch.tensor([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]], dtype=torch.bfloat16),
+                "P2": torch.tensor([[1.0, 1.0], [1.0, 1.0]], dtype=torch.bfloat16),
             }
         )
 
@@ -544,17 +543,12 @@ class StructuredTrainingTests(unittest.TestCase):
         )
         import torch
 
-        def bf16_raw(values: list[list[float]]) -> np.ndarray:
-            return torch.tensor(values, dtype=torch.bfloat16).view(torch.int16).numpy()
-
+        # Real embedding stores always hold native bfloat16 tensors (safetensors
+        # decodes bf16 directly); no int16 bitcast reinterpretation ever happens.
         store = ResidueEmbeddingStore(
             by_id={
-                "P1": bf16_raw(
-                    [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
-                ),
-                "P2": bf16_raw(
-                    [[0.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
-                ),
+                "P1": torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]], dtype=torch.bfloat16),
+                "P2": torch.tensor([[0.0, 1.0], [1.0, 0.0], [0.0, 1.0]], dtype=torch.bfloat16),
             }
         )
 
