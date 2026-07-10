@@ -118,15 +118,20 @@ def _read_npz(path: Path) -> PredictionPayload:
     )
 
 
-def load_test_predictions(run_dir: Path) -> PredictionPayload | None:
-    """Locate and read this experiment's test predictions, returning None if missing."""
-    xz = sorted(run_dir.glob("*_test_predictions.safetensors.xz"))
+def load_split_predictions(run_dir: Path, split_name: str) -> PredictionPayload | None:
+    """Locate and read this experiment's <split_name> predictions, returning None if missing."""
+    xz = sorted(run_dir.glob(f"*_{split_name}_predictions.safetensors.xz"))
     if xz:
         return _read_safetensors_xz(xz[0])
-    npz = run_dir / "test_predictions.npz"
+    npz = run_dir / f"{split_name}_predictions.npz"
     if npz.exists():
         return _read_npz(npz)
     return None
+
+
+def load_test_predictions(run_dir: Path) -> PredictionPayload | None:
+    """Locate and read this experiment's test predictions, returning None if missing."""
+    return load_split_predictions(run_dir, "test")
 
 
 def read_metrics(run_dir: Path) -> dict:
@@ -145,3 +150,15 @@ def read_hparams(run_dir: Path) -> dict:
     if not path.exists():
         return {}
     return json.loads(path.read_text())
+
+
+def derive_task_type(hparams: dict) -> str | None:
+    """Infer 'classification'/'regression' from hparams.json's label_kind.
+
+    Mirrors the task_type computation in scripts/run_benchmark.py so evaluation
+    can determine task_type without depending on metrics.json already existing.
+    """
+    label_kind = (hparams.get("task_config") or {}).get("label_kind")
+    if label_kind is None:
+        return None
+    return "classification" if label_kind == "binary" else "regression"

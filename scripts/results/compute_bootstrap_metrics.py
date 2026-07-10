@@ -9,6 +9,9 @@ For each experiment we:
   - augment the experiment's metrics.json with a `test_bootstrap` block holding
     mean / std / CI per metric.
 
+Requires scripts/results/compute_metrics.py to have already run for these
+experiments (it computes the primary metrics.json this script augments).
+
 Usage:
     python scripts/results/compute_bootstrap_metrics.py
     python scripts/results/compute_bootstrap_metrics.py --n-replicates 200 --seed 0
@@ -37,7 +40,9 @@ from src.evaluation.bootstrap import (
 )
 from src.evaluation.discover import discover_experiments, task_signature
 from src.evaluation.loaders import (
+    derive_task_type,
     load_test_predictions,
+    read_hparams,
     read_metrics,
     write_metrics,
 )
@@ -45,6 +50,10 @@ from src.evaluation.metrics_registry import metric_set_for, primary_metric_for
 
 
 def _resolve_task_type(run_dir: Path) -> str | None:
+    """Infer task_type, preferring hparams.json over metrics.json (older runs)."""
+    task_type = derive_task_type(read_hparams(run_dir))
+    if task_type is not None:
+        return task_type
     md = read_metrics(run_dir)
     for split in ("test", "val", "train"):
         block = md.get(split)
@@ -137,7 +146,15 @@ def main() -> None:
 
             task_type = _resolve_task_type(e.run_dir)
             if task_type is None:
-                print(f"    {e.embedding_model}: missing task_type in metrics.json; skipping")
+                print(f"    {e.embedding_model}: missing task_type in hparams.json/metrics.json; skipping")
+                continue
+
+            md = read_metrics(e.run_dir)
+            if not md:
+                print(
+                    f"    {e.embedding_model}: metrics.json not found —"
+                    " run compute_metrics.py first; skipping"
+                )
                 continue
 
             payload = load_test_predictions(e.run_dir)
@@ -154,16 +171,13 @@ def main() -> None:
             metric_set = metric_set_for(task_type)
             primary_metric = primary_metric_for(task_type)
             t0 = time.perf_counter()
-            # bootstrap_replicates auto-selects the fast TP/FP/FN/TN path for
-            # binary classification internally; no separate call needed here.
-            replicates = bootstrap_replicates(payload, indices, metric_set)
+            replicates = bootstrap_replicates(payload, indices, metric_set, task_type)
             elapsed = time.perf_counter() - t0
             summary = summarise_replicates(replicates, confidence_level=args.confidence_level)
 
             bs_dir.mkdir(parents=True, exist_ok=True)
             np.savez_compressed(bs_path, **{k: v.astype(np.float64) for k, v in replicates.items()})
 
-            md = read_metrics(e.run_dir)
             md["test_bootstrap"] = {
                 "n_replicates": args.n_replicates,
                 "confidence_level": args.confidence_level,

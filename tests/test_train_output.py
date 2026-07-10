@@ -13,7 +13,7 @@ from evaluation.artifacts import (
     evaluate_predictions,
     make_result_entry,
     make_safetensors_predictions_file,
-    save_prediction_artifacts,
+    save_raw_predictions,
     write_hparams_file,
     write_metrics_file,
     write_training_log_file,
@@ -127,10 +127,10 @@ class TrainOutputTests(unittest.TestCase):
             self.assertIn("y_true", payload)
             self.assertIn("predictions", payload)
 
-    def test_prediction_artifacts_use_safetensors_as_default(self) -> None:
+    def test_save_raw_predictions_use_safetensors_as_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
-            pred_file, metrics = save_prediction_artifacts(
+            pred_file = save_raw_predictions(
                 np.asarray([1.0, 2.0], dtype=np.float32),
                 np.asarray([1.5, 1.8], dtype=np.float32),
                 None,
@@ -140,12 +140,38 @@ class TrainOutputTests(unittest.TestCase):
                 model_name="mlp_regressor",
                 split_variant="random",
                 split_name="test",
-                task_type="regression",
             )
 
             self.assertEqual(pred_file.suffixes[-2:], [".safetensors", ".xz"])
             self.assertTrue(pred_file.exists())
+
+    def test_save_raw_predictions_carries_no_metrics(self) -> None:
+        """save_raw_predictions is I/O only; evaluate_predictions computes metrics separately."""
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            pred_file = save_raw_predictions(
+                np.asarray([1.0, 2.0], dtype=np.float32),
+                np.asarray([1.5, 1.8], dtype=np.float32),
+                None,
+                run_dir=run_dir,
+                task_name="phopt",
+                emb_name="ankh_base",
+                model_name="mlp_regressor",
+                split_variant="random",
+                split_name="test",
+            )
+
+            from safetensors.torch import load as load_tensors
+
+            payload = load_tensors(lzma.open(pred_file, "rb").read())
+            metrics = evaluate_predictions(
+                payload["y_true"].numpy(),
+                payload["predictions"].numpy(),
+                "regression",
+                split="test",
+            )
             self.assertEqual(metrics["split"], "test")
+            self.assertEqual(metrics["n"], 2)
 
 
 if __name__ == "__main__":

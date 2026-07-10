@@ -26,11 +26,10 @@ class ModelRunOutputs:
 
 @dataclass
 class SavedModelRun:
-    """Trained estimator plus the split artifacts saved for one model run."""
+    """Trained estimator plus the raw prediction paths saved for one model run."""
 
     trained: Any
     prediction_paths: dict[str, Path]
-    metrics_by_split: dict[str, dict[str, Any]]
 
 
 @dataclass

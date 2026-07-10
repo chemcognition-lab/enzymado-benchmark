@@ -4,11 +4,19 @@ The same `(n_replicates, n_units)` index matrix is reused across every experimen
 the same task so embedding models are scored on identical resamples; the caller is
 responsible for generating and supplying that matrix.
 
-For binary classification tasks (solubility, binding, active_sites, binding_site,
-ec_number, etc.) the fast path is used automatically: TP/FP/FN/TN counts are
-pre-aggregated once per payload, making each replicate O(N) integer arithmetic
-instead of a full sklearn call. The result is mathematically identical to the
-generic path but ~100x faster on large 2D arrays.
+Metrics that reduce to a sum of precomputed per-row values (classification's
+accuracy/precision/recall/f1 via TP/FP/FN/TN counts; regression's mae/rmse via
+per-row error sums) are evaluated for all replicates in one vectorized NumPy call
+instead of a Python loop calling the metric function once per replicate — the
+per-row values are summed once per replicate via `stats[indices].sum(axis=1)`,
+then combined into the final metric. r2 and kendall_tau cannot be reduced this
+way: r2's sum-of-squares-total depends on the resample's own mean (not a fixed
+global value), and kendall_tau depends on the pairwise rank order of whichever
+rows end up in a given resample — neither is a sum of independent per-row
+contributions, so both are recomputed directly on each replicate's resampled
+values. The caller passes `task_type` explicitly; it is never inferred from the
+numeric range of the data (a normalized regression target living in [0, 1] would
+be indistinguishable from binary labels by value alone).
 """
 
 from __future__ import annotations
@@ -69,27 +77,8 @@ def summarise_replicates(
 
 
 # ---------------------------------------------------------------------------
-# Fast path — binary classification (solubility, binding, active_sites, etc.)
+# Additive path — classification (accuracy/precision/recall/f1 from TP/FP/FN/TN)
 # ---------------------------------------------------------------------------
-
-def _is_binary_classification(payload: PredictionPayload) -> bool:
-    """Return True when labels are binary {0,1} and the fast path can be used."""
-    y = payload.y_true
-    p = payload.predictions
-    if y.size == 0 or p.size == 0:
-        return False
-    if np.issubdtype(y.dtype, np.floating):
-        y_max, y_min = float(np.nanmax(y)), float(np.nanmin(y))
-    else:
-        y_max, y_min = float(y.max()), float(y.min())
-    if np.issubdtype(p.dtype, np.floating):
-        p_max, p_min = float(np.nanmax(p)), float(np.nanmin(p))
-    else:
-        p_max, p_min = float(p.max()), float(p.min())
-    if not all(np.isfinite(v) for v in (y_max, y_min, p_max, p_min)):
-        return False
-    return y_max <= 1.5 and p_max <= 1.5 and y_min >= -0.5 and p_min >= -0.5
-
 
 def _precompute_binary_counts(payload: PredictionPayload) -> np.ndarray:
     """Aggregate per-row [TP, FP, FN, TN] counts — computed once before the loop.
@@ -126,11 +115,11 @@ def _precompute_binary_counts(payload: PredictionPayload) -> np.ndarray:
     return np.stack([tp, fp, fn, tn], axis=1)
 
 
-def _bootstrap_binary_fast(
+def _bootstrap_classification_counts(
     counts: np.ndarray,
     indices: np.ndarray,
 ) -> dict[str, np.ndarray]:
-    """Compute classification metrics per replicate from pre-aggregated counts."""
+    """Compute accuracy/precision/recall/f1 per replicate from pre-aggregated counts."""
     totals = counts[indices].sum(axis=1, dtype=np.int64)
     tp = totals[:, 0].astype(np.float64)
     fp = totals[:, 1].astype(np.float64)
@@ -151,10 +140,68 @@ def _bootstrap_binary_fast(
 
 
 # ---------------------------------------------------------------------------
-# Generic path — regression and multi-class classification
+# Additive path — regression (mae/rmse from per-row error sums)
 # ---------------------------------------------------------------------------
 
-def _bootstrap_generic(
+_ADDITIVE_REGRESSION_METRICS = {"mae", "rmse"}
+
+
+def _precompute_regression_errors(payload: PredictionPayload) -> np.ndarray:
+    """Aggregate per-row [n_valid, sum_abs_error, sum_sq_error] — computed once before the loop.
+
+    mae/rmse are masked, flattened means (see metrics_registry._flatten_known):
+    summing these three per-row totals across a resampled set of rows and dividing
+    reproduces that same masked mean exactly, for any set of resampled rows.
+    """
+    y = np.asarray(payload.y_true, dtype=np.float64)
+    p = np.asarray(payload.predictions, dtype=np.float64)
+    m = payload.target_mask
+
+    valid = np.asarray(m, dtype=bool) if m is not None else np.ones(y.shape, dtype=bool)
+    valid &= np.isfinite(y) & np.isfinite(p)
+
+    abs_err = np.where(valid, np.abs(p - y), 0.0)
+    sq_err = np.where(valid, (p - y) ** 2, 0.0)
+
+    if y.ndim == 1:
+        n_valid = valid.astype(np.float64)
+        sum_abs = abs_err
+        sum_sq = sq_err
+    else:
+        axes = tuple(range(1, y.ndim))
+        n_valid = valid.sum(axis=axes, dtype=np.float64)
+        sum_abs = abs_err.sum(axis=axes)
+        sum_sq = sq_err.sum(axis=axes)
+
+    return np.stack([n_valid, sum_abs, sum_sq], axis=1)
+
+
+def _bootstrap_additive_regression(
+    stats: np.ndarray,
+    indices: np.ndarray,
+    metric_names: set[str],
+) -> dict[str, np.ndarray]:
+    """Compute mae/rmse per replicate from pre-aggregated per-row error sums."""
+    totals = stats[indices].sum(axis=1)
+    n_valid = totals[:, 0]
+    sum_abs = totals[:, 1]
+    sum_sq = totals[:, 2]
+    safe_n = np.where(n_valid > 0, n_valid, 1.0)
+
+    out: dict[str, np.ndarray] = {}
+    if "mae" in metric_names:
+        out["mae"] = np.where(n_valid > 0, sum_abs / safe_n, np.nan)
+    if "rmse" in metric_names:
+        out["rmse"] = np.where(n_valid > 0, np.sqrt(sum_sq / safe_n), np.nan)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Per-replicate path — r2 and kendall_tau, recomputed on each replicate's
+# actual resampled values (not reducible to summed per-row statistics)
+# ---------------------------------------------------------------------------
+
+def _bootstrap_per_replicate(
     payload: PredictionPayload,
     indices: np.ndarray,
     metric_set: dict[str, MetricFn],
@@ -185,14 +232,24 @@ def bootstrap_replicates(
     payload: PredictionPayload,
     indices: np.ndarray,
     metric_set: dict[str, MetricFn],
+    task_type: str,
 ) -> dict[str, np.ndarray]:
-    """Compute bootstrap replicates, auto-selecting fast or generic path.
+    """Compute bootstrap replicates for every metric in metric_set.
 
-    Binary classification payloads (labels in {0,1}) use pre-aggregated
-    TP/FP/FN/TN counts for ~100x speedup. All other tasks use the generic path.
-    Returns one float64 array of length n_replicates per metric.
+    task_type selects the path — it is the caller's already-known task type
+    (e.g. from hparams.json), never guessed from the data itself.
     """
-    if _is_binary_classification(payload):
+    if task_type == "classification":
         counts = _precompute_binary_counts(payload)
-        return _bootstrap_binary_fast(counts, indices)
-    return _bootstrap_generic(payload, indices, metric_set)
+        return _bootstrap_classification_counts(counts, indices)
+
+    out: dict[str, np.ndarray] = {}
+    additive_names = _ADDITIVE_REGRESSION_METRICS & metric_set.keys()
+    if additive_names:
+        stats = _precompute_regression_errors(payload)
+        out.update(_bootstrap_additive_regression(stats, indices, additive_names))
+
+    remaining = {name: fn for name, fn in metric_set.items() if name not in additive_names}
+    if remaining:
+        out.update(_bootstrap_per_replicate(payload, indices, remaining))
+    return out

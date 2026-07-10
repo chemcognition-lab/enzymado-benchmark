@@ -1,14 +1,18 @@
-#!/usr/bin/env bash 
-# Prepare FASTA inputs and generate the embedding batch script from the card.
+#!/usr/bin/env bash
+# Prepare the deduplicated FASTA and generate the embedding batch script.
 # Run this helper from the repository root.
 
-# Generate FASTA files from the benchmark card.
-python ../data_prep/make_fasta_from_card.py \
-      --card ../benchmark_card.json
+# 1) Rebuild the canonical unique-sequence index from processed datasets.
+python ../data_prep/concat_unique_protein_sequences.py \
+      --output ../data/processed/protein_sequences_unique.csv
 
-# Generate the embedding run script and optionally update the card metadata.
-python ../embeddings/generate_embedding_sh_from_card.py \
-      --card ../benchmark_card.json \
+# 2) Build one deduplicated FASTA from that index.
+python ../data_prep/make_fasta_from_unique_sequences.py \
+      --input ../data/processed/protein_sequences_unique.csv \
+      --output ../data/fastas/protein_sequences_unique.fasta
+
+# 3) Generate the embedding run script (one model run over the whole FASTA).
+python ../embeddings/generate_embedding_sh.py \
+      --fasta ../data/fastas/protein_sequences_unique.fasta \
       --output_sh ../scripts/run_embeddings.sh \
-      --update_card
-
+      --git_root ..

@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .loaders import derive_task_type, read_hparams, read_metrics
+
 POOL_TYPES = {"attention", "no_attention"}
 
 
@@ -30,14 +32,15 @@ class Experiment:
     run_dir: Path
 
     def task_type(self) -> str | None:
-        """Read task_type from the run's metrics.json if present."""
-        path = self.run_dir / "metrics.json"
-        if not path.exists():
-            return None
-        try:
-            md = json.loads(path.read_text())
-        except json.JSONDecodeError:
-            return None
+        """Infer task_type, preferring hparams.json (written immediately after training).
+
+        Falls back to metrics.json for older runs whose hparams.json predates the
+        task_config block.
+        """
+        task_type = derive_task_type(read_hparams(self.run_dir))
+        if task_type is not None:
+            return task_type
+        md = read_metrics(self.run_dir)
         for split in ("test", "val", "train"):
             block = md.get(split)
             if isinstance(block, dict) and "task_type" in block:

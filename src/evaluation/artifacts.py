@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import fcntl
 import json
 import lzma
 from pathlib import Path
@@ -72,7 +71,7 @@ def make_safetensors_predictions_file(
     return path
 
 
-def save_prediction_artifacts(
+def save_raw_predictions(
     y_true,
     pred,
     target_mask,
@@ -83,9 +82,13 @@ def save_prediction_artifacts(
     model_name: str,
     split_variant: str,
     split_name: str,
-    task_type: str,
-) -> tuple[Path, dict[str, Any]]:
-    """Persist safetensors predictions and compute metrics for one split."""
+) -> Path:
+    """Persist one split's raw predictions as safetensors.
+
+    Training only writes raw predictions; metrics.json is computed later by
+    scripts/results/compute_metrics.py reading these files plus hparams.json,
+    not inline during training.
+    """
     prediction_path = build_prediction_artifact_path(
         run_dir,
         task_name=task_name,
@@ -94,7 +97,7 @@ def save_prediction_artifacts(
         split_variant=split_variant,
         split_name=split_name,
     )
-    prediction_path = make_safetensors_predictions_file(
+    return make_safetensors_predictions_file(
         y_true,
         pred,
         run_dir,
@@ -102,8 +105,6 @@ def save_prediction_artifacts(
         target_mask,
         artifact_path=prediction_path,
     )
-    metrics = evaluate_predictions(y_true, pred, task_type, target_mask, split=split_name)
-    return prediction_path, metrics
 
 
 def _json_ready(value):
@@ -359,20 +360,6 @@ def write_json(data: dict, path):
         json.dump(data, f, indent=4)
 
 
-def update_card_locked(card_path: Path, task_name: str, result_key: str, result_entry: dict):
-    """Thread/process-safe update of a single result entry in the benchmark card."""
-    lock_path = card_path.with_suffix(".lock")
-    with open(lock_path, "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        try:
-            card = read_json(card_path)
-            card["properties"][task_name].setdefault("training_results", {})
-            card["properties"][task_name]["training_results"][result_key] = result_entry
-            write_json(card, card_path)
-        finally:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
-
-
 __all__ = [
     "evaluate_predictions",
     "make_result_entry",
@@ -380,8 +367,7 @@ __all__ = [
     "read_json",
     "save_model",
     "save_model_safetensors",
-    "save_prediction_artifacts",
-    "update_card_locked",
+    "save_raw_predictions",
     "write_hparams_file",
     "write_metrics_file",
     "write_training_log_file",

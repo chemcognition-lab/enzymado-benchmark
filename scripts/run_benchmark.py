@@ -33,9 +33,8 @@ from evaluation.artifacts import (
     read_json,
     save_model,
     save_model_safetensors,
-    save_prediction_artifacts,
+    save_raw_predictions,
     write_hparams_file,
-    write_metrics_file,
     write_training_log_file,
 )
 from evaluation.results_layout import (
@@ -75,19 +74,17 @@ def save_split_predictions(
     emb_name: str,
     model_name: str,
     split_variant: str,
-    task_type: str,
     use_validation: bool,
-) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
-    """Save predictions and compute metrics for each split."""
+) -> dict[str, Path]:
+    """Save raw predictions for each split. Metrics are computed later by evaluation."""
     split_payloads = [("train", outputs.y_train, outputs.pred_train, outputs.target_mask_train)]
     if use_validation:
         split_payloads.append(("val", outputs.y_val, outputs.pred_val, outputs.target_mask_val))
     split_payloads.append(("test", outputs.y_test, outputs.pred_test, outputs.target_mask_test))
 
     saved_paths: dict[str, Path] = {}
-    metrics_by_split: dict[str, dict[str, Any]] = {}
     for split_name, y_true, pred, target_mask in split_payloads:
-        prediction_path, metrics = save_prediction_artifacts(
+        saved_paths[split_name] = save_raw_predictions(
             y_true,
             pred,
             target_mask,
@@ -97,11 +94,8 @@ def save_split_predictions(
             model_name=model_name,
             split_variant=split_variant,
             split_name=split_name,
-            task_type=task_type,
         )
-        saved_paths[split_name] = prediction_path
-        metrics_by_split[split_name] = metrics
-    return saved_paths, metrics_by_split
+    return saved_paths
 
 
 def save_residue_predictions(
@@ -115,9 +109,8 @@ def save_residue_predictions(
     emb_name: str,
     model_name: str,
     split_variant: str,
-    task_type: str,
-) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
-    """Generate and save residue predictions split-by-split to manage memory."""
+) -> dict[str, Path]:
+    """Generate and save raw residue predictions split-by-split to manage memory."""
     split_jobs = [
         ("train", prepared.train_bundle, trained_payload.loaders.train_predict_loader),
         ("test", prepared.test_bundle, trained_payload.loaders.test_loader),
@@ -126,12 +119,11 @@ def save_residue_predictions(
         split_jobs.insert(1, ("val", prepared.val_bundle, trained_payload.loaders.val_loader))
 
     saved_paths: dict[str, Path] = {}
-    metrics_by_split: dict[str, dict[str, Any]] = {}
     for split_name, bundle, loader in split_jobs:
         log(f"      Predicting/saving split='{split_name}'...")
         y_true, target_mask = get_target_payload(bundle)
         pred = trained_payload.trained.predict_loader(loader, batch_kind=config.batch_kind)
-        prediction_path, metrics = save_prediction_artifacts(
+        saved_paths[split_name] = save_raw_predictions(
             y_true,
             pred,
             target_mask,
@@ -141,13 +133,10 @@ def save_residue_predictions(
             model_name=model_name,
             split_variant=split_variant,
             split_name=split_name,
-            task_type=task_type,
         )
-        saved_paths[split_name] = prediction_path
-        metrics_by_split[split_name] = metrics
         del y_true, target_mask, pred
         gc.collect()
-    return saved_paths, metrics_by_split
+    return saved_paths
 
 
 def run_model(
@@ -162,9 +151,8 @@ def run_model(
     run_dir: Path,
     task_name: str,
     split_variant: str,
-    task_type: str,
 ) -> SavedModelRun:
-    """Train one model and generate/save predictions for all splits."""
+    """Train one model and generate/save raw predictions for all splits."""
     trained_payload = route.train(
         model_name=model_name,
         emb_name=emb_name,
@@ -181,13 +169,12 @@ def run_model(
         emb_name=emb_name,
         model_name=model_name,
         split_variant=split_variant,
-        task_type=task_type,
         use_validation=use_validation,
     )
 
     if route.name == "residue":
         log("      Predicting and saving residue outputs split-by-split...")
-        prediction_paths, metrics_by_split = save_residue_predictions(
+        prediction_paths = save_residue_predictions(
             trained_payload,
             prepared=prepared,
             use_validation=use_validation,
@@ -219,7 +206,7 @@ def run_model(
             use_validation,
             config.batch_kind,
         )
-        prediction_paths, metrics_by_split = save_split_predictions(outputs, **save_kwargs)
+        prediction_paths = save_split_predictions(outputs, **save_kwargs)
         trained = outputs.trained
 
     else:  # GlobalRoute
@@ -235,13 +222,12 @@ def run_model(
             use_validation,
             m_tr, m_va, m_te,
         )
-        prediction_paths, metrics_by_split = save_split_predictions(outputs, **save_kwargs)
+        prediction_paths = save_split_predictions(outputs, **save_kwargs)
         trained = outputs.trained
 
     return SavedModelRun(
         trained=trained,
         prediction_paths=prediction_paths,
-        metrics_by_split=metrics_by_split,
     )
 
 
@@ -420,10 +406,8 @@ def _run_task(
                 run_dir=run_dir,
                 task_name=task_name,
                 split_variant=split_variant,
-                task_type=task_type,
             )
             trained = saved_run.trained
-            write_metrics_file(run_dir, saved_run.metrics_by_split)
             write_training_log_file(trained, run_dir)
 
             canonical_model_path = build_model_artifact_path(

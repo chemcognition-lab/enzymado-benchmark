@@ -9,9 +9,10 @@ from unittest import TestCase
 import numpy as np
 
 from src.evaluation.bootstrap import (
-    _bootstrap_binary_fast,
-    _is_binary_classification,
+    _bootstrap_additive_regression,
+    _bootstrap_classification_counts,
     _precompute_binary_counts,
+    _precompute_regression_errors,
     bootstrap_replicates,
     make_resample_indices,
     n_resample_units,
@@ -24,13 +25,14 @@ from src.evaluation.discover import (
     discover_experiments,
     group_into_tracks,
 )
-from src.evaluation.loaders import PredictionPayload
+from src.evaluation.loaders import PredictionPayload, derive_task_type
 from src.evaluation.metrics_registry import (
     classification_f1,
     higher_is_better_for,
     metric_set_for,
     primary_metric_for,
     regression_mae,
+    regression_rmse,
 )
 from src.evaluation.rating_lib import (
     determine_outcome_aggregate,
@@ -76,11 +78,21 @@ class TestBootstrap(TestCase):
         p = y + 0.5
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
         idx = make_resample_indices(20, 8, seed=0)
-        out = bootstrap_replicates(payload, idx, metric_set_for("regression"))
+        out = bootstrap_replicates(payload, idx, metric_set_for("regression"), "regression")
         self.assertEqual(set(out.keys()), {"mae", "rmse", "r2", "kendall_tau"})
         self.assertEqual(out["mae"].shape, (8,))
         # Predictions are y + 0.5 → mae across any resample = 0.5
         np.testing.assert_allclose(out["mae"], 0.5, rtol=1e-6)
+
+    def test_bootstrap_regression_task_type_not_misdetected_from_value_range(self) -> None:
+        """A [0, 1]-scaled regression target must not be routed to classification metrics."""
+        rng = np.random.default_rng(3)
+        y = rng.random(30).astype(np.float32)
+        p = y + rng.normal(0, 0.05, 30).astype(np.float32)
+        payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
+        idx = make_resample_indices(30, 10, seed=0)
+        out = bootstrap_replicates(payload, idx, metric_set_for("regression"), "regression")
+        self.assertEqual(set(out.keys()), {"mae", "rmse", "r2", "kendall_tau"})
 
     def test_bootstrap_per_residue_uses_protein_unit(self) -> None:
         rng = np.random.default_rng(0)
@@ -94,7 +106,7 @@ class TestBootstrap(TestCase):
         self.assertEqual(n_resample_units(payload), n_proteins)
 
         idx = make_resample_indices(n_proteins, 50, seed=1)
-        out = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        out = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
         # Across replicates the F1 should vary (some samples include only good proteins).
         self.assertGreater(out["f1"].std(), 0.0)
 
@@ -142,15 +154,28 @@ class TestLoaders(TestCase):
         flat = {"y_true": np.zeros((2, 3)), "predictions": np.zeros((2, 3))}
         self.assertIsNone(_unify_multi_head_levels(flat))
 
+    def test_derive_task_type_from_hparams(self) -> None:
+        self.assertEqual(
+            derive_task_type({"task_config": {"label_kind": "binary"}}), "classification"
+        )
+        self.assertEqual(
+            derive_task_type({"task_config": {"label_kind": "scalar_regression"}}), "regression"
+        )
+        self.assertIsNone(derive_task_type({}))
+        self.assertIsNone(derive_task_type({"task_config": {}}))
 
-class TestBootstrapFast(TestCase):
-    def _assert_metrics_match(self, generic: dict, fast: dict, atol: float = 1e-12) -> None:
+
+class TestBootstrapClassificationCounts(TestCase):
+    """The additive classification path (TP/FP/FN/TN counts) must match a direct,
+    per-replicate call to the metric functions themselves."""
+
+    def _assert_metrics_match(self, direct: dict, additive: dict, atol: float = 1e-12) -> None:
         for name in ("accuracy", "precision", "recall", "f1"):
             np.testing.assert_allclose(
-                fast[name], generic[name], atol=atol, err_msg=f"{name} mismatch"
+                additive[name], direct[name], atol=atol, err_msg=f"{name} mismatch"
             )
 
-    def test_fast_path_matches_generic_for_1d_binary(self) -> None:
+    def test_additive_path_matches_direct_for_1d_binary(self) -> None:
         rng = np.random.default_rng(0)
         n = 80
         y = (rng.random(n) > 0.5).astype(np.float32)
@@ -159,12 +184,12 @@ class TestBootstrapFast(TestCase):
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
 
         idx = make_resample_indices(n, 30, seed=42)
-        generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        direct = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
         counts = _precompute_binary_counts(payload)
-        fast = _bootstrap_binary_fast(counts, idx)
-        self._assert_metrics_match(generic, fast)
+        additive = _bootstrap_classification_counts(counts, idx)
+        self._assert_metrics_match(direct, additive)
 
-    def test_fast_path_matches_generic_for_per_residue(self) -> None:
+    def test_additive_path_matches_direct_for_per_residue(self) -> None:
         rng = np.random.default_rng(1)
         n_proteins, max_len = 25, 12
         y = (rng.random((n_proteins, max_len)) > 0.6).astype(np.float32)
@@ -177,12 +202,12 @@ class TestBootstrapFast(TestCase):
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
 
         idx = make_resample_indices(n_proteins, 50, seed=7)
-        generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        direct = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
         counts = _precompute_binary_counts(payload)
-        fast = _bootstrap_binary_fast(counts, idx)
-        self._assert_metrics_match(generic, fast)
+        additive = _bootstrap_classification_counts(counts, idx)
+        self._assert_metrics_match(direct, additive)
 
-    def test_fast_path_matches_generic_for_multilabel(self) -> None:
+    def test_additive_path_matches_direct_for_multilabel(self) -> None:
         rng = np.random.default_rng(2)
         n_rows, n_cols = 40, 6
         y = (rng.random((n_rows, n_cols)) > 0.7).astype(np.float32)
@@ -191,25 +216,55 @@ class TestBootstrapFast(TestCase):
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
 
         idx = make_resample_indices(n_rows, 40, seed=3)
-        generic = bootstrap_replicates(payload, idx, metric_set_for("classification"))
+        direct = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
         counts = _precompute_binary_counts(payload)
-        fast = _bootstrap_binary_fast(counts, idx)
-        self._assert_metrics_match(generic, fast)
+        additive = _bootstrap_classification_counts(counts, idx)
+        self._assert_metrics_match(direct, additive)
 
-    def test_eligibility_detection(self) -> None:
-        binary = PredictionPayload(
-            y_true=np.array([0.0, 1.0, 0.0]),
-            predictions=np.array([1.0, 1.0, 0.0]),
-            target_mask=None,
-        )
-        self.assertTrue(_is_binary_classification(binary))
 
-        multiclass = PredictionPayload(
-            y_true=np.array([0.0, 1.0, 2.0]),
-            predictions=np.array([1.0, 1.0, 2.0]),
-            target_mask=None,
-        )
-        self.assertFalse(_is_binary_classification(multiclass))
+class TestBootstrapAdditiveRegression(TestCase):
+    """The additive regression path (mae/rmse from per-row error sums) must match a
+    direct, per-replicate call to regression_mae/regression_rmse themselves."""
+
+    def _direct_mae_rmse(self, payload: PredictionPayload, idx: np.ndarray) -> dict[str, np.ndarray]:
+        out = {"mae": np.empty(idx.shape[0]), "rmse": np.empty(idx.shape[0])}
+        for r, row in enumerate(idx):
+            y = payload.y_true[row]
+            p = payload.predictions[row]
+            m = payload.target_mask[row] if payload.target_mask is not None else None
+            out["mae"][r] = regression_mae(y, p, m)
+            out["rmse"][r] = regression_rmse(y, p, m)
+        return out
+
+    def test_additive_path_matches_direct_for_1d_with_mask(self) -> None:
+        rng = np.random.default_rng(4)
+        n = 60
+        y = rng.random(n).astype(np.float32)
+        p = y + rng.normal(0, 0.1, n).astype(np.float32)
+        mask = rng.random(n) > 0.2
+        payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
+
+        idx = make_resample_indices(n, 25, seed=11)
+        direct = self._direct_mae_rmse(payload, idx)
+        stats = _precompute_regression_errors(payload)
+        additive = _bootstrap_additive_regression(stats, idx, {"mae", "rmse"})
+        np.testing.assert_allclose(additive["mae"], direct["mae"], atol=1e-6)
+        np.testing.assert_allclose(additive["rmse"], direct["rmse"], atol=1e-6)
+
+    def test_additive_path_matches_direct_for_per_residue_with_mask(self) -> None:
+        rng = np.random.default_rng(5)
+        n_proteins, max_len = 18, 9
+        y = rng.random((n_proteins, max_len)).astype(np.float32)
+        p = y + rng.normal(0, 0.1, (n_proteins, max_len)).astype(np.float32)
+        mask = rng.random((n_proteins, max_len)) > 0.15
+        payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
+
+        idx = make_resample_indices(n_proteins, 20, seed=13)
+        direct = self._direct_mae_rmse(payload, idx)
+        stats = _precompute_regression_errors(payload)
+        additive = _bootstrap_additive_regression(stats, idx, {"mae", "rmse"})
+        np.testing.assert_allclose(additive["mae"], direct["mae"], atol=1e-6)
+        np.testing.assert_allclose(additive["rmse"], direct["rmse"], atol=1e-6)
 
 
 class TestDiscover(TestCase):
@@ -242,6 +297,33 @@ class TestDiscover(TestCase):
         self.assertEqual(assign_track(e_residue, rc), "no_attention")
         self.assertEqual(assign_track(e_attn, rc), "attention")
         self.assertEqual(assign_track(e_real, rc), "real_case")
+
+    def test_experiment_task_type_prefers_hparams_over_metrics(self) -> None:
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "hparams.json").write_text(
+                json.dumps({"task_config": {"label_kind": "binary"}})
+            )
+            (run_dir / "metrics.json").write_text(
+                json.dumps({"test": {"task_type": "regression"}})
+            )
+            exp = Experiment("no_attention", "random", "linear", "binding", "ankh_base", run_dir)
+            self.assertEqual(exp.task_type(), "classification")
+
+    def test_experiment_task_type_falls_back_to_metrics_json(self) -> None:
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "metrics.json").write_text(
+                json.dumps({"test": {"task_type": "regression"}})
+            )
+            exp = Experiment("no_attention", "random", "linear", "binding", "ankh_base", run_dir)
+            self.assertEqual(exp.task_type(), "regression")
 
     def test_group_into_tracks_buckets_by_split_and_family(self) -> None:
         exps = [
