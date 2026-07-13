@@ -1,0 +1,54 @@
+---
+id: {{ card_id }}
+type: split
+title: "{{ content.display_name or title }}"
+split_family: {{ split_family }}
+tags: [data-split, {{ split_id }}, generalization]
+aliases: ["{{ split_id }}"{% if split_family != split_id %}, "{{ split_family }}"{% endif %}]
+---
+
+# {{ content.display_name or title }} — data-split card
+
+> {{ content.summary or '_TODO: one-line summary._' }}
+
+- **Split id (this benchmark):** `{{ split_id }}`{% if split_family != split_id %} (recorded as `{{ split_family }}` in results){% endif %}
+
+## How this split is constructed
+
+{{ content.methodology or '_TODO: methodology._' }}
+
+## Generalization gap (auto — random vs similarity, `properties` tasks)
+
+Mean held-out primary metric across all foundation models and heads. The
+similarity (MMseqs2) split holds out homologous clusters, so it is the harder,
+more realistic estimate of generalization to novel sequences.
+
+{% if gap_rows %}
+| Task | Primary metric | Random | Similarity | Similarity harder by |
+|---|---|---|---|---|
+{% for r in gap_rows %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.random }} | {{ r.similarity }} | {{ r.harder_by }} |
+{% endfor %}
+
+_"Harder by" is sign-adjusted: positive means the similarity split scores worse.
+real_case tasks are random-only and excluded._
+{% else %}
+_No comparable results found in `results_card.json`._
+{% endif %}
+
+## When to use
+
+{{ content.when_to_use or '_TODO_' }}
+
+## Caveats
+
+{{ content.caveats or '_TODO_' }}
+
+## References
+{% if content.citations %}
+{% for c in content.citations %}
+- {{ c.authors }} ({{ c.year }}). *{{ c.title }}*.{% if c.venue %} {{ c.venue }}.{% endif %}{% if c.url %} <{{ c.url }}>{% endif %}
+{% endfor %}
+{% else %}
+No external reference — this split is a methodology defined in the benchmark's `src/dataset_splitting.py`.
+{% endif %}

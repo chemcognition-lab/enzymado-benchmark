@@ -1,0 +1,92 @@
+---
+id: {{ card_id }}
+type: baseline
+title: "{{ content.display_name or title }}"
+embedding_mode: {{ embedding_mode }}
+model_family: {{ model_family }}
+tags: [baseline, prediction-head, {{ embedding_mode|replace('_', '-') }}, {{ model_family }}]
+aliases: ["{{ baseline_id }}"]
+---
+
+# {{ content.display_name or title }} — baseline / prediction-head card
+
+> {{ content.summary or '_TODO: one-line summary._' }}
+
+- **Embedding mode:** `{{ embedding_mode }}` ({{ 'learned attention pooling' if embedding_mode == 'attention' else 'fixed masked mean pooling' }})
+- **Model family:** `{{ model_family }}`
+
+## What it is
+
+{{ content.algorithm or '_TODO: algorithm description._' }}
+
+- **Loss:** {{ content.loss or 'TODO' }}
+- **Pooling of residue embeddings:** {{ content.pooling or 'TODO' }}
+
+## Hyperparameters (auto-generated from `results_card.json`)
+
+These are the exact parameters recorded for the runs of this head. Structured
+tasks (EC multi-label, per-residue) use their own variants.
+
+{% if param_variants %}
+{% for v in param_variants %}
+**`{{ v.model_name }}`** — {{ v.note }} _(e.g. {{ v.example_task }})_
+
+```json
+{{ v.params_json }}
+```
+
+{% endfor %}
+{% else %}
+_No runs for this head found in `results_card.json`._
+{% endif %}
+
+{% if content.hyperparameter_notes %}
+{{ content.hyperparameter_notes }}
+{% endif %}
+
+{% if content.doc_refs %}
+## Documentation references
+
+{% for d in content.doc_refs %}
+- [{{ d.name }}]({{ d.url }})
+{% endfor %}
+{% endif %}
+
+## Benchmark standing (auto — mean/best test score across the {{ n_models }} models)
+
+{% if table_random %}
+### Random split
+
+| Task | Primary metric | Mean over models | Best | Models |
+|---|---|---|---|---|
+{% for r in table_random %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.mean }} | {{ r.best }} | {{ r.n_models }} |
+{% endfor %}
+{% endif %}
+{% if table_similarity %}
+
+### Similarity split
+
+| Task | Primary metric | Mean over models | Best | Models |
+|---|---|---|---|---|
+{% for r in table_similarity %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.mean }} | {{ r.best }} | {{ r.n_models }} |
+{% endfor %}
+{% endif %}
+
+## When to use
+
+{{ content.when_to_use or '_TODO_' }}
+
+## Caveats
+
+{{ content.caveats or '_TODO_' }}
+
+## References
+{% if content.citations %}
+{% for c in content.citations %}
+- {{ c.authors }} ({{ c.year }}). *{{ c.title }}*.{% if c.venue %} {{ c.venue }}.{% endif %}{% if c.url %} <{{ c.url }}>{% endif %}
+{% endfor %}
+{% else %}
+_TODO: add citations / doc links._
+{% endif %}

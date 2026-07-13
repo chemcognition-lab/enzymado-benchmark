@@ -1,0 +1,110 @@
+---
+id: {{ card_id }}
+type: foundation_model
+title: "{{ content.display_name or emb }}"
+family: "{{ content.family or 'TODO' }}"
+embedding_dim: {{ dim }}
+tags: [foundation-model, protein-language-model{% if content.family %}, {{ content.family|lower|replace(' ', '-') }}{% endif %}]
+aliases: ["{{ emb }}"]
+---
+
+# {{ content.display_name or emb }} — foundation model card
+
+> {{ content.summary or '_TODO: one-line summary._' }}
+{% if content.needs_verification %}
+>
+> ⚠️ **Needs verification:** some specifics below are best-effort for this recent / thin-source model.
+{% endif %}
+
+## At a glance
+
+| Field | Value |
+|---|---|
+| Benchmark model key | `{{ emb }}` |
+| Family | {{ content.family or 'TODO' }} |
+| Developer | {{ content.developer or 'TODO' }} |
+| Parameters | {{ content.parameters or 'TODO' }} |
+| Embedding dimension | **{{ dim }}** |
+| Context length | {{ content.context_length or 'TODO' }} |
+| HuggingFace | {% if content.hf_repo %}`{{ content.hf_repo }}`{% else %}TODO{% endif %} |
+
+## Architecture & pretraining
+
+{{ content.architecture or '_TODO: architecture summary._' }}
+
+- **Pretraining data:** {{ content.pretraining_data or 'TODO' }}
+- **Pretraining objective:** {{ content.pretraining_objective or 'TODO' }}
+{% if content.key_innovations %}
+
+**Key ideas:**
+{% for k in content.key_innovations %}
+- {{ k }}
+{% endfor %}
+{% endif %}
+
+## How its embeddings are used in this benchmark
+
+Embeddings are precomputed once over the deduplicated protein pool and stored as
+bfloat16 safetensors shards (1000 proteins each) under `{{ shard_path }}`.
+Per-residue representations are the model's `last_hidden_state` with special
+tokens stripped and non-standard residues (`U`, `Z`, `O`) remapped to `X`; each
+residue vector has dimension **{{ dim }}**. No-attention baselines mean-pool the
+residues into one vector; attention baselines learn the pooling instead (see the
+baseline cards).
+
+## Benchmark standing (auto-generated — refreshes when results change)
+
+Mean rank among the {{ n_models }} foundation models (1 = best), averaged over
+heads and tasks:
+
+{% if standing_rows %}
+| Track | Mean rank (of {{ n_models }}) | Groups averaged |
+|---|---|---|
+{% for r in standing_rows %}
+| {{ r.track }} | {{ r.mean_rank }} | {{ r.n }} |
+{% endfor %}
+{% else %}
+_No runs for this model found in `results_card.json`._
+{% endif %}
+
+{% if best_random %}
+### Best test score per task — random split
+
+| Task | Primary metric | Best score | Winning head |
+|---|---|---|---|
+{% for r in best_random %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.value }} | `{{ r.head }}` |
+{% endfor %}
+{% endif %}
+{% if best_similarity %}
+
+### Best test score per task — similarity split
+
+| Task | Primary metric | Best score | Winning head |
+|---|---|---|---|
+{% for r in best_similarity %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.value }} | `{{ r.head }}` |
+{% endfor %}
+{% endif %}
+
+> Scores are point estimates. Paired-bootstrap CIs and Bradley-Terry Elo ratings
+> are produced on the cluster (`compute_bootstrap_metrics.py` →
+> `compute_ratings.py`); regenerate this card once those artifacts are available
+> locally.
+
+## When to use
+
+{{ content.when_to_use or '_TODO_' }}
+
+## Caveats
+
+{{ content.caveats or '_TODO_' }}
+
+## References
+{% if content.citations %}
+{% for c in content.citations %}
+- {{ c.authors }} ({{ c.year }}). *{{ c.title }}*.{% if c.venue %} {{ c.venue }}.{% endif %}{% if c.url %} <{{ c.url }}>{% endif %}
+{% endfor %}
+{% else %}
+_TODO: add citations._
+{% endif %}
