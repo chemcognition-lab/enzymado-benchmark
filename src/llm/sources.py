@@ -16,6 +16,7 @@ These functions return plain dicts/lists that the Jinja templates render.
 """
 from __future__ import annotations
 
+import functools
 import importlib.util
 import json
 import sys
@@ -93,8 +94,13 @@ def _metric_conventions():
 # Static/manifest sources
 # ---------------------------------------------------------------------------
 
+@functools.lru_cache(maxsize=1)
 def load_models() -> dict[str, dict[str, Any]]:
-    """Foundation-model auto facts: embedding dim + shard path per model key."""
+    """Foundation-model auto facts: embedding dim + shard path per model key.
+
+    Cached: the manifest is read once per process. Treat the result as read-only
+    (it is shared across callers). A regenerated manifest requires a fresh process.
+    """
     data = json.loads(EMBEDDINGS_MANIFEST.read_text())
     return {
         key: {"dim": val["dim"], "shard_path": val["path"]}
@@ -148,11 +154,15 @@ def iter_raw_entries():
                             yield entry
 
 
+@functools.lru_cache(maxsize=1)
 def load_records() -> list[dict[str, Any]]:
     """Flatten results_card.json into tidy per-run records.
 
     Each record captures the identity of a run plus its held-out (test) primary
     metric, so downstream aggregations stay simple.
+
+    Cached: parsed once per process and shared across callers, which read but never
+    mutate the records. A regenerated results_card requires a fresh process.
     """
     primary_metric_for, higher_is_better_for = _metric_conventions()
     card = json.loads(RESULTS_CARD.read_text())

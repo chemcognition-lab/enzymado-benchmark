@@ -7,8 +7,8 @@ Two layers are merged per card:
 * the **authored layer** — web-verified prose + citations stored in
   ``content/<card_id>.json`` (never overwritten by this script).
 
-Run via the wrapper ``scripts/generate_rag_cards.py`` (which puts ``src`` on the
-path), or ``python -m rag_cards.render`` with ``src`` importable.
+Run via the wrapper ``scripts/generate_cards.py`` (which puts ``src`` on the
+path), or ``python -m llm.render`` with ``src`` importable.
 """
 from __future__ import annotations
 

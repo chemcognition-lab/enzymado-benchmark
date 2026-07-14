@@ -35,6 +35,12 @@ dependencies = [
 requires-python = ">=3.12,<3.14"
 
 [project.optional-dependencies]
+# Benchmark hypothesis engine + Streamlit UI (src/llm). Kept out of the base deps
+# so the torch-free card generator installs without the Gemini SDK / Streamlit.
+llm = [
+    "google-genai",
+    "streamlit",
+]
 # Cluster jobs currently use both Python 3.12 and 3.13 modules. Keep torch in
 # the extras so `uv sync --extra ...` creates runnable environments directly.
 train = [

@@ -1,4 +1,4 @@
-"""Tests for the RAG knowledge-base card generator (`rag_cards`).
+"""Tests for the RAG knowledge-base card generator (`llm` package).
 
 These are intentionally torch-free (they exercise only the base-env code path),
 mirroring how the generator sources everything from data_registry.py,
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from rag_cards import render, sources
+from llm import render, sources
 
 
 def _cards() -> dict[str, str]:
