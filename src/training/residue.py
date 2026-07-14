@@ -58,11 +58,19 @@ def build_residue_aware_loaders(
         log("      Using concatenated residue batches (sum of per-protein lengths per batch).")
         residue_collate_fn = ProteinResidueConcatCollator()
 
+    # xgb.QuantileDMatrix streams batches from this loader through a DataIter
+    # across multiple internal passes (one to build the quantile sketch, one
+    # to write the compressed histogram matrix) and requires reset() to replay
+    # the *same* batch sequence every pass. shuffle=True reshuffles on every
+    # fresh iter(), so the streaming XGBoost path (concat_residue_batch) would
+    # see a different batch grouping per pass and crash with
+    # `vector::_M_range_check`. Order doesn't affect XGBoost's global
+    # histogram/sketch construction, so disabling shuffle there is free.
     train_loader = get_dataloader(
         train_bundle,
         batch_size=residue_batch_size,
         collate_fn=residue_collate_fn,
-        shuffle=True,
+        shuffle=not model_info.get("concat_residue_batch", False),
         num_workers=num_workers,
     )
     train_predict_loader = get_dataloader(

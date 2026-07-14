@@ -5,6 +5,8 @@
 #SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=%x_%A_%a.out
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=josechemistry.qb@gmail.com
 
 set -euo pipefail
 
@@ -21,7 +23,6 @@ fi
 
 : "${CLUSTER_RUNTIME_ROOT:=${REPO}/.cluster_runtime}"
 : "${UV_LINK_MODE:=copy}"
-: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=0}"
 if [[ -z "${UV_CACHE_DIR:-}" || "${UV_CACHE_DIR}" == /scratch/* ]]; then
     UV_CACHE_DIR="${CLUSTER_RUNTIME_ROOT}/uv-cache"
 fi
@@ -41,17 +42,8 @@ export CLUSTER_RUNTIME_ROOT UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDI
 export PYTHONNOUSERSITE=1
 mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
 
-if [[ -z "${CARD_PATH:-}" ]]; then
-    if [[ -f "${REPO}/benchmark_card_attention.json" ]]; then
-        CARD_PATH="${REPO}/benchmark_card_attention.json"
-    else
-        CARD_PATH="${REPO}/benchmark_card.json"
-    fi
-fi
-if [[ -z "${RESULTS_CARD_PATH:-}" ]]; then
-    RESULTS_CARD_PATH="${REPO}/results_card.json"
-fi
 : "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
+: "${ATTENTION_EMBEDDINGS_JSON:=${EMBEDDINGS_JSON}}"
 : "${OUTPUT_DIR:=${REPO}/results/predictions}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
@@ -62,24 +54,18 @@ fi
 # on the exact same subset of IDs. Override with `COMMON_IDS_PATH= sbatch ...` to
 # disable, or point it elsewhere.
 : "${COMMON_IDS_PATH:=${REPO}/results/embedding_intersection/common_ids.txt}"
-: "${BATCH_SIZE:=16}"
-: "${EMBEDDING_STORAGE_FORMAT:=safetensors}"
+# This launcher trains attention-pooling models exclusively; restricting the
+# results embedding mode skips the redundant non-attention pass over the same
+# embeddings_json.
+: "${EMBEDDING_MODES:=attention}"
 : "${OVERWRITE_RESULTS:=0}"
 
-if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
-    echo "ERROR: AUTO_RELOCATE_EMBEDDINGS_JSON=1 is disabled for training jobs." >&2
-    echo "Jobs must read/write project paths, not generated scratch manifests." >&2
-    exit 1
-fi
-
-for _write_path in "${OUTPUT_DIR}" "${RESULTS_CARD_PATH}" "${CLUSTER_RUNTIME_ROOT}" "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"; do
+for _write_path in "${OUTPUT_DIR}" "${CLUSTER_RUNTIME_ROOT}" "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"; do
     if [[ "${_write_path}" == /scratch/* ]]; then
         echo "ERROR: training jobs may not write to scratch: ${_write_path}" >&2
         exit 1
     fi
 done
-
-export AUTO_RELOCATE_EMBEDDINGS_JSON
 
 EMB_MODELS=(
     ankh3_large
@@ -146,9 +132,8 @@ mkdir -p "${OUTPUT_DIR}"
 
 echo "Job host: $(hostname)"
 echo "Embedding model: ${EMBEDDING_NAME}"
-echo "Card path: ${CARD_PATH}"
-echo "Results card path: ${RESULTS_CARD_PATH}"
 echo "Embeddings json: ${EMBEDDINGS_JSON}"
+echo "Attention embeddings json: ${ATTENTION_EMBEDDINGS_JSON}"
 echo "Output dir: ${OUTPUT_DIR}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
     echo "Model prefix: ${MODEL_PREFIX}"
@@ -168,18 +153,16 @@ fi
 if [[ -n "${COMMON_IDS_PATH}" ]]; then
     echo "Allowed IDs: ${COMMON_IDS_PATH}"
 fi
-echo "Batch size: ${BATCH_SIZE}"
-echo "Embedding storage format: ${EMBEDDING_STORAGE_FORMAT}"
+if [[ -n "${EMBEDDING_MODES}" ]]; then
+    echo "Embedding modes: ${EMBEDDING_MODES}"
+fi
 echo "Overwrite results: ${OVERWRITE_RESULTS}"
 
 TRAIN_ARGS=(
-    "${CARD_PATH}"
     "${EMBEDDINGS_JSON}"
-    "${OUTPUT_DIR}"
+    --output_dir "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
-    --batch_size "${BATCH_SIZE}"
-    --results_card "${RESULTS_CARD_PATH}"
-    --embedding_storage_format "${EMBEDDING_STORAGE_FORMAT}"
+    --attention_embeddings_json "${ATTENTION_EMBEDDINGS_JSON}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
@@ -219,6 +202,15 @@ fi
 
 if [[ -n "${COMMON_IDS_PATH}" ]]; then
     TRAIN_ARGS+=(--allowed_ids "${COMMON_IDS_PATH}")
+fi
+
+if [[ -n "${EMBEDDING_MODES}" ]]; then
+    IFS=',' read -r -a _embedding_modes <<< "${EMBEDDING_MODES}"
+    for _embedding_mode in "${_embedding_modes[@]}"; do
+        if [[ -n "${_embedding_mode}" ]]; then
+            TRAIN_ARGS+=(--embedding_mode "${_embedding_mode}")
+        fi
+    done
 fi
 
 if [[ "${OVERWRITE_RESULTS}" == "1" || "${OVERWRITE_RESULTS}" == "true" || "${OVERWRITE_RESULTS}" == "TRUE" ]]; then

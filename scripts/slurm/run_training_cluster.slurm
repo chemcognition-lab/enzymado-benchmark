@@ -5,6 +5,8 @@
 #SBATCH --mem=200G
 #SBATCH --time=24:00:00
 #SBATCH --output=%x_%A_%a.out
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=josechemistry.qb@gmail.com
 
 set -euo pipefail
 
@@ -14,8 +16,8 @@ set -euo pipefail
 #   AIP_ACCOUNT="$(ls -d ~/projects/*/ | head -n 1 | sed 's|/$||' | sed 's|.*/||')"
 #   sbatch --account="$AIP_ACCOUNT" --array=0-13%2 scripts/run_training_cluster.slurm
 #   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMB_NAME=esm2_650M scripts/run_training_cluster.slurm
-#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions,RESULTS_CARD_PATH=${PWD}/results_card.json,MODEL_PREFIX=mlp_,EMBEDDING_MODES=mean scripts/run_training_cluster.slurm
-#   sbatch --account="$AIP_ACCOUNT" --export=ALL,MODEL_PREFIX=xgb_,EMBEDDING_MODES=mean,OVERWRITE_RESULTS=1 scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,EMBEDDINGS_JSON=${PWD}/embeddings_models_output_mean_pooled.json,OUTPUT_DIR=${PWD}/results/predictions,MODEL_PREFIX=mlp_,EMBEDDING_MODES=no_attention scripts/run_training_cluster.slurm
+#   sbatch --account="$AIP_ACCOUNT" --export=ALL,MODEL_PREFIX=xgb_,EMBEDDING_MODES=no_attention,OVERWRITE_RESULTS=1 scripts/run_training_cluster.slurm
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
@@ -30,7 +32,6 @@ fi
 
 : "${CLUSTER_RUNTIME_ROOT:=${REPO}/.cluster_runtime}"
 : "${UV_LINK_MODE:=copy}"
-: "${AUTO_RELOCATE_EMBEDDINGS_JSON:=0}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
 : "${TASK_SCOPES:=}"
@@ -41,7 +42,6 @@ fi
 # disable, or point it elsewhere.
 : "${COMMON_IDS_PATH:=${REPO}/results/embedding_intersection/common_ids.txt}"
 : "${RESIDUE_STORE_MODE:=auto}"
-: "${EMBEDDING_STORAGE_FORMAT:=safetensors}"
 : "${EMBEDDING_MODES:=}"
 : "${OVERWRITE_RESULTS:=0}"
 
@@ -65,32 +65,18 @@ export CLUSTER_RUNTIME_ROOT UV_CACHE_DIR HF_HOME TORCH_HOME XDG_CACHE_HOME TMPDI
 export PYTHONNOUSERSITE=1
 mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"
 
-if [[ -z "${CARD_PATH:-}" ]]; then
-    CARD_PATH="${REPO}/benchmark_card.json"
-fi
-if [[ -z "${RESULTS_CARD_PATH:-}" ]]; then
-    RESULTS_CARD_PATH="${REPO}/results_card.json"
-fi
-
 if [[ -z "${EMBEDDINGS_JSON:-}" ]]; then
     EMBEDDINGS_JSON="${REPO}/embeddings_models_output.json"
-fi
-if [[ "${AUTO_RELOCATE_EMBEDDINGS_JSON}" == "1" ]]; then
-    echo "ERROR: AUTO_RELOCATE_EMBEDDINGS_JSON=1 is disabled for training jobs." >&2
-    echo "Jobs must read/write project paths, not generated scratch manifests." >&2
-    exit 1
 fi
 
 : "${OUTPUT_DIR:=${REPO}/results/predictions}"
 
-for _write_path in "${OUTPUT_DIR}" "${RESULTS_CARD_PATH}" "${CLUSTER_RUNTIME_ROOT}" "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"; do
+for _write_path in "${OUTPUT_DIR}" "${CLUSTER_RUNTIME_ROOT}" "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"; do
     if [[ "${_write_path}" == /scratch/* ]]; then
         echo "ERROR: training jobs may not write to scratch: ${_write_path}" >&2
         exit 1
     fi
 done
-
-export AUTO_RELOCATE_EMBEDDINGS_JSON
 
 EMB_MODELS=(
     ankh3_large
@@ -157,8 +143,6 @@ mkdir -p "${OUTPUT_DIR}"
 
 echo "Job host: $(hostname)"
 echo "Embedding model: ${EMBEDDING_NAME}"
-echo "Card path: ${CARD_PATH}"
-echo "Results card path: ${RESULTS_CARD_PATH}"
 echo "Embeddings json: ${EMBEDDINGS_JSON}"
 echo "Output dir: ${OUTPUT_DIR}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
@@ -180,19 +164,15 @@ if [[ -n "${COMMON_IDS_PATH}" ]]; then
     echo "Allowed IDs: ${COMMON_IDS_PATH}"
 fi
 echo "Residue store mode: ${RESIDUE_STORE_MODE}"
-echo "Embedding storage format: ${EMBEDDING_STORAGE_FORMAT}"
 if [[ -n "${EMBEDDING_MODES}" ]]; then
     echo "Embedding modes: ${EMBEDDING_MODES}"
 fi
 echo "Overwrite results: ${OVERWRITE_RESULTS}"
 
 TRAIN_ARGS=(
-    "${CARD_PATH}"
     "${EMBEDDINGS_JSON}"
-    "${OUTPUT_DIR}"
+    --output_dir "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
-    --results_card "${RESULTS_CARD_PATH}"
-    --embedding_storage_format "${EMBEDDING_STORAGE_FORMAT}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then

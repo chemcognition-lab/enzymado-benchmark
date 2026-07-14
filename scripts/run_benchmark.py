@@ -177,7 +177,6 @@ def run_model(
         prediction_paths = save_residue_predictions(
             trained_payload,
             prepared=prepared,
-            use_validation=use_validation,
             config=config,
             **save_kwargs,
         )

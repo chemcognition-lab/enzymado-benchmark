@@ -270,11 +270,14 @@ def _residue_xgb_classifier_entry() -> dict:
             "subsample": 0.5,
             "colsample_bytree": 0.25,
             "max_bin": 64,
-            "n_jobs": -1,
-            # Force CPU for the streaming QuantileDMatrix path: XGBoost 3.x crashes
-            # with `vector::_M_range_check` when building a QuantileDMatrix from a
-            # CPU iterator while the booster targets cuda. CPU is plenty fast here
-            # (the per-batch sums dominate; binning to <=256 bins is cheap).
+            # Pin nthread to the actual cpus-per-task allocation rather than -1
+            # (auto-detect all host cores), since SLURM cgroups can confine the
+            # process to fewer cores than the host reports.
+            "n_jobs": 4,
+            # CPU is plenty fast for this streaming QuantileDMatrix path (the
+            # per-batch sums dominate; binning to <=256 bins is cheap), and
+            # keeps the residue path independent of GPU vector-leaf support
+            # across xgboost versions.
             "device": "cpu",
             "random_state": 0,
             "eval_metric": "logloss",

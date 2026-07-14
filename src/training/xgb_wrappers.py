@@ -1102,7 +1102,7 @@ class XGBResidueBinaryClassifier:
         )
         impl = data_iter.as_xgb_iter()
         build_start = time.perf_counter()
-        dmatrix = xgb.QuantileDMatrix(impl, max_bin=self.max_bin, ref=ref)
+        dmatrix = xgb.QuantileDMatrix(impl, max_bin=self.max_bin, ref=ref, nthread=self.n_jobs)
         if progress_label is not None:
             _progress_log(
                 f"Built {split_name} QuantileDMatrix "

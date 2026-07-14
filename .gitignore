@@ -24,6 +24,7 @@ logs/
 scripts/logs/
 *.out
 results/predictions/
+results/analysis/
 results/bootstrap/
 results/*_audit_report.json
 pytest-of-chemist/

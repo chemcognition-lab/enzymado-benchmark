@@ -163,6 +163,7 @@ def find_model_artifact(run_dir: Path) -> Path | None:
             return legacy_path
     matches = [path for path in run_dir.glob("*.pt") if path.is_file()]
     matches.extend(path for path in run_dir.glob("*.joblib") if path.is_file())
+    matches.extend(path for path in run_dir.glob("*.safetensors") if path.is_file())
     if not matches:
         return None
     return max(matches, key=lambda path: (path.stat().st_mtime, path.name))

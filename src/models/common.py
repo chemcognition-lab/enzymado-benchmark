@@ -145,6 +145,12 @@ def maybe_resume_torch_wrapper(wrapper, path: str | Path | None) -> int:
     wrapper.device = torch.device(current_device)
     if getattr(wrapper, "model", None) is not None:
         wrapper.model = wrapper.model.to(wrapper.device)
+    # Checkpoints are loaded to CPU; move any other restored tensor attributes
+    # (e.g. normalization scalers) back to the active device so forward passes
+    # don't mix cuda/cpu tensors after a resume.
+    for attr_name, attr_value in wrapper.__dict__.items():
+        if isinstance(attr_value, torch.Tensor):
+            wrapper.__dict__[attr_name] = attr_value.to(wrapper.device)
     return int(getattr(wrapper, "current_epoch_", 0))
 
 

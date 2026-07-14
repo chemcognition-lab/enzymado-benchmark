@@ -1,0 +1,58 @@
+{
+  "ankh3_large": {
+    "path": "data/embeddings/protein_sequences_unique/ankh3_large_shards",
+    "dim": 1536
+  },
+  "ankh3_xl": {
+    "path": "data/embeddings/protein_sequences_unique/ankh3_xl_shards",
+    "dim": 2560
+  },
+  "ankh_base": {
+    "path": "data/embeddings/protein_sequences_unique/ankh_base_shards",
+    "dim": 768
+  },
+  "ankh_large": {
+    "path": "data/embeddings/protein_sequences_unique/ankh_large_shards",
+    "dim": 1536
+  },
+  "esm2_3B": {
+    "path": "data/embeddings/protein_sequences_unique/esm2_3B_shards",
+    "dim": 2560
+  },
+  "esm2_650M": {
+    "path": "data/embeddings/protein_sequences_unique/esm2_650M_shards",
+    "dim": 1280
+  },
+  "esm3_open": {
+    "path": "data/embeddings/protein_sequences_unique/esm3_open_shards",
+    "dim": 1536
+  },
+  "esmc_300m": {
+    "path": "data/embeddings/protein_sequences_unique/esmc_300m_shards",
+    "dim": 960
+  },
+  "esmc_600m": {
+    "path": "data/embeddings/protein_sequences_unique/esmc_600m_shards",
+    "dim": 1152
+  },
+  "profluent_e1_300m": {
+    "path": "data/embeddings/protein_sequences_unique/profluent_e1_300m_shards",
+    "dim": 1024
+  },
+  "profluent_e1_600m": {
+    "path": "data/embeddings/protein_sequences_unique/profluent_e1_600m_shards",
+    "dim": 1280
+  },
+  "prost5": {
+    "path": "data/embeddings/protein_sequences_unique/prost5_shards",
+    "dim": 1024
+  },
+  "prot5_xl_half_uniref50": {
+    "path": "data/embeddings/protein_sequences_unique/prot5_xl_half_uniref50_shards",
+    "dim": 1024
+  },
+  "prot5_xl_uniref50": {
+    "path": "data/embeddings/protein_sequences_unique/prot5_xl_uniref50_shards",
+    "dim": 1024
+  }
+}

@@ -183,6 +183,7 @@ def train_attention(
     """Fit an attention-pooling model using DataLoaders built from LoaderTaskData bundles."""
     batch_size = int(model_info.get("loader_batch_size", 16))
     num_workers = int(model_info.get("loader_num_workers", 4))
+    checkpoint_path = run_dir / "training_checkpoint.bin"
     train_loader = get_dataloader(
         data.train_bundle, batch_size=batch_size, shuffle=True, num_workers=num_workers,
     )
@@ -192,7 +193,10 @@ def train_attention(
     )
     log("      Training attention model...")
     t0 = time.time()
-    trained = train_model_loader(model_info, train_loader, config.batch_kind, val_loader=val_loader)
+    trained = train_model_loader(
+        model_info, train_loader, config.batch_kind,
+        val_loader=val_loader, checkpoint_path=checkpoint_path,
+    )
     log(f"      Training done ({time.time() - t0:.1f}s).")
     return trained
 
