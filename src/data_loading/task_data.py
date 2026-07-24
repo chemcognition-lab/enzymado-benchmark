@@ -9,6 +9,9 @@ CLI example:
 """
 from __future__ import annotations
 
+import ctypes
+import gc
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -226,6 +229,91 @@ def _build_pooled_data(
     )
 
 
+def _cgroup_mem_limit_bytes() -> int | None:
+    """Read this process's cgroup memory limit (v1 then v2), or None if unbounded."""
+    try:
+        controllers: dict[str, str] = {}
+        for line in Path("/proc/self/cgroup").read_text().splitlines():
+            parts = line.split(":")
+            if len(parts) == 3:
+                for controller in parts[1].split(","):
+                    controllers[controller] = parts[2]
+        # cgroup v1: dedicated memory controller hierarchy.
+        rel = controllers.get("memory")
+        if rel is not None:
+            memory_root = Path("/sys/fs/cgroup/memory")
+            for path in (
+                memory_root / rel.lstrip("/") / "memory.limit_in_bytes",
+                memory_root / "memory.limit_in_bytes",
+            ):
+                if path.exists():
+                    return int(path.read_text().strip())
+        # cgroup v2: unified hierarchy (controller key is the empty string).
+        rel_v2 = controllers.get("")
+        if rel_v2 is not None:
+            path = Path("/sys/fs/cgroup") / rel_v2.lstrip("/") / "memory.max"
+            if path.exists():
+                raw = path.read_text().strip()
+                return None if raw == "max" else int(raw)
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def _process_memory_budget_gib() -> float:
+    """Available-RAM budget that respects the SLURM/cgroup cap, not just the node.
+
+    ``psutil.virtual_memory().available`` reports *physical node* free RAM and
+    ignores the SLURM ``--mem`` cgroup limit, so on a 512 GiB node a job with
+    ``--mem=250G`` sees ~470 GiB free and materializes embedding stores that
+    don't actually fit its cgroup — then OOMs (worse: the retained store stacks
+    under the next task). We cap the psutil figure by the real cgroup / SLURM
+    budget minus what this process already holds resident.
+    """
+    vm = psutil.virtual_memory()
+    budgets_gib = [vm.available / 1024 ** 3]
+    used_gib = psutil.Process().memory_info().rss / 1024 ** 3
+
+    slurm_mem_mb = os.environ.get("SLURM_MEM_PER_NODE")
+    if slurm_mem_mb:
+        try:
+            budgets_gib.append(max(float(slurm_mem_mb) / 1024.0 - used_gib, 0.0))
+        except ValueError:
+            pass
+
+    limit_bytes = _cgroup_mem_limit_bytes()
+    if limit_bytes is not None and 0 < limit_bytes < vm.total:
+        budgets_gib.append(max(limit_bytes / 1024 ** 3 - used_gib, 0.0))
+
+    return min(budgets_gib)
+
+
+def _malloc_trim() -> None:
+    """Best-effort return of freed heap arenas to the OS (glibc only)."""
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
+def _release_loader_bundles(*bundles) -> None:
+    """Drop each bundle's embedding-store references so a materialized store frees.
+
+    The store is shared across the train/val/test datasets' feature builders, so
+    nulling a single closure variable is not enough — every builder must release
+    it before the RAM (often 100s of GiB for materialized residue stores) can be
+    reclaimed between tasks in a long-running benchmark process.
+    """
+    for bundle in bundles:
+        dataset = getattr(bundle, "dataset", None)
+        builders_fn = getattr(dataset, "_feature_builders", None)
+        if builders_fn is None:
+            continue
+        for builder in builders_fn():
+            if hasattr(builder, "embedding_store"):
+                builder.embedding_store = None
+
+
 def _estimate_residue_store_gib(
     needed_sequences: set[str],
     embedding_dim: int | None,
@@ -251,7 +339,7 @@ def _build_loader_data(
     if config.batch_kind == TaskType.PROTEIN_RESIDUE:
         resolved_mode = residue_store_mode
         if residue_store_mode == "auto":
-            available_gib = psutil.virtual_memory().available / 1024 ** 3
+            available_gib = _process_memory_budget_gib()
             safe_limit_gib = available_gib * 0.8
             estimate_gib = _estimate_residue_store_gib(rows.needed_sequences, embedding_dim)
             if estimate_gib is not None:
@@ -332,7 +420,15 @@ def _build_loader_data(
     store_ref = [store]  # closure captures a mutable container so cleanup can release
 
     def cleanup() -> None:
+        # The train/val/test datasets' feature builders each hold the same store,
+        # so releasing only store_ref leaves a materialized store (100s of GiB)
+        # pinned until the whole LoaderTaskData is collected — long enough to
+        # stack under the next task and OOM. Drop every reference, then hand the
+        # freed arenas back to the OS.
+        _release_loader_bundles(train_bundle, val_bundle, test_bundle)
         store_ref[0] = None
+        gc.collect()
+        _malloc_trim()
 
     return LoaderTaskData(
         config=config,
@@ -380,20 +476,24 @@ def load_loader_task_data(
     *,
     allowed_ids: set[str] | None = None,
     sequence_to_id: dict[str, str] | None = None,
+    residue_store_mode: str = "auto",
     embedding_dim: int | None = None,
 ) -> LoaderTaskData:
     """Load data as LoaderTaskData regardless of batch_kind.
 
     Used by the attention route, which needs per-residue DataLoaders even for
     tasks whose batch_kind would normally select the pooled-arrays path.
-    Always uses a lazy embedding store.
+    Honors ``residue_store_mode`` (default "auto") so per-residue attention
+    tasks materialize the embedding subset into RAM when it fits, instead of
+    re-reading every residue from disk on each epoch. Non-residue batch_kinds
+    always fall back to a lazy store inside ``_build_loader_data``.
     """
     config = get_task_config(task_name)
     seq_to_id = sequence_to_id or {}
     rows = _load_and_filter_rows(config, split_variant, allowed_ids, seq_to_id)
     return _build_loader_data(
         config, task_name, emb_path, split_variant, rows,
-        "lazy", embedding_dim, seq_to_id,
+        residue_store_mode, embedding_dim, seq_to_id,
     )
 
 

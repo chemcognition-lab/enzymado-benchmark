@@ -149,6 +149,38 @@ class _BaseAttentionWrapper:
             return extra_t
         return (extra_t.float() - self.extra_mean_) / self.extra_scale_
 
+    def _maybe_fit_pooled_scalers(self, dataloader, batch_kind: str) -> None:
+        """Fit sequence (+ extra) scalers once, skipping when already known.
+
+        Called *after* ``maybe_resume_torch_wrapper``: a resumed checkpoint
+        already carries ``seq_mean_``/``seq_scale_`` (and extra scalers), so the
+        expensive full-dataset scaler passes are not re-paid on every restart.
+        The extra-feature pass is skipped entirely when the task has no extra
+        (ligand) features, which is a full no-op pass for protein-only tasks.
+        """
+        if self.seq_mean_ is not None:
+            return
+        self._fit_sequence_scaler(dataloader, batch_kind)
+        if self.extra_dim_ > 0:
+            self._fit_extra_scaler(dataloader, batch_kind)
+
+    def _run_early_stopping(self, train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path):
+        """Shared early-stopping loop plumbing used by every attention wrapper."""
+        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
+            self.model,
+            self.epochs,
+            train_epoch,
+            val_loss_fn=val_loss if val_dataloader is not None else None,
+            patience=self.early_stopping_patience,
+            min_delta=self.early_stopping_min_delta,
+            start_epoch=start_epoch,
+            initial_best_state=self.best_model_state_,
+            initial_best_epoch=self.best_epoch_,
+            initial_best_val_loss=self.best_val_loss_,
+            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
+        )
+        return self
+
     def build_checkpoint(self) -> dict[str, Any]:
         """Serialize the trained wrapper and pooled model weights."""
         if self.model is None:
@@ -179,16 +211,25 @@ class _BaseAttentionWrapper:
         }
 
 
-class AttentionRegressorTorch(_BaseAttentionWrapper):
-    """Attention-pooled regressor for global tasks."""
+class _PooledAttentionWrapper(_BaseAttentionWrapper):
+    """Shared fit/predict for single-output attention-pooled global models.
+
+    Subclasses only supply the loss (`_make_criterion`) and how logits map to a
+    prediction row (`_activate_predictions`); regressor vs binary classifier are
+    otherwise identical.
+    """
+
+    def _make_criterion(self):
+        raise NotImplementedError
+
+    def _activate_predictions(self, logits: torch.Tensor) -> np.ndarray:
+        raise NotImplementedError
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
         input_dim, extra_dim = self._infer_dims(dataloader, batch_kind)
         self.input_dim_ = input_dim
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
-        self._fit_sequence_scaler(dataloader, batch_kind)
-        self._fit_extra_scaler(dataloader, batch_kind)
         self.model = AttentionPredictor(
             input_dim,
             self.hidden_dims,
@@ -199,8 +240,9 @@ class AttentionRegressorTorch(_BaseAttentionWrapper):
             dropout=self.dropout,
         ).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
+        self._maybe_fit_pooled_scalers(dataloader, batch_kind)
         optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
-        criterion = nn.MSELoss()
+        criterion = self._make_criterion()
 
         def forward_logits(seq_t, mask_t, extra_t):
             seq_t = self._normalize_sequence(seq_t)
@@ -228,100 +270,7 @@ class AttentionRegressorTorch(_BaseAttentionWrapper):
                     losses.append(float(criterion(forward_logits(seq_t, mask_t, extra_t), y_t).item()))
             return mean_losses(losses)
 
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
-        )
-        return self
-
-    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
-        if self.model is None:
-            raise ValueError("Model must be fit before calling predict_loader().")
-        self.model.eval()
-        preds = []
-        with torch.no_grad():
-            for batch in dataloader:
-                seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
-                seq_t = self._normalize_sequence(seq_t)
-                extra_t = self._normalize_extra(extra_t)
-                with attention_autocast(self.device):
-                    out = self.model(seq_t, mask_t, extra_t).float()
-                preds.append(out.squeeze(1).cpu().numpy())
-        return np.concatenate(preds).astype(np.float32, copy=False)
-
-
-class AttentionBinaryClassifierTorch(_BaseAttentionWrapper):
-    """Attention-pooled binary classifier for global tasks."""
-
-    def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
-        input_dim, extra_dim = self._infer_dims(dataloader, batch_kind)
-        self.input_dim_ = input_dim
-        self.extra_dim_ = extra_dim
-        self.batch_kind_ = batch_kind
-        self._fit_sequence_scaler(dataloader, batch_kind)
-        self._fit_extra_scaler(dataloader, batch_kind)
-        self.model = AttentionPredictor(
-            input_dim,
-            self.hidden_dims,
-            output_dim=1,
-            extra_dim=extra_dim,
-            num_attention_heads=self.num_attention_heads,
-            attention_dropout_rate=self.attention_dropout_rate,
-            dropout=self.dropout,
-        ).to(self.device)
-        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
-        criterion = nn.BCEWithLogitsLoss()
-
-        def forward_logits(seq_t, mask_t, extra_t):
-            seq_t = self._normalize_sequence(seq_t)
-            extra_t = self._normalize_extra(extra_t)
-            with attention_autocast(self.device):
-                return self.model(seq_t, mask_t, extra_t).float()
-
-        def train_epoch():
-            self.model.train()
-            for batch in dataloader:
-                seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
-                y_t = torch.from_numpy(np.asarray(batch.target, dtype=np.float32)).unsqueeze(1).to(self.device)
-                optimizer.zero_grad()
-                loss = criterion(forward_logits(seq_t, mask_t, extra_t), y_t)
-                loss.backward()
-                optimizer.step()
-
-        def val_loss():
-            self.model.eval()
-            losses = []
-            with torch.no_grad():
-                for batch in val_dataloader:
-                    seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
-                    y_t = torch.from_numpy(np.asarray(batch.target, dtype=np.float32)).unsqueeze(1).to(self.device)
-                    losses.append(float(criterion(forward_logits(seq_t, mask_t, extra_t), y_t).item()))
-            return mean_losses(losses)
-
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
-        )
-        return self
+        return self._run_early_stopping(train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path)
 
     def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
         if self.model is None:
@@ -335,8 +284,28 @@ class AttentionBinaryClassifierTorch(_BaseAttentionWrapper):
                 extra_t = self._normalize_extra(extra_t)
                 with attention_autocast(self.device):
                     logits = self.model(seq_t, mask_t, extra_t).float()
-                preds.append((torch.sigmoid(logits).squeeze(1) >= 0.5).cpu().numpy().astype(np.float32))
+                preds.append(self._activate_predictions(logits))
         return np.concatenate(preds).astype(np.float32, copy=False)
+
+
+class AttentionRegressorTorch(_PooledAttentionWrapper):
+    """Attention-pooled regressor for global tasks."""
+
+    def _make_criterion(self):
+        return nn.MSELoss()
+
+    def _activate_predictions(self, logits: torch.Tensor) -> np.ndarray:
+        return logits.squeeze(1).cpu().numpy()
+
+
+class AttentionBinaryClassifierTorch(_PooledAttentionWrapper):
+    """Attention-pooled binary classifier for global tasks."""
+
+    def _make_criterion(self):
+        return nn.BCEWithLogitsLoss()
+
+    def _activate_predictions(self, logits: torch.Tensor) -> np.ndarray:
+        return (torch.sigmoid(logits).squeeze(1) >= 0.5).cpu().numpy().astype(np.float32)
 
 
 class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
@@ -384,8 +353,6 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
         self.extra_dim_ = extra_dim
         self.batch_kind_ = batch_kind
         self.output_dims_ = dict(output_dims)
-        self._fit_sequence_scaler(dataloader, batch_kind)
-        self._fit_extra_scaler(dataloader, batch_kind)
         self.model = AttentionMultiHeadPredictor(
             input_dim,
             self.hidden_dims,
@@ -396,6 +363,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
             dropout=self.dropout,
         ).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
+        self._maybe_fit_pooled_scalers(dataloader, batch_kind)
         optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
@@ -445,20 +413,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
                         losses.append(float(loss.item()))
             return mean_losses(losses)
 
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
-        )
-        return self
+        return self._run_early_stopping(train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path)
 
     def predict_loader(self, dataloader, batch_kind: str) -> dict[str, np.ndarray]:
         if self.model is None or self.output_dims_ is None:
@@ -520,7 +475,6 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
         self.input_dim_ = input_dim
         self.extra_dim_ = 0
         self.batch_kind_ = batch_kind
-        self._fit_residue_sequence_scaler(dataloader)
         self.model = AttentionResiduePredictor(
             input_dim,
             self.hidden_dims,
@@ -530,6 +484,8 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
             dropout=self.dropout,
         ).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
+        if self.seq_mean_ is None:
+            self._fit_residue_sequence_scaler(dataloader)
         optimizer = make_optimizer(self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
@@ -563,20 +519,7 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
                     losses.append(float(compute_batch_loss(logits, y_t, target_mask_t).item()))
             return mean_losses(losses)
 
-        self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
-            self.model,
-            self.epochs,
-            train_epoch,
-            val_loss_fn=val_loss if val_dataloader is not None else None,
-            patience=self.early_stopping_patience,
-            min_delta=self.early_stopping_min_delta,
-            start_epoch=start_epoch,
-            initial_best_state=self.best_model_state_,
-            initial_best_epoch=self.best_epoch_,
-            initial_best_val_loss=self.best_val_loss_,
-            epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
-        )
-        return self
+        return self._run_early_stopping(train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path)
 
     def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
         if batch_kind != "protein_residue":

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -66,6 +69,16 @@ def _is_xgb_cuda_oom(exc: Exception) -> bool:
     )
 
 
+def _is_disk_write_error(exc: Exception) -> bool:
+    """Detect an external-memory cache write that failed for lack of disk space.
+
+    XGBoost/dmlc raise `FileStream.Write incomplete` (a short std::fwrite) when
+    the cache filesystem runs out of space or hits a quota — not a memory issue.
+    """
+    message = str(exc).lower()
+    return "filestream.write" in message or "write incomplete" in message
+
+
 def _is_xgb_cuda_failure(exc: Exception) -> bool:
     """Heuristic for any XGBoost failure that should trigger a CPU fallback.
 
@@ -103,6 +116,34 @@ def _save_xgb_checkpoint(wrapper, path: str | Path | None) -> None:
     if path is None:
         return
     _atomic_joblib_dump(wrapper, path)
+
+
+def _make_xgb_checkpoint_callback(wrapper, path: str | Path | None, interval: int = 1):
+    """Persist the wrapper (with its partially-boosted booster) every `interval` rounds.
+
+    Without this a residue XGBoost fit that is killed mid-boosting loses every
+    round it completed, since the wrapper is otherwise only saved once
+    `xgb.train` returns — unlike the torch wrappers, which checkpoint per epoch.
+    """
+    if path is None or xgb is None:
+        return None
+
+    interval = max(1, int(interval))
+
+    class _Checkpoint(xgb.callback.TrainingCallback):
+        def after_iteration(self, model, epoch: int, evals_log) -> bool:
+            # num_boosted_rounds() is authoritative when continuing from xgb_model,
+            # where `epoch` restarts at 0 for the resumed call.
+            rounds_done = model.num_boosted_rounds()
+            if rounds_done % interval:
+                return False
+            wrapper.booster = model
+            wrapper.rounds_completed_ = rounds_done
+            wrapper.training_complete_ = False
+            _save_xgb_checkpoint(wrapper, path)
+            return False
+
+    return _Checkpoint()
 
 
 def _maybe_resume_xgb_wrapper(wrapper, path: str | Path | None) -> bool:
@@ -865,21 +906,26 @@ class _ResidueDataIter:
     matrix never lives in RAM. Tracks unique labels seen and totals for logging.
     """
 
-    def __init__(self, loader_factory, decode_fn):
+    def __init__(self, loader_factory, decode_fn, cache_prefix: str | None = None):
         if xgb is None:
             raise ImportError("xgboost is required to build a residue DataIter.")
         # xgb.DataIter is the upstream base class; subclass dynamically so this file
-        # still imports when xgboost is missing.
-        self._iter_impl = _build_residue_data_iter_impl(loader_factory, decode_fn)
+        # still imports when xgboost is missing. A non-None cache_prefix routes the
+        # binned pages to that on-disk cache (external memory) instead of RAM.
+        self._iter_impl = _build_residue_data_iter_impl(
+            loader_factory, decode_fn, cache_prefix
+        )
 
     def as_xgb_iter(self):
         return self._iter_impl
 
 
-def _build_residue_data_iter_impl(loader_factory, decode_fn):
+def _build_residue_data_iter_impl(
+    loader_factory, decode_fn, cache_prefix: str | None = None
+):
     class _Impl(xgb.DataIter):
         def __init__(self) -> None:
-            super().__init__()
+            super().__init__(cache_prefix=cache_prefix)
             self._loader_factory = loader_factory
             self._decode_fn = decode_fn
             self._iterator = None
@@ -928,9 +974,17 @@ class XGBResidueBinaryClassifier:
         random_state=0,
         eval_metric="logloss",
         early_stopping_rounds=None,
+        external_memory: str = "auto",
+        cache_dir: str | None = None,
+        checkpoint_interval: int = 1,
     ):
         if xgb is None:
             raise ImportError("xgboost is required to use XGBResidueBinaryClassifier.")
+        if external_memory not in {"auto", "on", "off"}:
+            raise ValueError(
+                "external_memory must be one of 'auto', 'on', or 'off'."
+                f" Received '{external_memory}'."
+            )
 
         self.n_estimators = n_estimators
         self.max_depth = max_depth
@@ -944,11 +998,24 @@ class XGBResidueBinaryClassifier:
         self.random_state = random_state
         self.eval_metric = eval_metric
         self.early_stopping_rounds = early_stopping_rounds
+        # "auto" spills the binned matrix to an on-disk cache (external memory)
+        # whenever the embedding store streams from disk (i.e. it was too large
+        # to materialize in RAM), so a QuantileDMatrix that would not fit host
+        # RAM no longer OOMs. See _should_use_external_memory.
+        self.external_memory = external_memory
+        self.cache_dir = cache_dir
+        self.checkpoint_interval = checkpoint_interval
         self.booster = None
         self.constant_prediction_ = None
         self.model_device_ = self.device
         self.best_iteration_ = None
         self.best_score_ = None
+        self.rounds_completed_ = 0
+        # `training_complete_` is deliberately NOT initialized here: its absence is
+        # how fit_loader recognizes a checkpoint written before mid-training
+        # checkpointing existed (those were only ever saved after a finished fit,
+        # so they must resume as "done" rather than be boosted a second time).
+        self._cache_root_: str | None = None
 
     @staticmethod
     def _flatten_batch(batch) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -1087,6 +1154,76 @@ class XGBResidueBinaryClassifier:
             "verbosity": 0,
         }
 
+    @staticmethod
+    def _dataloader_embedding_store(dataloader):
+        """Best-effort reach into the loader's residue embedding store, or None."""
+        dataset = getattr(dataloader, "dataset", None)
+        builder = getattr(dataset, "protein_builder", None)
+        return getattr(builder, "embedding_store", None)
+
+    def _should_use_external_memory(self, dataloader) -> bool:
+        """Decide whether the binned matrix should spill to disk instead of RAM."""
+        if self.external_memory == "on":
+            return True
+        if self.external_memory == "off":
+            return False
+        # "auto": mirror the store decision. A lazy (disk-streamed) store was
+        # chosen because the residue embeddings did not fit RAM, so hold the
+        # binned matrix externally too rather than risk a host-RAM OOM.
+        from data_loading.stores import LazySafetensorsResidueEmbeddingStore
+
+        store = self._dataloader_embedding_store(dataloader)
+        return isinstance(store, LazySafetensorsResidueEmbeddingStore)
+
+    def _resolve_cache_base(self) -> str:
+        """Pick a base dir for the external cache.
+
+        An explicit ``cache_dir`` or ``XGB_RESIDUE_CACHE_DIR`` wins; otherwise the
+        candidate with the most free space is chosen. This avoids the common trap
+        of writing a hundreds-of-GiB binned cache to small node-local /tmp
+        (SLURM_TMPDIR), which fails mid-write with ENOSPC.
+        """
+        explicit = self.cache_dir or os.environ.get("XGB_RESIDUE_CACHE_DIR")
+        if explicit:
+            os.makedirs(explicit, exist_ok=True)
+            return explicit
+        best_base, best_free = None, -1
+        for base in (os.environ.get("SLURM_TMPDIR"), os.environ.get("TMPDIR"),
+                     tempfile.gettempdir()):
+            if not base:
+                continue
+            try:
+                os.makedirs(base, exist_ok=True)
+                free = shutil.disk_usage(base).free
+            except OSError:
+                continue
+            if free > best_free:
+                best_base, best_free = base, free
+        if best_base is None:
+            raise RuntimeError("No writable directory for the external-memory cache.")
+        return best_base
+
+    def _cache_root(self) -> str:
+        """Create (once) a private on-disk cache directory for external memory.
+
+        ``_cache_root_`` is persisted in the training checkpoint (it is a plain
+        wrapper attribute), but the directory it names is not: a resumed run may
+        find it already cleaned up (e.g. after a prior timeout was tidied up
+        manually) or simply gone. Re-mint a fresh one rather than handing back a
+        dangling path — the DMatrix is always rebuilt from scratch on resume
+        anyway, so nothing relies on the old cache's contents surviving.
+        """
+        if self._cache_root_ is None or not os.path.isdir(self._cache_root_):
+            base = self._resolve_cache_base()
+            self._cache_root_ = tempfile.mkdtemp(prefix="xgb_residue_cache_", dir=base)
+        return self._cache_root_
+
+    def _release_cache(self) -> None:
+        """Remove the external-memory cache directory, if one was created."""
+        if self._cache_root_ is not None:
+            shutil.rmtree(self._cache_root_, ignore_errors=True)
+            self._cache_root_ = None
+
     def _build_quantile_dmatrix(
         self,
         dataloader,
@@ -1095,17 +1232,50 @@ class XGBResidueBinaryClassifier:
         progress_label: str | None = None,
         split_name: str = "train",
     ):
-        """Stream the dataloader through xgb.DataIter to build a QuantileDMatrix in-place."""
+        """Stream the dataloader through xgb.DataIter into a (external or RAM) DMatrix.
+
+        When external memory is selected, the binned pages are spilled to an
+        on-disk cache via ExtMemQuantileDMatrix so a matrix larger than host RAM
+        no longer OOMs; otherwise an in-RAM QuantileDMatrix is built. Both replay
+        the same batch sequence across XGBoost's sketch/fill passes via reset().
+        """
+        use_external = self._should_use_external_memory(dataloader)
+        cache_prefix = None
+        if use_external:
+            cache_root = self._cache_root()
+            cache_prefix = str(Path(cache_root) / split_name)
+            if progress_label is not None:
+                free_gib = shutil.disk_usage(cache_root).free / 1024 ** 3
+                _progress_log(
+                    f"External-memory cache dir: {cache_root} "
+                    f"| free={free_gib:.0f} GiB",
+                    label=progress_label,
+                )
         data_iter = _ResidueDataIter(
             loader_factory=lambda: dataloader,
             decode_fn=self._flatten_batch,
+            cache_prefix=cache_prefix,
         )
         impl = data_iter.as_xgb_iter()
         build_start = time.perf_counter()
-        dmatrix = xgb.QuantileDMatrix(impl, max_bin=self.max_bin, ref=ref, nthread=self.n_jobs)
+        dmatrix_cls = xgb.ExtMemQuantileDMatrix if use_external else xgb.QuantileDMatrix
+        try:
+            dmatrix = dmatrix_cls(
+                impl, max_bin=self.max_bin, ref=ref, nthread=self.n_jobs
+            )
+        except Exception as exc:
+            if use_external and _is_disk_write_error(exc):
+                raise RuntimeError(
+                    f"External-memory cache ran out of disk space at "
+                    f"'{self._cache_root_}' while building the {split_name} matrix. "
+                    "Point XGB_RESIDUE_CACHE_DIR at a larger filesystem (e.g. "
+                    "$SCRATCH), or reduce the residue count fed to XGBoost."
+                ) from exc
+            raise
         if progress_label is not None:
+            kind = "ExtMemQuantileDMatrix" if use_external else "QuantileDMatrix"
             _progress_log(
-                f"Built {split_name} QuantileDMatrix "
+                f"Built {split_name} {kind} "
                 f"| proteins={impl.proteins_seen:,} "
                 f"| residues={impl.residues_seen:,} "
                 f"| classes_seen={sorted(impl.labels_seen)} "
@@ -1126,22 +1296,48 @@ class XGBResidueBinaryClassifier:
         if batch_kind != "protein_residue":
             raise ValueError(f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'")
         resumed = _maybe_resume_xgb_wrapper(self, checkpoint_path)
-        if resumed and (self.booster is not None or self.constant_prediction_ is not None):
+        if resumed and self.constant_prediction_ is not None:
             if progress_label is not None:
-                _progress_log("Resuming from existing residue XGBoost checkpoint.", label=progress_label)
+                _progress_log(
+                    "Resuming from constant-prediction residue XGBoost checkpoint.",
+                    label=progress_label,
+                )
+            return self
+        # A checkpoint without `training_complete_` predates mid-training
+        # checkpointing and was only ever written after a finished fit.
+        was_complete = getattr(self, "training_complete_", True)
+        if resumed and self.booster is not None and was_complete:
+            if progress_label is not None:
+                _progress_log(
+                    "Resuming from completed residue XGBoost checkpoint.",
+                    label=progress_label,
+                )
             return self
 
-        self.constant_prediction_ = None
-        self.booster = None
-        self.best_iteration_ = None
-        self.best_score_ = None
+        resume_booster = self.booster if resumed else None
+        rounds_done = 0
+        if resume_booster is not None:
+            rounds_done = int(getattr(self, "rounds_completed_", 0))
+        if resume_booster is None:
+            self.constant_prediction_ = None
+            self.booster = None
+            self.best_iteration_ = None
+            self.best_score_ = None
+            self.rounds_completed_ = 0
         self.model_device_ = self.device
 
         if progress_label is not None:
-            _progress_log(
-                f"Residue XGBoost streaming fit starting | device={self.model_device_}",
-                label=progress_label,
-            )
+            if resume_booster is not None:
+                _progress_log(
+                    f"Resuming residue XGBoost boosting at round {rounds_done}"
+                    f"/{self.n_estimators} | device={self.model_device_}",
+                    label=progress_label,
+                )
+            else:
+                _progress_log(
+                    f"Residue XGBoost streaming fit starting | device={self.model_device_}",
+                    label=progress_label,
+                )
 
         try:
             dtrain, train_impl = self._build_quantile_dmatrix(
@@ -1163,20 +1359,24 @@ class XGBResidueBinaryClassifier:
                     split_name="train",
                 )
             else:
+                self._release_cache()
                 raise
         if train_impl.residues_seen == 0:
+            self._release_cache()
             raise ValueError("No residue-level training samples found for XGBoost.")
 
         if len(train_impl.labels_seen) == 1:
             only_class = next(iter(train_impl.labels_seen))
             self.constant_prediction_ = float(only_class)
             self.model_device_ = None
+            self.training_complete_ = True
             if progress_label is not None:
                 _progress_log(
                     f"Residue XGBoost collapsed to constant prediction={only_class}.",
                     label=progress_label,
                 )
             _save_xgb_checkpoint(self, checkpoint_path)
+            self._release_cache()
             return self
 
         evals: list[tuple] = []
@@ -1190,13 +1390,27 @@ class XGBResidueBinaryClassifier:
             if val_impl.residues_seen > 0:
                 evals.append((dval, "validation"))
 
+        remaining = max(int(self.n_estimators) - rounds_done, 0)
+        if remaining == 0:
+            self.training_complete_ = True
+            _save_xgb_checkpoint(self, checkpoint_path)
+            self._release_cache()
+            return self
+
         train_kwargs = {
             "params": self._make_train_params(device_override=self.model_device_),
             "dtrain": dtrain,
-            "num_boost_round": self.n_estimators,
+            "num_boost_round": remaining,
             "evals": evals,
             "verbose_eval": False,
         }
+        if resume_booster is not None:
+            train_kwargs["xgb_model"] = resume_booster
+        checkpoint_cb = _make_xgb_checkpoint_callback(
+            self, checkpoint_path, self.checkpoint_interval
+        )
+        if checkpoint_cb is not None:
+            train_kwargs["callbacks"] = [checkpoint_cb]
         if evals and self.early_stopping_rounds is not None:
             train_kwargs["early_stopping_rounds"] = self.early_stopping_rounds
 
@@ -1214,10 +1428,13 @@ class XGBResidueBinaryClassifier:
                 train_kwargs["params"] = self._make_train_params(device_override="cpu")
                 self.booster = xgb.train(**train_kwargs)
             else:
+                self._release_cache()
                 raise
 
         self.best_iteration_ = getattr(self.booster, "best_iteration", None)
         self.best_score_ = getattr(self.booster, "best_score", None)
+        self.rounds_completed_ = self.booster.num_boosted_rounds()
+        self.training_complete_ = True
 
         if progress_label is not None:
             summary = f"Residue XGBoost fit done in {time.perf_counter() - fit_start:.1f}s"
@@ -1228,6 +1445,7 @@ class XGBResidueBinaryClassifier:
             summary += f" | device={self.model_device_}"
             _progress_log(summary, label=progress_label)
         _save_xgb_checkpoint(self, checkpoint_path)
+        self._release_cache()
         return self
 
     def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:

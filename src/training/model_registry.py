@@ -282,6 +282,11 @@ def _residue_xgb_classifier_entry() -> dict:
             "random_state": 0,
             "eval_metric": "logloss",
             "early_stopping_rounds": 10,
+            # Spill the binned matrix to on-disk cache whenever the embedding
+            # store is lazy (too large to hold in RAM), so the biggest residue
+            # tasks (e.g. binding_site at dim=2560) no longer OOM building the
+            # QuantileDMatrix. Small tasks keep the fast in-RAM path.
+            "external_memory": "auto",
         },
         residue_aware=True,
         loader_batch_size=80,

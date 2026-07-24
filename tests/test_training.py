@@ -343,6 +343,266 @@ class StructuredTrainingTests(unittest.TestCase):
         load_lazy.assert_called_once_with("fake_embeddings.safetensors", {"P1"}, {"AAAA"})
         load_subset.assert_not_called()
 
+    def test_auto_store_mode_respects_slurm_cap_not_node_ram(self) -> None:
+        """The store budget must honor the SLURM `--mem` cgroup cap, not the node.
+
+        Regression for the OOM where a 512 GiB node let a `--mem=250G` job
+        materialize a ~361 GiB-estimate store (phantom budget) that then stacked
+        under the next task. With the real cap the task must fall back to lazy.
+        """
+        import os
+
+        from data_loading import task_data
+        from data_loading.task_data import _build_loader_data
+
+        config = TaskConfig(
+            name="active_sites_test",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_paths={"random": self.root / "unused.csv"},
+            target_column=None,
+            residue_positions_column="active_site",
+            index_columns=("uniprot_id",),
+        )
+        lazy_store = types.SimpleNamespace(_available_ids=["P1"], _seq_to_key={})
+        fake_bundle = types.SimpleNamespace(dataset=[1], label_builder=None)
+
+        phantom_vm = types.SimpleNamespace(
+            available=480 * 1024 ** 3,  # a 512 GiB node reports ~480 GiB free
+            total=512 * 1024 ** 3,
+        )
+        small_proc = types.SimpleNamespace(
+            memory_info=lambda: types.SimpleNamespace(rss=8 * 1024 ** 3)
+        )
+
+        with (
+            mock.patch.dict(os.environ, {"SLURM_MEM_PER_NODE": str(250 * 1024)}),
+            mock.patch.object(task_data.psutil, "virtual_memory", return_value=phantom_vm),
+            mock.patch.object(task_data.psutil, "Process", return_value=small_proc),
+            mock.patch.object(task_data, "_cgroup_mem_limit_bytes", return_value=None),
+            mock.patch.object(task_data, "_estimate_residue_store_gib", return_value=361.0),
+            mock.patch("data_loading.task_data.load_safetensors_embedding_store_subset") as load_subset,
+            mock.patch(
+                "data_loading.task_data.load_lazy_safetensors_embedding_store",
+                return_value=lazy_store,
+            ) as load_lazy,
+            mock.patch("data_loading.task_data.build_task_dataset", return_value=fake_bundle),
+        ):
+            # Sanity: the budget honors the 250G cap despite the 480 GiB "available".
+            self.assertLessEqual(task_data._process_memory_budget_gib(), 250.0)
+            _build_loader_data(
+                config, "active_sites_test", "fake_embeddings.safetensors",
+                "random", self._fake_task_rows({"P1"}, {"AAAA"}),
+                residue_store_mode="auto", embedding_dim=2560, sequence_to_id={},
+            )
+
+        load_lazy.assert_called_once()
+        load_subset.assert_not_called()
+
+    def test_residue_xgboost_uses_external_memory_for_lazy_store(self) -> None:
+        """A lazy (disk-streamed) store routes the residue XGBoost binned matrix
+        to an on-disk cache (ExtMemQuantileDMatrix) that is cleaned up after fit."""
+        import glob
+        import os
+
+        import torch
+        import xgboost as xgb
+        from safetensors.torch import save_file
+        from torch.utils.data import DataLoader
+
+        from data_loading.collators import ProteinResidueConcatCollator
+        from data_loading.stores import load_lazy_safetensors_embedding_store
+        from training.xgb_wrappers import XGBResidueBinaryClassifier
+
+        ids = [f"P{i}" for i in range(8)]
+        rng = np.random.default_rng(0)
+        embeddings = {
+            pid: torch.tensor(rng.standard_normal((10, 4)), dtype=torch.bfloat16) for pid in ids
+        }
+        save_file(embeddings, str(self.root / "emb.safetensors"))
+
+        dataset_path = self.root / "ext_active.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
+            [
+                {
+                    "uniprot_id": pid,
+                    "protein_sequence": "A" * 10,
+                    "active_site": str([1, 3, 5] if i % 2 == 0 else [2, 4]),
+                    "split": "train",
+                }
+                for i, pid in enumerate(ids)
+            ],
+        )
+        config = TaskConfig(
+            name="active_sites_test",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_paths={"random": dataset_path},
+            target_column=None,
+            residue_positions_column="active_site",
+            index_columns=("uniprot_id",),
+        )
+        lazy_store = load_lazy_safetensors_embedding_store(
+            self.root / "emb.safetensors", needed_ids=set(ids), needed_sequences=set()
+        )
+        bundle = build_dataset_from_config(config, lazy_store, split_name="train")
+
+        def make_loader():
+            return DataLoader(
+                bundle.dataset, batch_size=3, collate_fn=ProteinResidueConcatCollator(),
+                shuffle=False, num_workers=0,
+            )
+
+        cache_dir = self.root / "xgb_cache"
+        cache_dir.mkdir()
+        model = XGBResidueBinaryClassifier(
+            n_estimators=8, max_depth=3, max_bin=64, n_jobs=2, device="cpu",
+            external_memory="auto", cache_dir=str(cache_dir),
+        )
+        self.assertTrue(model._should_use_external_memory(make_loader()))
+
+        dmatrix, _ = model._build_quantile_dmatrix(make_loader(), split_name="train")
+        self.assertIsInstance(dmatrix, xgb.ExtMemQuantileDMatrix)
+        self.assertTrue(glob.glob(os.path.join(str(cache_dir), "xgb_residue_cache_*")))
+
+        model.fit_loader(make_loader(), "protein_residue", val_dataloader=make_loader())
+        preds = model.predict_loader(make_loader(), "protein_residue")
+        self.assertIsNotNone(model.booster)
+        self.assertEqual(preds.shape, (8, 10))
+        self.assertFalse(
+            glob.glob(os.path.join(str(cache_dir), "xgb_residue_cache_*")),
+            "external-memory cache must be removed after fit",
+        )
+
+    def test_residue_xgb_checkpoints_and_resumes_mid_boosting(self) -> None:
+        """Residue XGBoost must checkpoint during boosting, resume a partial fit by
+        continuing (not restarting), and treat marker-less legacy checkpoints as done."""
+        import joblib
+        import torch
+        from torch.utils.data import DataLoader
+
+        from data_loading.collators import ProteinResidueConcatCollator
+        from data_loading.features import ResidueEmbeddingStore
+        from training.xgb_wrappers import XGBResidueBinaryClassifier
+
+        ids = [f"P{i}" for i in range(8)]
+        rng = np.random.default_rng(0)
+        emb = {
+            pid: torch.tensor(rng.standard_normal((10, 4)), dtype=torch.bfloat16) for pid in ids
+        }
+        dataset_path = self.root / "ckpt_active.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "active_site", "split"],
+            [
+                {
+                    "uniprot_id": pid,
+                    "protein_sequence": "A" * 10,
+                    "active_site": str([1, 3, 5] if i % 2 == 0 else [2, 4]),
+                    "split": "train",
+                }
+                for i, pid in enumerate(ids)
+            ],
+        )
+        config = TaskConfig(
+            name="active_sites_test",
+            batch_kind="protein_residue",
+            label_kind="residue_binary_vector",
+            dataset_paths={"random": dataset_path},
+            target_column=None,
+            residue_positions_column="active_site",
+            index_columns=("uniprot_id",),
+        )
+        bundle = build_dataset_from_config(
+            config, ResidueEmbeddingStore(by_id=emb), split_name="train"
+        )
+
+        def make_loader():
+            return DataLoader(
+                bundle.dataset, batch_size=3,
+                collate_fn=ProteinResidueConcatCollator(), num_workers=0,
+            )
+
+        def new_model(n_estimators):
+            # no val loader + in-RAM matrix -> deterministic full n_estimators rounds
+            return XGBResidueBinaryClassifier(
+                n_estimators=n_estimators, max_depth=3, max_bin=64, n_jobs=2,
+                device="cpu", external_memory="off", checkpoint_interval=1,
+            )
+
+        # Fresh fit writes a checkpoint and marks it complete.
+        checkpoint = self.root / "xgb_ckpt.bin"
+        fresh = new_model(10)
+        fresh.fit_loader(make_loader(), "protein_residue", checkpoint_path=checkpoint)
+        self.assertTrue(checkpoint.exists())
+        self.assertTrue(fresh.training_complete_)
+        self.assertEqual(fresh.booster.num_boosted_rounds(), 10)
+
+        # A completed checkpoint short-circuits instead of boosting again.
+        done = new_model(10)
+        done.fit_loader(make_loader(), "protein_residue", checkpoint_path=checkpoint)
+        self.assertEqual(done.booster.num_boosted_rounds(), 10)
+
+        # A partial checkpoint (killed at round 4 of 10) continues to 10.
+        partial = new_model(4)
+        partial.fit_loader(make_loader(), "protein_residue", checkpoint_path=self.root / "p.bin")
+        partial.n_estimators = 10  # resume reads hyperparameters back from the checkpoint
+        partial.training_complete_ = False
+        partial.rounds_completed_ = 4
+        joblib.dump(partial, self.root / "partial.bin")
+
+        resumed = new_model(10)
+        resumed.fit_loader(
+            make_loader(), "protein_residue", checkpoint_path=self.root / "partial.bin"
+        )
+        self.assertEqual(resumed.booster.num_boosted_rounds(), 10)
+        self.assertTrue(resumed.training_complete_)
+
+        # Legacy checkpoints predate the marker and must NOT be boosted a second time.
+        legacy = joblib.load(checkpoint)
+        del legacy.__dict__["training_complete_"]
+        legacy.__dict__.pop("rounds_completed_", None)
+        joblib.dump(legacy, self.root / "legacy.bin")
+        legacy_model = new_model(10)
+        legacy_model.fit_loader(
+            make_loader(), "protein_residue", checkpoint_path=self.root / "legacy.bin"
+        )
+        self.assertEqual(legacy_model.booster.num_boosted_rounds(), 10)
+
+    def test_residue_xgb_cache_prefers_largest_disk(self) -> None:
+        """The external-memory cache must avoid small node-local /tmp and pick the
+        filesystem with the most free space (or an explicit override)."""
+        import os
+        import types
+        from unittest import mock
+
+        from training import xgb_wrappers
+
+        model = xgb_wrappers.XGBResidueBinaryClassifier(external_memory="auto")
+        free = {"/local_tmp": 219 * 1024 ** 3, "/big_tmp": 1600 * 1024 ** 3}
+
+        def fake_usage(path):
+            return types.SimpleNamespace(total=0, used=0, free=free.get(path, 0))
+
+        with (
+            mock.patch.dict(
+                os.environ, {"SLURM_TMPDIR": "/local_tmp", "TMPDIR": "/big_tmp"}, clear=False
+            ),
+            mock.patch.object(xgb_wrappers.os, "makedirs"),
+            mock.patch.object(xgb_wrappers.shutil, "disk_usage", side_effect=fake_usage),
+        ):
+            os.environ.pop("XGB_RESIDUE_CACHE_DIR", None)
+            self.assertEqual(model._resolve_cache_base(), "/big_tmp")
+            with mock.patch.dict(os.environ, {"XGB_RESIDUE_CACHE_DIR": "/forced"}):
+                self.assertEqual(model._resolve_cache_base(), "/forced")
+
+        self.assertTrue(
+            xgb_wrappers._is_disk_write_error(Exception("FileStream.Write incomplete"))
+        )
+        self.assertFalse(xgb_wrappers._is_disk_write_error(Exception("out of memory")))
+
     def test_residue_binary_training_and_prediction_serialization(self) -> None:
         from torch.utils.data import DataLoader
 
@@ -476,6 +736,83 @@ class StructuredTrainingTests(unittest.TestCase):
 
         np.testing.assert_allclose(normalized.mean(axis=0), np.zeros(2, dtype=np.float32), atol=1e-6)
         np.testing.assert_allclose(normalized.std(axis=0), np.ones(2, dtype=np.float32), atol=1e-6)
+
+    def test_attention_resume_skips_scaler_refit(self) -> None:
+        """A resumed attention fit must not re-run the full-dataset scaler passes.
+
+        The scaler is fit once on a fresh run and restored from the checkpoint on
+        resume; re-fitting it on every TIMEOUT restart was pure wasted disk I/O.
+        """
+        from torch.utils.data import DataLoader
+
+        from training.attention_wrappers import (
+            AttentionBinaryClassifierTorch,
+            _PooledAttentionWrapper,
+        )
+
+        dataset_path = self.root / "resume_binary.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "binding", "split"],
+            [
+                {"uniprot_id": f"P{i}", "protein_sequence": "AAAA", "binding": str(i % 2), "split": "train"}
+                for i in range(6)
+            ],
+        )
+        config = TaskConfig(
+            name="resume_binary_test",
+            batch_kind="protein_global",
+            label_kind="binary",
+            dataset_paths={"random": dataset_path},
+            target_column="binding",
+            index_columns=("uniprot_id",),
+        )
+        rng = np.random.default_rng(0)
+        store = ResidueEmbeddingStore(
+            by_id={f"P{i}": rng.standard_normal((4, 3)).astype(np.float32) for i in range(6)}
+        )
+        bundle = build_dataset_from_config(config, store, split_name="train")
+
+        def make_loader():
+            return DataLoader(bundle.dataset, batch_size=2, collate_fn=bundle.collator, num_workers=0)
+
+        checkpoint = self.root / "training_checkpoint.bin"
+
+        fresh = AttentionBinaryClassifierTorch(hidden_dims=(), lr=1e-3, epochs=2, optimizer_name="adamw")
+        with mock.patch.object(
+            AttentionBinaryClassifierTorch, "_fit_sequence_scaler", autospec=True,
+            side_effect=_PooledAttentionWrapper._fit_sequence_scaler,
+        ) as fresh_spy:
+            fresh.fit_loader(make_loader(), "protein_global", checkpoint_path=checkpoint)
+        self.assertEqual(fresh_spy.call_count, 1)
+        self.assertIsNotNone(fresh.seq_mean_)
+        self.assertTrue(checkpoint.exists())
+
+        resumed = AttentionBinaryClassifierTorch(hidden_dims=(), lr=1e-3, epochs=4, optimizer_name="adamw")
+        with mock.patch.object(
+            AttentionBinaryClassifierTorch, "_fit_sequence_scaler", autospec=True,
+            side_effect=_PooledAttentionWrapper._fit_sequence_scaler,
+        ) as resume_spy:
+            resumed.fit_loader(make_loader(), "protein_global", checkpoint_path=checkpoint)
+        self.assertEqual(resume_spy.call_count, 0)
+        self.assertIsNotNone(resumed.seq_mean_)
+
+    def test_load_loader_task_data_honors_auto_store_mode(self) -> None:
+        """The attention route forwards residue_store_mode (default 'auto') so
+        per-residue tasks materialize into RAM instead of forcing a lazy store."""
+        from data_loading import task_data
+
+        with (
+            mock.patch.object(task_data, "get_task_config", return_value=object()),
+            mock.patch.object(task_data, "_load_and_filter_rows", return_value=object()),
+            mock.patch.object(task_data, "_build_loader_data") as build,
+        ):
+            task_data.load_loader_task_data(
+                "any_task", "fake.safetensors", "random",
+                allowed_ids={"P1"}, sequence_to_id={},
+            )
+        # positional signature: (config, task_name, emb_path, split, rows, mode, dim, seq_to_id)
+        self.assertEqual(build.call_args.args[5], "auto")
 
     def test_get_target_payload_for_residue_tasks_does_not_reload_embeddings(self) -> None:
         from data_loading.stores import get_target_payload

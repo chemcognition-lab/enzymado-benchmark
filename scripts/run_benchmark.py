@@ -346,6 +346,7 @@ def _run_task(
                 split_variant,
                 allowed_ids=allowed_ids,
                 sequence_to_id=sequence_to_id,
+                residue_store_mode=residue_store_mode,
                 embedding_dim=embedding_dim,
             )
             training_route: TrainingRouteSpec = ATTENTION_ROUTE

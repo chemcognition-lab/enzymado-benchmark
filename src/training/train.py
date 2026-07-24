@@ -213,17 +213,21 @@ def prepare_attention(
     *,
     allowed_ids: set[str] | None = None,
     sequence_to_id: dict[str, str] | None = None,
+    residue_store_mode: str = "auto",
     embedding_dim: int | None = None,
 ) -> LoaderTaskData:
     """Thin wrapper: load data as LoaderTaskData for attention models on any batch_kind.
 
-    Attention models always need per-residue DataLoaders (lazy store) regardless
-    of the task's batch_kind. Delegates to data_loading.load_loader_task_data.
+    Attention models always need per-residue DataLoaders regardless of the
+    task's batch_kind. ``residue_store_mode`` is forwarded so per-residue tasks
+    materialize the embedding subset into RAM when it fits. Delegates to
+    data_loading.load_loader_task_data.
     """
     return load_loader_task_data(
         task_name, emb_path, split_variant,
         allowed_ids=allowed_ids,
         sequence_to_id=sequence_to_id,
+        residue_store_mode=residue_store_mode,
         embedding_dim=embedding_dim,
     )
 
