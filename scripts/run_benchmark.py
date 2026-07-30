@@ -272,10 +272,16 @@ def _completed_models(
     split_variant: str,
     task_name: str,
     emb_name: str,
+    task_scope: str,
 ) -> list[str]:
     return [
         model_name for model_name in model_map
-        if is_run_complete(build_results_run_dir(output_dir, split_variant, task_name, emb_name, model_name))
+        if is_run_complete(
+            build_results_run_dir(
+                output_dir, split_variant, task_name, emb_name, model_name,
+                task_scope=task_scope,
+            )
+        )
     ]
 
 
@@ -327,7 +333,9 @@ def _run_task(
             return
 
         if not overwrite_results:
-            already_done = _completed_models(model_map, output_dir, split_variant, task_name, emb_name)
+            already_done = _completed_models(
+                model_map, output_dir, split_variant, task_name, emb_name, task_scope,
+            )
             if len(already_done) == len(model_map):
                 log(f"    All {len(already_done)} models already trained — skipping task.")
                 return
@@ -375,7 +383,10 @@ def _run_task(
             log("    Validation disabled: empty val split after filtering")
 
         for model_name, model_info in model_map.items():
-            run_dir = build_results_run_dir(output_dir, split_variant, task_name, emb_name, model_name)
+            run_dir = build_results_run_dir(
+                output_dir, split_variant, task_name, emb_name, model_name,
+                task_scope=task_scope,
+            )
             if not overwrite_results and is_run_complete(run_dir):
                 log(f"    [{model_name}] Already trained — skipping.")
                 continue

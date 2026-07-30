@@ -79,10 +79,18 @@ def build_results_run_dir(
     task_name: str,
     emb_name: str,
     model_name: str,
+    *,
+    task_scope: str,
 ) -> Path:
-    """Return the canonical on-disk artifact path for one trained run."""
+    """Return the canonical on-disk artifact path for one trained run.
+
+    ``task_scope`` ("properties" or "real_case", from ``TaskConfig.task_scope``)
+    is the top-level bucket so the two experiment families live in separate
+    subtrees instead of interleaved under the same attention/no_attention dirs.
+    """
     return (
         output_root
+        / _path_token(task_scope)
         / canonical_embedding_mode(task_name, model_name)
         / canonical_split_family(split_variant)
         / canonical_model_family(model_name)

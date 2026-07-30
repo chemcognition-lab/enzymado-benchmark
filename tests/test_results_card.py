@@ -28,24 +28,46 @@ class ResultsCardTests(unittest.TestCase):
         build_result_run_dir = module.build_results_run_dir
         root = Path("/tmp/results")
         self.assertEqual(
-            build_result_run_dir(root, "random", "binding", "ankh_base", "linear_classification"),
-            root / "no_attention" / "random" / "linear" / "binding" / "ankh_base",
+            build_result_run_dir(
+                root, "random", "binding", "ankh_base", "linear_classification",
+                task_scope="properties",
+            ),
+            root / "properties" / "no_attention" / "random" / "linear" / "binding" / "ankh_base",
         )
         self.assertEqual(
-            build_result_run_dir(root, "random", "ddg", "ankh_base", "linear_regressor"),
-            root / "no_attention" / "random" / "linear" / "ddg" / "ankh_base",
+            build_result_run_dir(
+                root, "random", "ddg", "ankh_base", "linear_regressor",
+                task_scope="properties",
+            ),
+            root / "properties" / "no_attention" / "random" / "linear" / "ddg" / "ankh_base",
         )
         self.assertEqual(
-            build_result_run_dir(root, "random", "solubility", "ankh_base", "linear_classification"),
-            root / "no_attention" / "random" / "linear" / "solubility" / "ankh_base",
+            build_result_run_dir(
+                root, "random", "solubility", "ankh_base", "linear_classification",
+                task_scope="properties",
+            ),
+            root / "properties" / "no_attention" / "random" / "linear" / "solubility" / "ankh_base",
         )
         self.assertEqual(
-            build_result_run_dir(root, "similarity", "kcat", "esm2_650M", "attention_mlp_regressor"),
-            root / "attention" / "loco" / "mlp" / "kcat" / "esm2_650M",
+            build_result_run_dir(
+                root, "similarity", "kcat", "esm2_650M", "attention_mlp_regressor",
+                task_scope="properties",
+            ),
+            root / "properties" / "attention" / "loco" / "mlp" / "kcat" / "esm2_650M",
         )
         self.assertEqual(
-            build_result_run_dir(root, "random", "active_sites", "prot5_xl_uniref50", "xgb_classification"),
-            root / "no_attention" / "random" / "xgboost" / "active_sites" / "prot5_xl_uniref50",
+            build_result_run_dir(
+                root, "random", "active_sites", "prot5_xl_uniref50", "xgb_classification",
+                task_scope="properties",
+            ),
+            root / "properties" / "no_attention" / "random" / "xgboost" / "active_sites" / "prot5_xl_uniref50",
+        )
+        self.assertEqual(
+            build_result_run_dir(
+                root, "random", "erickson_petase", "ankh_base", "linear_regressor",
+                task_scope="real_case",
+            ),
+            root / "real_case" / "no_attention" / "random" / "linear" / "erickson_petase" / "ankh_base",
         )
 
     def test_artifact_paths_use_full_run_context(self) -> None:

@@ -29,8 +29,12 @@ fi
 source "${REPO}/.venv/bin/activate"
 
 : "${FILTER_TASKS:=}"
+: "${SKIP_EXISTING:=1}"
 
-ARGS=(--skip-existing)
+ARGS=()
+if [[ "${SKIP_EXISTING}" == "1" || "${SKIP_EXISTING}" == "true" || "${SKIP_EXISTING}" == "TRUE" ]]; then
+    ARGS+=(--skip-existing)
+fi
 if [[ -n "${FILTER_TASKS}" ]]; then
     IFS=',' read -r -a _tasks <<< "${FILTER_TASKS}"
     for _task in "${_tasks[@]}"; do
@@ -41,4 +45,5 @@ if [[ -n "${FILTER_TASKS}" ]]; then
 fi
 
 echo "Filter tasks: ${FILTER_TASKS:-<none>}"
+echo "Skip existing: ${SKIP_EXISTING}"
 python -u "${REPO}/scripts/results/compute_metrics.py" "${ARGS[@]}"

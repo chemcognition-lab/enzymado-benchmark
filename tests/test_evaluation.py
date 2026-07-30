@@ -273,30 +273,43 @@ class TestDiscover(TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "no_attention/random/linear/binding/ankh_base").mkdir(parents=True)
-            (root / "attention/loco/mlp/kcat/esm2_650M").mkdir(parents=True)
-            (root / "no_attention/random/xgboost/active_sites/ankh_large").mkdir(parents=True)
+            (root / "properties/no_attention/random/linear/binding/ankh_base").mkdir(parents=True)
+            (root / "properties/attention/loco/mlp/kcat/esm2_650M").mkdir(parents=True)
+            (root / "properties/no_attention/random/xgboost/active_sites/ankh_large").mkdir(parents=True)
+            (root / "real_case/no_attention/random/mlp/erickson_petase/ankh_base").mkdir(parents=True)
             exps = discover_experiments(root)
-            sigs = {(e.pool_type, e.split, e.model_family, e.task, e.embedding_model) for e in exps}
-            self.assertEqual(len(exps), 3)
-            self.assertIn(("no_attention", "random", "linear", "binding", "ankh_base"), sigs)
-            self.assertIn(("attention", "loco", "mlp", "kcat", "esm2_650M"), sigs)
-            self.assertIn(("no_attention", "random", "xgboost", "active_sites", "ankh_large"), sigs)
+            sigs = {
+                (e.task_scope, e.pool_type, e.split, e.model_family, e.task, e.embedding_model)
+                for e in exps
+            }
+            self.assertEqual(len(exps), 4)
+            self.assertIn(("properties", "no_attention", "random", "linear", "binding", "ankh_base"), sigs)
+            self.assertIn(("properties", "attention", "loco", "mlp", "kcat", "esm2_650M"), sigs)
+            self.assertIn(
+                ("properties", "no_attention", "random", "xgboost", "active_sites", "ankh_large"), sigs
+            )
+            self.assertIn(
+                ("real_case", "no_attention", "random", "mlp", "erickson_petase", "ankh_base"), sigs
+            )
 
     def test_assign_track_routes_into_no_attention(self) -> None:
-        e_mean = Experiment("no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp"))
+        e_mean = Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp"))
         e_residue = Experiment(
-            "no_attention", "random", "xgboost", "active_sites", "ankh_large", Path("/tmp")
+            "properties", "no_attention", "random", "xgboost", "active_sites", "ankh_large", Path("/tmp")
         )
-        e_attn = Experiment("attention", "loco", "mlp", "kcat", "esm2_650M", Path("/tmp"))
+        e_attn = Experiment("properties", "attention", "loco", "mlp", "kcat", "esm2_650M", Path("/tmp"))
         e_real = Experiment(
-            "no_attention", "random", "linear", "align_amylase_activity", "ankh_base", Path("/tmp")
+            "real_case", "no_attention", "random", "linear", "align_amylase_activity", "ankh_base", Path("/tmp")
+        )
+        e_real_attn = Experiment(
+            "real_case", "attention", "random", "mlp", "align_amylase_activity", "ankh_base", Path("/tmp")
         )
         rc = {"align_amylase_activity"}
         self.assertEqual(assign_track(e_mean, rc), "no_attention")
         self.assertEqual(assign_track(e_residue, rc), "no_attention")
         self.assertEqual(assign_track(e_attn, rc), "attention")
         self.assertEqual(assign_track(e_real, rc), "real_case")
+        self.assertEqual(assign_track(e_real_attn, rc), "real_case_attention")
 
     def test_experiment_task_type_prefers_hparams_over_metrics(self) -> None:
         import json
@@ -310,7 +323,7 @@ class TestDiscover(TestCase):
             (run_dir / "metrics.json").write_text(
                 json.dumps({"test": {"task_type": "regression"}})
             )
-            exp = Experiment("no_attention", "random", "linear", "binding", "ankh_base", run_dir)
+            exp = Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", run_dir)
             self.assertEqual(exp.task_type(), "classification")
 
     def test_experiment_task_type_falls_back_to_metrics_json(self) -> None:
@@ -322,14 +335,14 @@ class TestDiscover(TestCase):
             (run_dir / "metrics.json").write_text(
                 json.dumps({"test": {"task_type": "regression"}})
             )
-            exp = Experiment("no_attention", "random", "linear", "binding", "ankh_base", run_dir)
+            exp = Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", run_dir)
             self.assertEqual(exp.task_type(), "regression")
 
     def test_group_into_tracks_buckets_by_split_and_family(self) -> None:
         exps = [
-            Experiment("no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp/a")),
-            Experiment("no_attention", "random", "linear", "active_sites", "ankh_base", Path("/tmp/b")),
-            Experiment("attention", "random", "mlp", "kcat", "esm2_650M", Path("/tmp/c")),
+            Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp/a")),
+            Experiment("properties", "no_attention", "random", "linear", "active_sites", "ankh_base", Path("/tmp/b")),
+            Experiment("properties", "attention", "random", "mlp", "kcat", "esm2_650M", Path("/tmp/c")),
         ]
         groups = group_into_tracks(exps, real_case_tasks=set())
         keys = sorted(groups.keys(), key=lambda k: (k.track, k.split, k.model_family))
