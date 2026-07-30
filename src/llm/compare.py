@@ -87,7 +87,7 @@ def _best_per_task(records: list[dict], emb: str) -> dict[tuple[str, str], dict]
 # ---------------------------------------------------------------------------
 
 def _standing_pair(standing: dict, x: str, y: str) -> list[dict]:
-    """Mean-rank (1 = best) for x and y across the four evaluation tracks."""
+    """Competition score (1 = best) for x and y across the four evaluation tracks."""
     tracks = [
         ("no_attention", "random"), ("no_attention", "loco"),
         ("attention", "random"), ("attention", "loco"),
@@ -100,8 +100,10 @@ def _standing_pair(standing: dict, x: str, y: str) -> list[dict]:
             continue
         rows.append({
             "track": f"{emode} · {SPLIT_DISPLAY.get(sfam, sfam)}",
-            "x_mean_rank": xc["mean_rank"] if xc else None,
-            "y_mean_rank": yc["mean_rank"] if yc else None,
+            "x_score": xc["score"] if xc else None,
+            "y_score": yc["score"] if yc else None,
+            "x_n": xc["n"] if xc else 0,
+            "y_n": yc["n"] if yc else 0,
         })
     return rows
 
@@ -291,12 +293,21 @@ def render_head_to_head_md(h2h: dict) -> str:
     x, y = h2h["x"], h2h["y"]
     n_models = len(S.load_models())
     lines = [f"### Head-to-head: `{x}` (X) vs `{y}` (Y)", ""]
-    lines.append(f"Overall mean rank among all {n_models} models (1 = best; lower is better):")
+    lines.append(
+        f"Overall competition score against the other {n_models} models — each task/head "
+        "group scored `(n - rank) / (n - 1)`, so **1.0 = beat every competitor, 0.0 = "
+        "beaten by all**, on the same scale whether the group had 2 entrants or 14. "
+        "`groups` is how many task/head groups each side was averaged over; when those "
+        "differ the two sides were scored over different tasks, so read the gap loosely:")
     lines.append("")
-    lines.append("| Track | X mean rank | Y mean rank |")
-    lines.append("|---|---|---|")
+    lines.append("| Track | X score | X groups | Y score | Y groups |")
+    lines.append("|---|---|---|---|---|")
     for s in h2h["standing"]:
-        lines.append(f"| {s['track']} | {s['x_mean_rank']} | {s['y_mean_rank']} |")
+        # A side with no runs on a track scores None — render it as an explicit dash so
+        # the model reads "did not run" rather than treating a blank cell as a zero.
+        xs = f"{s['x_score']:.3f}" if s["x_score"] is not None else "—"
+        ys = f"{s['y_score']:.3f}" if s["y_score"] is not None else "—"
+        lines.append(f"| {s['track']} | {xs} | {s['x_n']} | {ys} | {s['y_n']} |")
     lines += ["", "Per-task best score (sign-aware; Δ>0 means X is better):", ""]
     lines.append("| Task | Split | Metric | X | Y | Δ | Winner |")
     lines.append("|---|---|---|---|---|---|---|")

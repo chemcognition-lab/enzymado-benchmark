@@ -135,31 +135,42 @@ def test_send_registers_tools_and_parses_reply(monkeypatch):
 
     # The tools + system prompt are registered on the chat config.
     cfg = record["config"]
-    assert cfg.system_instruction == chat.CHAT_SYSTEM
-    assert len(cfg.tools) == len(chat.TOOLS)
+    assert cfg.system_instruction.startswith(chat.CHAT_SYSTEM)
+    assert len(cfg.tools) == len(chat.CORPUS_TOOLS)
 
     # The reply text is passed through and the tool call is parsed for display.
     assert reply.text == resp.text
     assert [c.name for c in reply.tool_calls] == ["compare_two_models"]
     assert reply.tool_calls[0].args == {"model_x": "esm2_650M", "model_y": "prost5"}
     assert "0.676" in reply.tool_calls[0].result_preview
-    # 0.676 came from the tool output, so it is grounded.
-    assert reply.ungrounded_numbers == []
 
 
-def test_send_flags_ungrounded_number(monkeypatch):
-    resp = SimpleNamespace(
-        text="esm2_650M wins by a landslide, 0.999 correlation.",
-        automatic_function_calling_history=_fake_afc_history(
-            tool_name="compare_two_models",
-            args={"model_x": "esm2_650M", "model_y": "prost5"},
-            result="kcat similarity: X 0.676 vs Y 0.5927"),
-        prompt_feedback=None,
-    )
-    _install_fake_client(monkeypatch, resp)
+def test_send_stuffs_the_whole_corpus_and_retires_card_tools(monkeypatch):
+    resp = SimpleNamespace(text="hi", automatic_function_calling_history=[],
+                           prompt_feedback=None)
+    record, _ = _install_fake_client(monkeypatch, resp)
 
-    reply = chat.ChatSession().send("Why does esm2_650M beat prost5?")
-    assert 0.999 in reply.ungrounded_numbers  # not present in any tool output
+    session = chat.ChatSession()
+    session.send("hello")
+    cfg = record["config"]
+
+    # Every card is inlined in the system instruction ...
+    assert session.cards_in_context == chat.corpus.card_count()
+    for card_id in ("model_esm2_650m", "task_kcat", "baseline_mlp", "split_random"):
+        assert f"{chat.corpus.CARD_MARKER} {card_id} =====" in cfg.system_instruction
+
+    # ... so the per-card readers are not registered, but the compute tools are.
+    names = {t.__name__ for t in cfg.tools}
+    assert names.isdisjoint({"model_info", "task_info"})
+    assert {"compare_two_models", "task_leaderboard", "split_difficulty"} <= names
+
+
+def test_missing_corpus_falls_back_to_card_tools(monkeypatch, tmp_path):
+    """An empty markdown dir degrades to the tool-based knowledge base instead of failing."""
+    system, tools, n_cards = chat.build_system_instruction(tmp_path)
+    assert n_cards == 0
+    assert "KNOWLEDGE BASE UNAVAILABLE" in system
+    assert {"model_info", "task_info"} <= {t.__name__ for t in tools}
 
 
 def test_send_raises_on_empty_response(monkeypatch):

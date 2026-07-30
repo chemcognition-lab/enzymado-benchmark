@@ -85,7 +85,8 @@ def _standing_rows(standing: dict, emb: str) -> list[dict]:
     for emode, sfam, label in TRACK_ORDER:
         cell = buckets.get((emode, sfam))
         if cell:
-            rows.append({"track": label, "mean_rank": cell["mean_rank"], "n": cell["n"]})
+            rows.append({"track": label, "score": cell["score"],
+                         "mean_rank": cell["mean_rank"], "n": cell["n"]})
     return rows
 
 

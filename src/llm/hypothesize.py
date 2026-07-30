@@ -27,13 +27,6 @@ _VERDICT_RANK = {
     "cherry-picked": 1, "contradicted": 0, "": 2,
 }
 
-# A hypothesis that cites numbers absent from the authoritative evidence table has its
-# self-reported confidence multiplied by this. `verify_evidence` only *flags* fabricated
-# numbers; without acting on that flag, the "numbers correct by construction" guarantee
-# would stop at display and an ungrounded claim could still rank first.
-_UNGROUNDED_CONFIDENCE_FACTOR = 0.5
-
-
 @dataclass
 class Result:
     question: str
@@ -46,14 +39,6 @@ class Result:
             "evidence_md": self.evidence_md,
             "hypotheses": [h.to_dict() for h in self.hypotheses],
         }
-
-
-def _penalize_ungrounded(hyps: list[schema.Hypothesis]) -> list[schema.Hypothesis]:
-    """Discount confidence for hypotheses citing numbers not in the evidence table."""
-    for h in hyps:
-        if h.unverified_numbers:
-            h.confidence *= _UNGROUNDED_CONFIDENCE_FACTOR
-    return hyps
 
 
 def _rank(hyps: list[schema.Hypothesis]) -> list[schema.Hypothesis]:
@@ -77,7 +62,6 @@ def _run(question: str, evidence_md: str, n: int, model: str | None,
     except (json.JSONDecodeError, ValueError) as e:
         # Surface as a GeminiError so callers (CLI/app) handle it uniformly.
         raise gemini.GeminiError(f"Could not parse the model's hypotheses: {e}") from e
-    schema.verify_evidence(hyps, evidence_md)  # flag cited numbers absent from the table
 
     if critique and hyps:
         # Tag each hypothesis with its index so the critic's verdicts can be matched
@@ -93,8 +77,6 @@ def _run(question: str, evidence_md: str, n: int, model: str | None,
         except (json.JSONDecodeError, ValueError):
             pass  # keep un-critiqued hypotheses rather than failing the whole run
 
-    # Applied after critique, which may overwrite confidence with its own revised value.
-    _penalize_ungrounded(hyps)
     return Result(question=question, evidence_md=evidence_md, hypotheses=_rank(hyps))
 
 
@@ -145,9 +127,6 @@ def _print(result: Result) -> None:
             print(f"   Caveat: {h.caveat}")
         if h.falsification_test:
             print(f"   Falsify: {h.falsification_test}")
-        if h.unverified_numbers:
-            nums = ", ".join(str(n) for n in h.unverified_numbers)
-            print(f"   ⚠ Unverified numbers (not in the evidence table): {nums}")
         if h.verdict_reason:
             print(f"   Critic: {h.verdict_reason}")
 

@@ -2,10 +2,15 @@
 
 The form-driven hypothesis engine (see :mod:`llm.hypothesize`) guaranteed correct numbers
 by making the user pick the two models and computing the head-to-head deterministically.
-This module keeps that guarantee inside a *free-text* interface: Gemini is given a set of
-**function-calling tools** that wrap the deterministic layer (:mod:`llm.compare`,
-:mod:`llm.sources`) and the authored cards, so the model must *call a tool* to obtain any
-benchmark number rather than inventing it.
+This module carries that deterministic layer into a *free-text* interface: Gemini is given
+**function-calling tools** wrapping :mod:`llm.compare` / :mod:`llm.sources`, so any
+cross-model aggregate (head-to-head, ranking, split gap) is computed rather than eyeballed.
+
+The knowledge base is not retrieved — the **entire card corpus is stuffed into the system
+instruction** on every session (:func:`build_system_instruction`, ~43k tokens for 39 cards,
+a stable prefix that Gemini's implicit caching absorbs). The model therefore reads model,
+task, baseline-head and split cards inline, and `model_info` / `task_info` are registered
+only in the fallback case where the corpus cannot be loaded.
 
 The four things the assistant is built to do:
 
@@ -29,7 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import compare, gemini, hypothesize, schema
+from . import compare, corpus, gemini, hypothesize
 from . import sources as S
 
 MARKDOWN_DIR = S.REPO_ROOT / "markdown"
@@ -263,9 +268,6 @@ def render_result_md(result: hypothesize.Result) -> str:
             lines.append(f"- *Caveat.* {h.caveat}")
         if h.falsification_test:
             lines.append(f"- *Falsification test.* {h.falsification_test}")
-        if h.unverified_numbers:
-            nums = ", ".join(str(n) for n in h.unverified_numbers)
-            lines.append(f"- ⚠ Cites numbers not in the evidence table: {nums}")
         if h.verdict_reason:
             lines.append(f"- *Critic.* {h.verdict_reason}")
         lines.append("")
@@ -286,9 +288,15 @@ TOOLS = [
     rigorous_combo_hypotheses,
 ]
 
+#: Card readers, redundant once the corpus is in context — registered only in the fallback.
+CARD_TOOLS = [model_info, task_info]
+
+#: The tools registered in the normal (corpus-stuffed) case.
+CORPUS_TOOLS = [t for t in TOOLS if t not in CARD_TOOLS]
+
 
 # ---------------------------------------------------------------------------
-# System prompt — capabilities, grounding rules, tool routing
+# System prompt — capabilities, number handling, tool routing
 # ---------------------------------------------------------------------------
 
 CHAT_SYSTEM = """You are a protein-ML benchmark analyst for the Enzymado benchmark. You help \
@@ -296,13 +304,26 @@ the user through a chat: you explain how models work, propose falsifiable hypoth
 one model (or set of models) outperforms another, and advise on experimental-design choices \
 (which model / prediction head / data split to use).
 
-HARD GROUNDING RULES — these are non-negotiable:
-- NEVER invent, recompute, or estimate a benchmark number. Any figure you state MUST come \
-from a tool result, quoted verbatim (same digits). If you do not have a number from a tool, \
-call the tool first; do not guess.
-- Every performance claim must rest on BOTH a real number (from a comparison/leaderboard tool) \
-AND a real attribute that differs between the models (from `model_info` / the attribute table). \
-No number + no attribute → no claim.
+The COMPLETE knowledge base is appended below — every foundation-model, task, baseline-head \
+and data-split card. You already hold each model's architecture and pretraining details, each \
+task's definition and dataset statistics, and every card's caveats, so answer descriptive \
+questions straight from the cards instead of calling a tool or asking the user for context.
+
+USING NUMBERS:
+- Two sources are legitimate: a figure copied verbatim (same digits) from a card below, or a \
+figure returned by a tool. Never invent, recompute, estimate, or interpolate one.
+- The cards' per-task leaderboard and standing tables are snapshots regenerated with the \
+benchmark. For anything spanning models or tasks — a head-to-head, a delta, a win tally, a \
+ranking, a split gap — CALL THE TOOL instead of reading it off the tables: \
+`compare_two_models`, `compare_model_sets`, `task_leaderboard` and `split_difficulty` compute \
+it exactly (sign-aware, and they disclose tasks only one side ran). Do not assemble a \
+comparison by eye across twenty tables — that is what the tools are for.
+- A card's figures describe that card's model/task only. Never carry a number from one card \
+over to another card's task or split.
+
+MAKING CLAIMS:
+- Every performance claim must rest on BOTH a real number AND a real attribute that differs \
+between the models. No number + no attribute → no claim.
 - Respect the cards' flags: an attribute marked `needs_verification` is soft evidence (cap \
 confidence); honor stated caveats (e.g. a retrieval capability that is DISABLED in this \
 single-sequence benchmark must not be credited for a win).
@@ -310,17 +331,53 @@ single-sequence benchmark must not be credited for a win).
 random vs similarity (out-of-distribution) split is the most informative contrast.
 
 TOOL ROUTING:
-- "How does model X work?" → `model_info`. "What is task T?" → `task_info`.
-- "Why does X beat Y?" → `compare_two_models`, then reason inline from that evidence.
+- "How does model X work?" / "What is task T?" → answer from the cards below; no tool needed.
+- "Why does X beat Y?" → `compare_two_models`, then reason from that table plus the cards.
 - "Why does set A beat set B?" → `compare_model_sets` (reason about complementarity/diversity).
-- "Which model/head/split should I use for task T?" → `task_leaderboard`, `task_info`, \
-`split_difficulty`, and `model_info` as needed.
+- "Which model/head/split should I use for task T?" → `task_leaderboard` and \
+`split_difficulty`, with the task and model cards for the mechanism.
 - Call `rigorous_pairwise_hypotheses` / `rigorous_combo_hypotheses` ONLY when the user \
 explicitly asks for ranked, vetted, critiqued, or rigorous hypotheses — they are slow.
-- If you are unsure of a model or task name, call `list_models` / `list_tasks` first.
+- `list_models` / `list_tasks` resolve a loose name (e.g. "ESM2" → `esm2_650M`) to the \
+canonical key a comparison tool expects.
 
 Be concise and mechanistic. It is fine to give fewer, stronger points. When a comparison mixes \
 model configurations or leans on a task run for only one side, say so."""
+
+#: Introduces the stuffed corpus; ``{n}`` is the card count.
+CORPUS_PREAMBLE = """
+
+================================ KNOWLEDGE BASE ================================
+All {n} benchmark cards follow, each introduced by a `===== CARD: <id> =====` marker.
+Cite ids inline (e.g. [task_kcat], [model_prost5]) when a claim leans on a card.
+"""
+
+#: Appended instead of the corpus when the cards cannot be loaded.
+NO_CORPUS_NOTE = """
+
+KNOWLEDGE BASE UNAVAILABLE: the cards could not be loaded, so they are NOT in this prompt.
+Disregard the instructions above about reading cards inline — call `model_info` / `task_info`
+to fetch a card before using its content, and tell the user to run
+`python scripts/generate_cards.py` to restore the knowledge base."""
+
+
+def build_system_instruction(markdown_dir: Path | None = None) -> tuple[str, list, int]:
+    """Return ``(system_instruction, tools, n_cards)`` for a session.
+
+    Normally that is :data:`CHAT_SYSTEM` plus every card and :data:`CORPUS_TOOLS`. If the
+    corpus is missing (cards never generated), degrade to the tool-based knowledge base
+    rather than failing the session: the card readers are registered and the prompt is told
+    the cards are absent.
+
+    ``n_cards`` is counted from the corpus, not the returned string — the preamble quotes the
+    card delimiter verbatim, so counting markers in the assembled prompt overcounts by one.
+    """
+    try:
+        kb = corpus.load_corpus(markdown_dir)
+    except (FileNotFoundError, OSError):
+        return CHAT_SYSTEM + NO_CORPUS_NOTE, list(TOOLS), 0
+    n_cards = kb.count(corpus.CARD_MARKER)
+    return CHAT_SYSTEM + CORPUS_PREAMBLE.format(n=n_cards) + "\n" + kb, list(CORPUS_TOOLS), n_cards
 
 
 # ---------------------------------------------------------------------------
@@ -338,22 +395,26 @@ class ToolCall:
 class ChatReply:
     text: str
     tool_calls: list[ToolCall] = field(default_factory=list)
-    ungrounded_numbers: list[float] = field(default_factory=list)
 
 
 class ChatSession:
-    """A multi-turn Gemini chat wired to the grounded benchmark tools.
+    """A multi-turn Gemini chat holding the whole card corpus, wired to the compute tools.
 
     The underlying ``genai`` chat is created lazily on the first :meth:`send`, so constructing
     a session (and importing this module) requires neither the SDK nor ``GEMINI_API_KEY``.
-    Automatic function calling runs the tool loop; the model's curated history — including the
-    tool round-trips — is the conversation's memory.
+    The corpus is loaded at that point and becomes the system instruction's tail; automatic
+    function calling runs the tool loop, and the model's curated history — including the tool
+    round-trips — is the conversation's memory.
     """
 
-    def __init__(self, *, model: str | None = None, temperature: float = 0.3):
+    def __init__(self, *, model: str | None = None, temperature: float = 0.3,
+                 markdown_dir: Path | None = None):
         self._model = model
         self._temperature = temperature
+        self._markdown_dir = markdown_dir
         self._chat = None
+        #: Cards stuffed into this session's prompt; ``None`` until the first :meth:`send`.
+        self.cards_in_context: int | None = None
 
     def _ensure_chat(self):
         if self._chat is not None:
@@ -361,10 +422,11 @@ class ChatSession:
         client = gemini._client()  # raises GeminiError on missing key / uninstalled SDK
         from google.genai import types
 
+        system, tools, self.cards_in_context = build_system_instruction(self._markdown_dir)
         config = types.GenerateContentConfig(
-            system_instruction=CHAT_SYSTEM,
+            system_instruction=system,
             temperature=self._temperature,
-            tools=TOOLS,
+            tools=tools,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 maximum_remote_calls=8),
         )
@@ -394,61 +456,48 @@ class ChatSession:
             raise gemini.GeminiError("Gemini returned an empty response.")
 
         full_history = getattr(resp, "automatic_function_calling_history", None) or []
-        tool_calls, tool_outputs = _parse_afc_history(full_history[prior_len:])
-        ungrounded = _ungrounded_numbers(text, tool_outputs)
-        return ChatReply(text=text, tool_calls=tool_calls, ungrounded_numbers=ungrounded)
+        return ChatReply(text=text, tool_calls=_parse_afc_history(full_history[prior_len:]))
 
 
-def _parse_afc_history(history) -> tuple[list[ToolCall], list[str]]:
-    """Extract (tool calls for display, tool-output strings for grounding) from AFC history.
+def _parse_afc_history(history) -> list[ToolCall]:
+    """Extract this turn's tool calls (name, args, result preview) from the AFC history.
 
     ``automatic_function_calling_history`` is a ``list[Content]`` whose parts carry either a
     ``function_call`` (name + args) or a ``function_response`` (name + wrapped result). AFC
     wraps a tool's return as ``{'result': ...}`` and a raised exception as ``{'error': ...}``.
+
+    Responses are matched to calls FIFO, not LIFO: the model can emit several
+    ``function_call`` parts in one turn and the SDK answers them in the same order, so when
+    one tool is invoked twice (``task_info('kcat')`` + ``task_info('km')``) a LIFO match
+    would pair each result with the *other* call's args and silently mislabel the evidence.
     """
     calls: list[dict[str, Any]] = []
-    outputs: list[str] = []
     if not history:
-        return [], []
+        return []
     for content in history:
         for part in getattr(content, "parts", None) or []:
             fc = getattr(part, "function_call", None)
             if fc is not None:
-                calls.append({"name": fc.name, "args": dict(fc.args or {}), "result": ""})
+                calls.append({"name": fc.name, "args": dict(fc.args or {}),
+                              "result": "", "answered": False})
             fr = getattr(part, "function_response", None)
             if fr is not None:
                 response = fr.response or {}
                 value = response.get("result", response.get("error", ""))
                 text = value if isinstance(value, str) else str(value)
-                outputs.append(text)
-                # Attach the response to the most recent matching, still-unfilled call.
-                for entry in reversed(calls):
-                    if entry["name"] == fr.name and not entry["result"]:
+                # Attach to the OLDEST matching call not yet answered. `answered` is a
+                # separate flag, not `not result`, so a tool that legitimately returns an
+                # empty string still consumes its slot instead of being overwritten later.
+                for entry in calls:
+                    if entry["name"] == fr.name and not entry["answered"]:
                         entry["result"] = text
+                        entry["answered"] = True
                         break
-    tool_calls = [
+    return [
         ToolCall(name=c["name"], args=c["args"],
                  result_preview=_truncate(c["result"], 600))
         for c in calls
     ]
-    return tool_calls, outputs
-
-
-def _ungrounded_numbers(reply_text: str, tool_outputs: list[str]) -> list[float]:
-    """Numbers stated in the reply that don't appear in any tool output (possible fabrication).
-
-    Compensates for the loss of ``schema.verify_evidence`` in a free-text answer: the reply's
-    numbers are matched (tolerantly, via ``schema._is_grounded``) against the numbers the tools
-    actually returned.
-    """
-    allowed = set()
-    for out in tool_outputs:
-        allowed.update(schema.extract_numbers(out))
-    flagged: list[float] = []
-    for num in schema.extract_numbers(reply_text):
-        if not schema._is_grounded(num, allowed) and num not in flagged:
-            flagged.append(num)
-    return flagged
 
 
 def _truncate(text: str, limit: int) -> str:

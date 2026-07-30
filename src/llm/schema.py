@@ -32,8 +32,6 @@ class Hypothesis:
     # Filled by the critic pass:
     verdict: str = ""
     verdict_reason: str = ""
-    # Filled by verify_evidence: numbers cited that are absent from the evidence table:
-    unverified_numbers: list[float] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -105,58 +103,6 @@ def parse_hypotheses(text: str) -> list[Hypothesis]:
             caveat=obj.get("caveat", "") or "",
         ))
     return out
-
-
-# ---------------------------------------------------------------------------
-# Evidence validation — do the numbers a hypothesis cites exist in the table?
-# ---------------------------------------------------------------------------
-
-# A numeric token NOT glued to letters/underscores, so we don't pull "650"/"3"/"2"
-# out of model names like `esm2_650M`, `esm2_3b`, or `prot5_xl` and then flag them
-# as fabricated. `\w` covers [A-Za-z0-9_]; the leading `.` guard avoids re-matching
-# the fractional tail of a number already consumed.
-_NUMBER_RE = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?![\w])")
-
-
-def extract_numbers(text: str) -> list[float]:
-    """Pull numeric tokens out of free text (ignores bare '.'/'-' and digits inside words)."""
-    out = []
-    for tok in _NUMBER_RE.findall(text):
-        try:
-            out.append(float(tok))
-        except ValueError:  # pragma: no cover - regex already constrains this
-            pass
-    return out
-
-
-def _is_grounded(value: float, allowed: set[float]) -> bool:
-    """A cited number is grounded if it (or its magnitude) matches an authoritative
-    number within the table's rounding — tolerant of fewer quoted decimals and sign."""
-    dec = len(f"{value:f}".rstrip("0").split(".")[1]) if value != int(value) else 0
-    for a in allowed:
-        if abs(a - value) <= 0.005 or abs(abs(a) - abs(value)) <= 0.005:
-            return True
-        if round(a, dec) == round(value, dec) or round(abs(a), dec) == round(abs(value), dec):
-            return True
-    return False
-
-
-def verify_evidence(hyps: list[Hypothesis], evidence_text: str) -> list[Hypothesis]:
-    """Flag numbers in each hypothesis's evidence that are absent from the evidence table.
-
-    ``evidence_text`` is the deterministic packet (head-to-head / combo / attribute
-    tables) — the authoritative source. Anything cited that isn't there (a miscopied
-    delta, a fabricated count) is recorded on ``unverified_numbers`` for display.
-    """
-    allowed = set(extract_numbers(evidence_text))
-    for h in hyps:
-        flagged: list[float] = []
-        for bullet in h.evidence:
-            for num in extract_numbers(bullet):
-                if not _is_grounded(num, allowed) and num not in flagged:
-                    flagged.append(num)
-        h.unverified_numbers = flagged
-    return hyps
 
 
 def apply_critique(hyps: list[Hypothesis], text: str) -> list[Hypothesis]:

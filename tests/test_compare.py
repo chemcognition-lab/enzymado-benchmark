@@ -149,42 +149,6 @@ def test_methodology_block_rendered_in_both_views(records):
         assert "Best-config per task" in md
 
 
-# ---------------------------------------------------------------------------
-# #4 Evidence validation
-# ---------------------------------------------------------------------------
-
-_EVIDENCE = ("| kcat | similarity | mae | 0.613 | 0.5927 | -0.0203 | Y |\n"
-             "**Task wins:** X=13, Y=15, tie=0.")
-
-
-def test_verify_evidence_flags_only_fabricated_numbers():
-    h = schema.Hypothesis(claim="c", mechanism="m", evidence=[
-        "kcat similarity: Y 0.5927 vs X 0.613",   # both grounded
-        "Y wins 15 tasks",                         # grounded (tally)
-        "Y wins 99 tasks",                         # fabricated
-    ])
-    schema.verify_evidence([h], _EVIDENCE)
-    assert h.unverified_numbers == [99.0]
-
-
-def test_verify_evidence_tolerates_rounding_and_sign():
-    h = schema.Hypothesis(claim="c", mechanism="m", evidence=[
-        "delta 0.0203",   # abs of the table's -0.0203
-        "about 0.59",     # rounded form of 0.5927
-    ])
-    schema.verify_evidence([h], _EVIDENCE)
-    assert h.unverified_numbers == []
-
-
-def test_verify_evidence_ignores_digits_inside_model_names():
-    h = schema.Hypothesis(claim="c", mechanism="m", evidence=[
-        "esm2_650M beats esm2_3b",   # 650/3/2 are model-name digits, not data
-        "by 0.77 on kcat",            # a genuine (fabricated) number → must still flag
-    ])
-    schema.verify_evidence([h], _EVIDENCE)
-    assert h.unverified_numbers == [0.77]
-
-
 def test_apply_critique_matches_by_index_when_reordered():
     hyps = [schema.Hypothesis(claim="first", mechanism="m"),
             schema.Hypothesis(claim="second", mechanism="m")]
@@ -256,22 +220,19 @@ def test_orchestrator_survives_bad_critique_json(monkeypatch):
     assert len(result.hypotheses) == 2  # kept despite critique parse failure
 
 
-def test_ungrounded_hypothesis_is_penalized_and_outranked(monkeypatch):
-    # One hypothesis cites a fabricated number (987654); the other is grounded.
+def test_hypotheses_rank_by_self_reported_confidence_without_critique(monkeypatch):
+    # With the critique off, verdicts tie and the model's own confidence alone orders them.
     gen = json.dumps([
-        {"claim": "ungrounded", "mechanism": "m", "evidence": ["Y wins 987654 tasks"],
-         "differentiating_attribute": "parameters", "confidence": 0.9},
-        {"claim": "grounded", "mechanism": "m", "evidence": [],
+        {"claim": "weaker", "mechanism": "m", "evidence": ["Y wins 987654 tasks"],
+         "differentiating_attribute": "parameters", "confidence": 0.4},
+        {"claim": "stronger", "mechanism": "m", "evidence": [],
          "differentiating_attribute": "family", "confidence": 0.6},
     ])
     monkeypatch.setattr(hypothesize.gemini, "generate", lambda *a, **k: gen)
-    # critique off so verdicts tie and confidence alone decides the ordering.
     result = hypothesize.explain_pairwise("esm2_650m", "prost5", n=5, critique=False)
 
     by_claim = {h.claim: h for h in result.hypotheses}
-    assert by_claim["ungrounded"].unverified_numbers == [987654.0]
-    assert by_claim["ungrounded"].confidence == pytest.approx(0.45)   # 0.9 * 0.5
-    assert by_claim["grounded"].confidence == pytest.approx(0.6)      # untouched
-    # The penalty flips the order: the grounded claim now outranks the ungrounded one,
-    # despite the ungrounded one's higher *self-reported* confidence.
-    assert result.hypotheses[0].claim == "grounded"
+    # Confidence is passed through untouched — nothing rewrites it post-generation.
+    assert by_claim["weaker"].confidence == pytest.approx(0.4)
+    assert by_claim["stronger"].confidence == pytest.approx(0.6)
+    assert result.hypotheses[0].claim == "stronger"

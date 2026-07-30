@@ -231,33 +231,52 @@ def _group(records, *keys):
     return grouped
 
 
-def model_standing(records: list[dict[str, Any]]) -> dict[str, dict[tuple, dict]]:
-    """Mean rank of each embedding within (embedding_mode, split_family).
+def _rank_score(rank: float, n: int) -> float:
+    """Normalize a within-group rank to a 0-1 score, 1 = best (fraction of field beaten).
 
-    For every (embedding_mode, split_family, model_family, task) group we rank
-    the competing embeddings by the primary metric, then average those ranks per
-    embedding across all groups sharing an (embedding_mode, split_family). Lower
-    is better. This is a local proxy for the deferred Bradley-Terry Elo.
+    ``(n - rank) / (n - 1)``: first of any field scores 1.0, last scores 0.0, and the
+    midpoint is 0.5 regardless of ``n``. This is what makes scores from a 2-model group
+    and a 14-model group comparable — a raw rank is not, since 2nd of 2 is *last* while
+    2nd of 14 is near the top. Averaged ties land between their neighbours' scores.
+    """
+    return (n - rank) / (n - 1)
+
+
+def model_standing(records: list[dict[str, Any]]) -> dict[str, dict[tuple, dict]]:
+    """Mean competition score of each embedding within (embedding_mode, split_family).
+
+    For every (embedding_mode, split_family, model_family, task) group we rank the
+    competing embeddings by the primary metric, convert each rank to a size-normalized
+    ``score`` (:func:`_rank_score`, 1 = best), then average those scores per embedding
+    across all groups sharing an (embedding_mode, split_family).
+
+    ``score`` is the headline number *because groups are not the same size*: sparse
+    groups (some tasks ran only 2-5 of the 14 models) hand their members a flattering
+    raw rank that is not comparable with a 14-way group's. ``mean_rank`` is still
+    reported alongside it for continuity, but it is only meaningful within one group.
+    This is a local proxy for the deferred Bradley-Terry Elo.
     """
     scored = [r for r in records if r["primary_value"] is not None]
     groups = _group(scored, "embedding_mode", "split_family", "model_family", "task")
 
-    # accumulate: standing[emb][(embedding_mode, split_family)] = [ranks...]
-    acc: dict[str, dict[tuple, list[float]]] = {}
+    # accumulate: standing[emb][(embedding_mode, split_family)] = [(rank, score)...]
+    acc: dict[str, dict[tuple, list[tuple[float, float]]]] = {}
     for (emode, sfam, _mf, _task), recs in groups.items():
-        if len(recs) < 2:
+        if len(recs) < 2:  # a one-horse race has no ranking information
             continue
         values = [r["primary_value"] for r in recs]
         ranks = _avg_ranks(values, recs[0]["primary_sign"])
         for rec, rank in zip(recs, ranks):
-            acc.setdefault(rec["emb"], {}).setdefault((emode, sfam), []).append(rank)
+            acc.setdefault(rec["emb"], {}).setdefault((emode, sfam), []).append(
+                (rank, _rank_score(rank, len(recs))))
 
     standing: dict[str, dict[tuple, dict]] = {}
     for emb, buckets in acc.items():
-        for bucket, ranks in buckets.items():
+        for bucket, pairs in buckets.items():
             standing.setdefault(emb, {})[bucket] = {
-                "mean_rank": round(sum(ranks) / len(ranks), 2),
-                "n": len(ranks),
+                "score": round(sum(s for _, s in pairs) / len(pairs), 3),
+                "mean_rank": round(sum(r for r, _ in pairs) / len(pairs), 2),
+                "n": len(pairs),
             }
     return standing
 

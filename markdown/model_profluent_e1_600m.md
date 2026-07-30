@@ -49,15 +49,19 @@ baseline cards).
 
 ## Benchmark standing (auto-generated — refreshes when results change)
 
-Mean rank among the 14 foundation models (1 = best), averaged over
-heads and tasks:
+Competition score against the other foundation models, averaged over heads and
+tasks. Each task/head group is scored `(n - rank) / (n - 1)` — **1.0 = beat every
+competitor, 0.0 = beaten by all** — so groups where only a few of the
+14 models ran count on the same scale as full 14-way groups. The raw
+mean rank is shown alongside it, but compare on the score: it is the rank-based
+number that survives the uneven group sizes.
 
-| Track | Mean rank (of 14) | Groups averaged |
-|---|---|---|
-| No-attention · Random | 7.78 | 51 |
-| No-attention · Similarity | 9.3 | 27 |
-| Attention · Random | 7.23 | 30 |
-| Attention · Similarity | 6.81 | 16 |
+| Track | Score (1 = best) | Mean rank | Groups averaged |
+|---|---|---|---|
+| No-attention · Random | 0.478 | 7.78 | 51 |
+| No-attention · Similarity | 0.362 | 9.30 | 27 |
+| Attention · Random | 0.490 | 7.23 | 30 |
+| Attention · Similarity | 0.501 | 6.81 | 16 |
 
 ### Best test score per task — random split
 

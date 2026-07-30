@@ -54,14 +54,18 @@ baseline cards).
 
 ## Benchmark standing (auto-generated — refreshes when results change)
 
-Mean rank among the {{ n_models }} foundation models (1 = best), averaged over
-heads and tasks:
+Competition score against the other foundation models, averaged over heads and
+tasks. Each task/head group is scored `(n - rank) / (n - 1)` — **1.0 = beat every
+competitor, 0.0 = beaten by all** — so groups where only a few of the
+{{ n_models }} models ran count on the same scale as full 14-way groups. The raw
+mean rank is shown alongside it, but compare on the score: it is the rank-based
+number that survives the uneven group sizes.
 
 {% if standing_rows %}
-| Track | Mean rank (of {{ n_models }}) | Groups averaged |
-|---|---|---|
+| Track | Score (1 = best) | Mean rank | Groups averaged |
+|---|---|---|---|
 {% for r in standing_rows %}
-| {{ r.track }} | {{ r.mean_rank }} | {{ r.n }} |
+| {{ r.track }} | {{ "%.3f"|format(r.score) }} | {{ "%.2f"|format(r.mean_rank) }} | {{ r.n }} |
 {% endfor %}
 {% else %}
 _No runs for this model found in `results_card.json`._
