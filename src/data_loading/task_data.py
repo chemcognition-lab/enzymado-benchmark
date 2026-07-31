@@ -62,6 +62,9 @@ class PooledTaskData:
     x_test_flat: torch.Tensor | None
     y_test_flat: torch.Tensor | None
     mask_test_flat: torch.Tensor | None
+    sample_ids_train: tuple[str, ...]
+    sample_ids_val: tuple[str, ...]
+    sample_ids_test: tuple[str, ...]
     cleanup: Callable[[], None]
 
 
@@ -80,11 +83,23 @@ class LoaderTaskData:
 class _TaskRows:
     """Internal: CSV rows for all splits plus lookup keys."""
 
-    train_rows: list[dict]
-    val_rows: list[dict]
-    test_rows: list[dict]
+    train_rows: list[dict[str, str]]
+    val_rows: list[dict[str, str]]
+    test_rows: list[dict[str, str]]
     needed_ids: set[str]
     needed_sequences: set[str]
+    ec_vocabulary: dict[str, tuple[str, ...]] | None = None
+
+
+def _sample_ids(rows: list[dict[str, str]]) -> tuple[str, ...]:
+    """Extract the ordered sample identifiers attached by TaskCSVLoader."""
+    identifiers = tuple(
+        str(row.get("prediction_id") or row.get("sample_id", "")).strip()
+        for row in rows
+    )
+    if any(not identifier for identifier in identifiers):
+        raise ValueError("Every prediction row must have a non-empty sample_id.")
+    return identifiers
 
 
 def _load_and_filter_rows(
@@ -98,6 +113,20 @@ def _load_and_filter_rows(
     train_rows = get_task_rows(config, "train", split_variant)
     val_rows = get_task_rows(config, "val", split_variant)
     test_rows = get_task_rows(config, "test", split_variant)
+    ec_vocabulary = None
+    if config.label_kind == "multilabel_ec":
+        ec_builder = HierarchicalECLabelBuilder(
+            target_column=str(config.target_column),
+            separator=config.ec_separator,
+        ).fit(train_rows)
+        ec_vocabulary = ec_builder.vocabulary_by_level
+        if ec_vocabulary is None:
+            raise RuntimeError("EC vocabulary builder did not produce a vocabulary.")
+        vocabulary_sizes = ", ".join(
+            f"{level_name}={len(labels):,}"
+            for level_name, labels in ec_vocabulary.items()
+        )
+        log(f"    Canonical EC vocabulary from full train: {vocabulary_sizes}")
 
     if allowed_ids is not None:
         orig_train = len(train_rows)
@@ -126,6 +155,7 @@ def _load_and_filter_rows(
         test_rows=test_rows,
         needed_ids=needed_ids,
         needed_sequences=needed_sequences,
+        ec_vocabulary=ec_vocabulary,
     )
 
 
@@ -150,11 +180,16 @@ def _build_pooled_data(
     )
 
     if config.label_kind == "multilabel_ec":
-        log("    Fitting EC vocabulary on train rows...")
+        if rows.ec_vocabulary is None:
+            raise ValueError(
+                "Canonical EC vocabulary is missing from loaded task rows."
+            )
+        log("    Using canonical EC vocabulary from the complete train split...")
         ec_builder = HierarchicalECLabelBuilder(
             target_column=str(config.target_column),
             separator=config.ec_separator,
-        ).fit(rows.train_rows)
+            vocabulary_by_level=rows.ec_vocabulary,
+        )
         flat_builder = FlatECLabelBuilder(
             target_column=str(config.target_column),
             separator=config.ec_separator,
@@ -162,19 +197,55 @@ def _build_pooled_data(
         )
 
         log("    Building pooled hierarchical EC arrays...")
-        x_tr, y_tr, m_tr = build_ec_arrays(rows.train_rows, by_id, by_seq, config, ec_builder)
-        x_va, y_va, m_va = build_ec_arrays(rows.val_rows, by_id, by_seq, config, ec_builder)
-        x_te, y_te, m_te = build_ec_arrays(rows.test_rows, by_id, by_seq, config, ec_builder)
+        x_tr, y_tr, m_tr = build_ec_arrays(
+            rows.train_rows,
+            by_id,
+            by_seq,
+            config,
+            ec_builder,
+            missing_policy="raise",
+        )
+        x_va, y_va, m_va = build_ec_arrays(
+            rows.val_rows,
+            by_id,
+            by_seq,
+            config,
+            ec_builder,
+            missing_policy="raise",
+        )
+        x_te, y_te, m_te = build_ec_arrays(
+            rows.test_rows,
+            by_id,
+            by_seq,
+            config,
+            ec_builder,
+            missing_policy="raise",
+        )
 
         log("    Building pooled flat EC arrays for XGBoost...")
         xf_tr, yf_tr, mf_tr = build_flat_ec_arrays(
-            rows.train_rows, by_id, by_seq, config, flat_builder
+            rows.train_rows,
+            by_id,
+            by_seq,
+            config,
+            flat_builder,
+            missing_policy="raise",
         )
         xf_va, yf_va, mf_va = build_flat_ec_arrays(
-            rows.val_rows, by_id, by_seq, config, flat_builder
+            rows.val_rows,
+            by_id,
+            by_seq,
+            config,
+            flat_builder,
+            missing_policy="raise",
         )
         xf_te, yf_te, mf_te = build_flat_ec_arrays(
-            rows.test_rows, by_id, by_seq, config, flat_builder
+            rows.test_rows,
+            by_id,
+            by_seq,
+            config,
+            flat_builder,
+            missing_policy="raise",
         )
 
         return PooledTaskData(
@@ -190,6 +261,9 @@ def _build_pooled_data(
             y_val_flat=yf_va if len(xf_va) > 0 else None,
             mask_val_flat=mf_va if len(xf_va) > 0 else None,
             x_test_flat=xf_te, y_test_flat=yf_te, mask_test_flat=mf_te,
+            sample_ids_train=_sample_ids(rows.train_rows),
+            sample_ids_val=_sample_ids(rows.val_rows),
+            sample_ids_test=_sample_ids(rows.test_rows),
             cleanup=lambda: None,
         )
 
@@ -199,14 +273,17 @@ def _build_pooled_data(
     train_bundle = build_task_dataset(
         task_name, store, split_name="train", split_variant=split_variant,
         missing_policy="skip",
+        rows=rows.train_rows,
     )
     val_bundle = build_task_dataset(
         task_name, store, split_name="val", split_variant=split_variant,
         missing_policy="skip",
+        rows=rows.val_rows,
     )
     test_bundle = build_task_dataset(
         task_name, store, split_name="test", split_variant=split_variant,
         missing_policy="skip",
+        rows=rows.test_rows,
     )
     log(f"    Pooling embeddings ({config.batch_kind})...")
     x_tr2, y_tr2 = build_xy_pooled(train_bundle, config.batch_kind)
@@ -225,6 +302,9 @@ def _build_pooled_data(
         x_train_flat=None, y_train_flat=None, mask_train_flat=None,
         x_val_flat=None, y_val_flat=None, mask_val_flat=None,
         x_test_flat=None, y_test_flat=None, mask_test_flat=None,
+        sample_ids_train=_sample_ids(train_bundle.dataset.rows),
+        sample_ids_val=_sample_ids(val_bundle.dataset.rows),
+        sample_ids_test=_sample_ids(test_bundle.dataset.rows),
         cleanup=lambda: None,
     )
 
@@ -392,22 +472,27 @@ def _build_loader_data(
 
     log("    Validating rows against embedding store...")
     t0 = time.time()
+    missing_policy = (
+        "raise" if config.label_kind == "multilabel_ec" else "skip"
+    )
     train_bundle = build_task_dataset(
         task_name, store, split_name="train", split_variant=split_variant,
-        missing_policy="skip",
-    )
-    ec_vocabulary = (
-        train_bundle.label_builder.vocabulary_by_level
-        if config.label_kind == "multilabel_ec" else None
+        missing_policy=missing_policy,
+        ec_vocabulary=rows.ec_vocabulary,
+        rows=rows.train_rows,
     )
     raw_val_bundle = build_task_dataset(
         task_name, store, split_name="val", split_variant=split_variant,
-        missing_policy="skip", ec_vocabulary=ec_vocabulary,
+        missing_policy=missing_policy,
+        ec_vocabulary=rows.ec_vocabulary,
+        rows=rows.val_rows,
     )
     val_bundle: TaskDatasetBundle | None = raw_val_bundle if len(raw_val_bundle.dataset) > 0 else None
     test_bundle = build_task_dataset(
         task_name, store, split_name="test", split_variant=split_variant,
-        missing_policy="skip", ec_vocabulary=ec_vocabulary,
+        missing_policy=missing_policy,
+        ec_vocabulary=rows.ec_vocabulary,
+        rows=rows.test_rows,
     )
     n_train = len(train_bundle.dataset)
     n_val = len(val_bundle.dataset) if val_bundle is not None else 0

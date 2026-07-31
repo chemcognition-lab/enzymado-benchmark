@@ -1,43 +1,65 @@
 #!/usr/bin/env python
-"""Compute primary metrics.json for every discovered experiment.
+"""Compute primary metrics directly from saved prediction artifacts.
 
-Training only writes raw predictions (safetensors) plus hparams.json — it no
-longer computes metrics inline. This script is the first evaluation pass: for
-each experiment it reads the raw train/val/test predictions and hparams.json,
-infers task_type, and writes metrics.json.
+The benchmark card determines each task type when training metadata is absent.
+Classification is reduced to compact per-row confusion counts that are cached
+for the bootstrap pass, avoiding dense EC concatenation.
 
-scripts/results/compute_bootstrap_metrics.py runs after this script and only
-augments the metrics.json written here with a `test_bootstrap` confidence-
-interval block — it does not compute the primary metrics itself.
-
-Usage:
-    python scripts/results/compute_metrics.py
-    python scripts/results/compute_metrics.py --skip-existing
+Example:
+    python scripts/results/compute_metrics.py --filter-task ec_number
 """
 
 from __future__ import annotations
 
 import argparse
+import pathlib
 import sys
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO))
-
-from src.evaluation.artifacts import write_metrics_file
-from src.evaluation.discover import discover_experiments
-from src.evaluation.loaders import derive_task_type, load_split_predictions, read_hparams
-from src.evaluation.metrics_registry import evaluate_predictions
 
 
-def _compute_experiment_metrics(run_dir: Path, task_type: str) -> dict[str, dict]:
-    """Compute metrics for every split with raw predictions present in run_dir."""
-    metrics_by_split: dict[str, dict] = {}
+def _repo_root() -> pathlib.Path:
+    """Return the repository root without relying on the launch directory."""
+    return pathlib.Path(__file__).resolve().parents[2]
+
+
+sys.path.insert(0, str(_repo_root()))
+
+from src.evaluation import (
+    binary_statistics,
+    discover,
+    loaders,
+    metrics_registry,
+    statistics_cache,
+    task_types,
+)
+
+
+def _compute_metrics(
+    experiment: discover.Experiment,
+    task_type: str,
+    predictions_root: pathlib.Path,
+    statistics_root: pathlib.Path,
+) -> dict[str, dict[str, object]]:
+    """Compute every available split for one experiment."""
+    metrics_by_split: dict[str, dict[str, object]] = {}
     for split_name in ("train", "val", "test"):
-        payload = load_split_predictions(run_dir, split_name)
+        if task_type == "classification":
+            counts = statistics_cache.load_or_create_counts(
+                statistics_root,
+                predictions_root,
+                experiment.run_dir,
+                split_name,
+            )
+            if counts is not None:
+                metrics_by_split[split_name] = binary_statistics.evaluate(
+                    counts,
+                    split=split_name,
+                )
+            continue
+
+        payload = loaders.load_split_predictions(experiment.run_dir, split_name)
         if payload is None:
             continue
-        metrics_by_split[split_name] = evaluate_predictions(
+        metrics_by_split[split_name] = metrics_registry.evaluate_predictions(
             payload.y_true,
             payload.predictions,
             task_type,
@@ -47,58 +69,94 @@ def _compute_experiment_metrics(run_dir: Path, task_type: str) -> dict[str, dict
     return metrics_by_split
 
 
-def main() -> None:
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line configuration."""
+    repo = _repo_root()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--predictions-root", type=Path, default=REPO / "results" / "predictions")
+    parser.add_argument(
+        "--predictions-root",
+        type=pathlib.Path,
+        default=repo / "results" / "predictions",
+    )
+    parser.add_argument(
+        "--statistics-root",
+        type=pathlib.Path,
+        default=repo / "results" / "evaluation_statistics",
+    )
+    parser.add_argument(
+        "--benchmark-card",
+        type=pathlib.Path,
+        default=repo / "benchmark_card.json",
+    )
     parser.add_argument(
         "--filter-task",
         action="append",
         default=None,
-        help="Only compute metrics for this task name. May be provided multiple times.",
+        help="Only compute metrics for this task. May be repeated.",
     )
     parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="Do not recompute if metrics.json already exists for a run.",
+        help="Do not recompute runs that already contain metrics.json.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    experiments = discover_experiments(args.predictions_root)
+
+def main() -> None:
+    """Compute and persist metrics for discovered experiments."""
+    args = _parse_args()
+    experiments = discover.discover_experiments(args.predictions_root)
     if args.filter_task:
         selected_tasks = set(args.filter_task)
         before = len(experiments)
-        experiments = [e for e in experiments if e.task in selected_tasks]
-        print(
-            f"Filtering to task(s): {', '.join(sorted(selected_tasks))} "
-            f"({len(experiments)}/{before} experiments)"
-        )
+        experiments = [
+            experiment
+            for experiment in experiments
+            if experiment.task in selected_tasks
+        ]
+        selected = ", ".join(sorted(selected_tasks))
+        print(f"Filtering to task(s): {selected} ({len(experiments)}/{before})")
     print(f"Discovered {len(experiments)} experiments under {args.predictions_root}")
 
-    n_written = 0
-    n_skipped = 0
-    for idx, exp in enumerate(experiments, start=1):
-        label = f"[{idx}/{len(experiments)}] {exp.embedding_model}/{exp.task}"
-        metrics_path = exp.run_dir / "metrics.json"
+    written = 0
+    skipped = 0
+    for index, experiment in enumerate(experiments, start=1):
+        label = (
+            f"[{index}/{len(experiments)}] "
+            f"{experiment.embedding_model}/{experiment.task}"
+        )
+        metrics_path = experiment.run_dir / "metrics.json"
         if args.skip_existing and metrics_path.exists():
-            n_skipped += 1
+            skipped += 1
             continue
 
-        task_type = derive_task_type(read_hparams(exp.run_dir))
+        task_type = task_types.resolve(
+            experiment.task,
+            args.benchmark_card,
+            loaders.read_hparams(experiment.run_dir),
+        )
         if task_type is None:
-            print(f"{label}: missing task_type in hparams.json; skipping")
+            print(f"{label}: task type is unavailable; skipping")
             continue
 
-        metrics_by_split = _compute_experiment_metrics(exp.run_dir, task_type)
-        if not metrics_by_split:
+        metrics = _compute_metrics(
+            experiment,
+            task_type,
+            args.predictions_root,
+            args.statistics_root,
+        )
+        if not metrics:
             print(f"{label}: no raw predictions found; skipping")
             continue
 
-        write_metrics_file(exp.run_dir, metrics_by_split)
-        n_written += 1
-        splits_summary = ", ".join(f"{split}.n={block.get('n')}" for split, block in metrics_by_split.items())
-        print(f"{label} ({task_type}): {splits_summary}")
+        loaders.write_metrics(experiment.run_dir, metrics)
+        written += 1
+        summary = ", ".join(
+            f"{split}.n={block.get('n')}" for split, block in metrics.items()
+        )
+        print(f"{label} ({task_type}): {summary}")
 
-    print(f"\nDone. {n_written} metrics.json written, {n_skipped} skipped (already existed).")
+    print(f"\nDone. {written} metrics.json written, {skipped} skipped.")
 
 
 if __name__ == "__main__":

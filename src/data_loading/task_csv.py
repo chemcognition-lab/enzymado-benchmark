@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,7 +56,7 @@ def filter_rows_by_split(
 
 @dataclass
 class TaskCSVLoader:
-    """Load a task CSV and return normalized rows tagged with a stable sample_id."""
+    """Load normalized rows with readable and prediction-unique identifiers."""
     dataset_path: Path
     index_columns: tuple[str, ...]
     split_name: str | None = None
@@ -70,7 +72,24 @@ class TaskCSVLoader:
     def _attach_sample_id(self, row: dict[str, str]) -> dict[str, str]:
         row = dict(row)
         row["sample_id"] = self._resolve_sample_id(row)
+        row["prediction_id"] = self._resolve_prediction_id(row)
         return row
+
+    def _resolve_prediction_id(self, row: dict[str, str]) -> str:
+        """Build a stable row identity while retaining a readable sample prefix."""
+        identity_payload = {
+            key: str(value)
+            for key, value in row.items()
+            if key not in {self.split_column, "resolved_split", "prediction_id"}
+        }
+        encoded = json.dumps(
+            identity_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()[:16]
+        return f"{row['sample_id']}:{digest}"
 
     def _resolve_sample_id(self, row: dict[str, str]) -> str:
         for candidate in self.index_columns:

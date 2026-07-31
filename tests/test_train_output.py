@@ -72,6 +72,9 @@ class TrainOutputTests(unittest.TestCase):
                     target_column="phopt_median_standardized",
                     dataset_paths={"random": run_dir / "phopt.csv"},
                 ),
+                sample_identity_manifest={
+                    "test": {"count": 2, "ordered_sha256": "a" * 64}
+                },
             )
             metrics_file = write_metrics_file(run_dir, {"val": {"mae": 0.1}})
             training_log_file = write_training_log_file(FakeTrained(), run_dir)
@@ -109,6 +112,7 @@ class TrainOutputTests(unittest.TestCase):
             hparams = json.loads(hparams_file.read_text())
             self.assertEqual(hparams["params"]["epochs"], 3)
             self.assertEqual(hparams["task_config"]["target_column"], "phopt_median_standardized")
+            self.assertEqual(hparams["sample_identity"]["test"]["count"], 2)
             self.assertFalse((run_dir / "target_audit_invalid.json").exists())
 
     def test_safetensors_prediction_file_is_compressed(self) -> None:
@@ -144,6 +148,44 @@ class TrainOutputTests(unittest.TestCase):
 
             self.assertEqual(pred_file.suffixes[-2:], [".safetensors", ".xz"])
             self.assertTrue(pred_file.exists())
+
+    def test_sample_ids_round_trip_inside_prediction_artifact(self) -> None:
+        from evaluation import loaders, sample_identity
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            pred_file = save_raw_predictions(
+                np.asarray([1.0, 2.0], dtype=np.float32),
+                np.asarray([1.5, 1.8], dtype=np.float32),
+                None,
+                run_dir=run_dir,
+                task_name="ph_opt",
+                emb_name="ankh_base",
+                model_name="mlp_regressor",
+                split_variant="random",
+                split_name="test",
+                sample_ids=("P1", "proteína-2"),
+            )
+
+            from safetensors.torch import load as load_tensors
+
+            tensors = load_tensors(lzma.open(pred_file, "rb").read())
+            self.assertIn(sample_identity.SAMPLE_ID_BYTES_KEY, tensors)
+            self.assertIn(sample_identity.SAMPLE_ID_OFFSETS_KEY, tensors)
+            payload = loaders.load_test_predictions(run_dir)
+            self.assertIsNotNone(payload)
+            self.assertEqual(payload.sample_ids, ("P1", "proteína-2"))
+
+    def test_prediction_writer_rejects_mismatched_sample_id_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "1 sample IDs for 2"):
+                make_safetensors_predictions_file(
+                    np.asarray([1.0, 2.0], dtype=np.float32),
+                    np.asarray([1.5, 1.8], dtype=np.float32),
+                    Path(tmp),
+                    "test",
+                    sample_ids=("P1",),
+                )
 
     def test_save_raw_predictions_carries_no_metrics(self) -> None:
         """save_raw_predictions is I/O only; evaluate_predictions computes metrics separately."""

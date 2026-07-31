@@ -5,14 +5,16 @@ from __future__ import annotations
 import csv
 import json
 import lzma
-from pathlib import Path
 import math
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import joblib
 import numpy as np
 import torch
 
+from . import sample_identity
 from .metrics_registry import evaluate_predictions  # noqa: F401 — re-exported
 from .results_layout import (
     INVALIDATION_MARKER,
@@ -44,6 +46,22 @@ def _flatten_safetensors_payload(prefix: str, payload) -> dict[str, torch.Tensor
     return {prefix: tensor}
 
 
+def _payload_row_count(payload: Any) -> int:
+    """Return a consistent leading dimension from a flat or structured payload."""
+    if isinstance(payload, dict):
+        counts = {_payload_row_count(value) for value in payload.values()}
+        if len(counts) != 1:
+            raise ValueError(
+                f"Prediction payload blocks have inconsistent row counts: {counts}."
+            )
+        return counts.pop()
+
+    array = np.asarray(payload)
+    if array.ndim == 0:
+        raise ValueError("Prediction payloads must have a sample dimension.")
+    return int(array.shape[0])
+
+
 def make_safetensors_predictions_file(
     y_true,
     pred,
@@ -52,6 +70,7 @@ def make_safetensors_predictions_file(
     target_mask=None,
     *,
     artifact_path: Path | None = None,
+    sample_ids: Sequence[str] | None = None,
 ) -> Path:
     """Persist one split as compressed safetensors."""
     from safetensors.torch import save as save_tensors
@@ -60,8 +79,25 @@ def make_safetensors_predictions_file(
     payload.update(_flatten_safetensors_payload("y_true", y_true))
     payload.update(_flatten_safetensors_payload("predictions", pred))
     payload.update(_flatten_safetensors_payload("target_mask", target_mask))
+    if sample_ids is not None:
+        normalized_ids = sample_identity.normalize(sample_ids)
+        expected_rows = _payload_row_count(y_true)
+        if len(normalized_ids) != expected_rows:
+            raise ValueError(
+                f"Received {len(normalized_ids)} sample IDs for "
+                f"{expected_rows} prediction rows."
+            )
+        byte_values, offsets = sample_identity.encode(normalized_ids)
+        payload[sample_identity.SAMPLE_ID_BYTES_KEY] = torch.from_numpy(
+            byte_values
+        )
+        payload[sample_identity.SAMPLE_ID_OFFSETS_KEY] = torch.from_numpy(
+            offsets
+        )
     if not payload:
-        raise ValueError("Prediction payload does not contain tensors supported by safetensors.")
+        raise ValueError(
+            "Prediction payload does not contain tensors supported by safetensors."
+        )
 
     path = artifact_path or (run_dir / f"{split}_predictions.safetensors.xz")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +118,7 @@ def save_raw_predictions(
     model_name: str,
     split_variant: str,
     split_name: str,
+    sample_ids: Sequence[str] | None = None,
 ) -> Path:
     """Persist one split's raw predictions as safetensors.
 
@@ -104,6 +141,7 @@ def save_raw_predictions(
         split_name,
         target_mask,
         artifact_path=prediction_path,
+        sample_ids=sample_ids,
     )
 
 
@@ -137,6 +175,7 @@ def write_hparams_file(
     split_variant: str,
     model_info: dict,
     task_config=None,
+    sample_identity_manifest: dict[str, dict[str, int | str]] | None = None,
 ) -> Path:
     """Persist the model configuration used for one run."""
     invalidation_marker = run_dir / INVALIDATION_MARKER
@@ -160,6 +199,8 @@ def write_hparams_file(
             "target_column": getattr(task_config, "target_column", None),
             "dataset_paths": getattr(task_config, "dataset_paths", {}),
         }
+    if sample_identity_manifest is not None:
+        payload["sample_identity"] = sample_identity_manifest
     path.write_text(json.dumps(_json_ready(payload), indent=4) + "\n", encoding="utf-8")
     return path
 

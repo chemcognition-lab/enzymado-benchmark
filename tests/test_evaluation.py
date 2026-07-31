@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tempfile
 from unittest import TestCase
 
 import numpy as np
+
+from src.evaluation import binary_statistics
+from src.evaluation import metrics_registry as metrics_module
+from src.evaluation import statistics_cache
+from src.evaluation import task_types
 
 from src.evaluation.bootstrap import (
     _bootstrap_additive_regression,
@@ -56,6 +62,8 @@ class TestMetrics(TestCase):
     def test_metric_set_dispatch(self) -> None:
         self.assertIn("mae", metric_set_for("regression"))
         self.assertIn("f1", metric_set_for("classification"))
+        self.assertIn("auroc", metric_set_for("classification"))
+        self.assertIn("auprc", metric_set_for("classification"))
         with self.assertRaises(ValueError):
             metric_set_for("nonsense")
 
@@ -64,6 +72,23 @@ class TestMetrics(TestCase):
         self.assertEqual(primary_metric_for("classification"), "f1")
         self.assertEqual(higher_is_better_for("regression")["mae"], -1)
         self.assertEqual(higher_is_better_for("classification")["f1"], +1)
+
+    def test_count_metrics_match_registered_classification_metrics(self) -> None:
+        y_true = np.array([1, 0, 1, 0, 1, 0], dtype=np.float32)
+        predictions = np.array([1, 1, 0, 0, 1, 0], dtype=np.float32)
+        payload = PredictionPayload(y_true, predictions, None)
+        count_metrics = binary_statistics.evaluate(
+            binary_statistics.count_payload(payload),
+            split="test",
+        )
+        direct_metrics = metrics_module.evaluate_predictions(
+            y_true,
+            predictions,
+            "classification",
+            split="test",
+        )
+        for name in ("accuracy", "precision", "recall", "f1", "auroc", "auprc"):
+            self.assertAlmostEqual(count_metrics[name], direct_metrics[name])
 
 
 class TestBootstrap(TestCase):
@@ -154,6 +179,37 @@ class TestLoaders(TestCase):
         flat = {"y_true": np.zeros((2, 3)), "predictions": np.zeros((2, 3))}
         self.assertIsNone(_unify_multi_head_levels(flat))
 
+    def test_multi_head_loader_preserves_encoded_sample_ids(self) -> None:
+        from src.evaluation import sample_identity
+        from src.evaluation.loaders import _unify_multi_head_levels
+
+        byte_values, offsets = sample_identity.encode(("P1", "P2"))
+        tensors = {
+            "y_true_level_1": np.zeros((2, 1), dtype=np.float32),
+            "predictions_level_1": np.zeros((2, 1), dtype=np.float32),
+            "target_mask_level_1": np.ones((2, 1), dtype=bool),
+            sample_identity.SAMPLE_ID_BYTES_KEY: byte_values,
+            sample_identity.SAMPLE_ID_OFFSETS_KEY: offsets,
+        }
+
+        payload = _unify_multi_head_levels(tensors)
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload.sample_ids, ("P1", "P2"))
+
+    def test_sample_identity_fingerprint_depends_on_order(self) -> None:
+        from src.evaluation import sample_identity
+
+        first = sample_identity.manifest(("P1", "P2"))
+        same = sample_identity.manifest(("P1", "P2"))
+        reversed_order = sample_identity.manifest(("P2", "P1"))
+
+        self.assertEqual(first, same)
+        self.assertNotEqual(
+            first["ordered_sha256"],
+            reversed_order["ordered_sha256"],
+        )
+
     def test_derive_task_type_from_hparams(self) -> None:
         self.assertEqual(
             derive_task_type({"task_config": {"label_kind": "binary"}}), "classification"
@@ -161,8 +217,31 @@ class TestLoaders(TestCase):
         self.assertEqual(
             derive_task_type({"task_config": {"label_kind": "scalar_regression"}}), "regression"
         )
+        self.assertEqual(
+            derive_task_type({"task_config": {"label_kind": "multilabel_ec"}}),
+            "classification",
+        )
+        self.assertEqual(
+            derive_task_type(
+                {"task_config": {"label_kind": "residue_binary_vector"}}
+            ),
+            "classification",
+        )
         self.assertIsNone(derive_task_type({}))
         self.assertIsNone(derive_task_type({"task_config": {}}))
+
+    def test_task_type_falls_back_to_benchmark_card(self) -> None:
+        card = {
+            "properties": {
+                "ec_number": {"task_type": "classification"},
+            },
+            "real_case": {},
+        }
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            card_path = Path(temporary_directory) / "benchmark_card.json"
+            card_path.write_text(json.dumps(card), encoding="utf-8")
+            task_type = task_types.resolve("ec_number", card_path, hparams={})
+        self.assertEqual(task_type, "classification")
 
 
 class TestBootstrapClassificationCounts(TestCase):
@@ -170,7 +249,14 @@ class TestBootstrapClassificationCounts(TestCase):
     per-replicate call to the metric functions themselves."""
 
     def _assert_metrics_match(self, direct: dict, additive: dict, atol: float = 1e-12) -> None:
-        for name in ("accuracy", "precision", "recall", "f1"):
+        for name in (
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+            "auroc",
+            "auprc",
+        ):
             np.testing.assert_allclose(
                 additive[name], direct[name], atol=atol, err_msg=f"{name} mismatch"
             )
@@ -220,6 +306,41 @@ class TestBootstrapClassificationCounts(TestCase):
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
         self._assert_metrics_match(direct, additive)
+
+    def test_multi_head_counts_avoid_dense_concatenation(self) -> None:
+        first = PredictionPayload(
+            y_true=np.array([[1, 0], [0, 1]], dtype=np.float32),
+            predictions=np.array([[1, 1], [0, 1]], dtype=np.float32),
+            target_mask=np.array([True, True]),
+        )
+        second = PredictionPayload(
+            y_true=np.array([[0, 1, 0], [1, 0, 0]], dtype=np.float32),
+            predictions=np.array([[0, 1, 0], [0, 0, 0]], dtype=np.float32),
+            target_mask=np.array([True, False]),
+        )
+        counts = binary_statistics.count_blocks((first, second))
+        np.testing.assert_array_equal(
+            counts,
+            np.array([[2, 1, 0, 2], [1, 0, 0, 1]], dtype=np.int64),
+        )
+        metrics = binary_statistics.evaluate(counts, split="test")
+        self.assertEqual(metrics["n"], 7)
+
+    def test_statistics_cache_validates_prediction_fingerprint(self) -> None:
+        counts = np.array([[1, 0, 0, 2]], dtype=np.int64)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            prediction_path = root / "prediction.safetensors.xz"
+            cache_path = root / "counts.npz"
+            prediction_path.write_bytes(b"first")
+            statistics_cache.save_counts(cache_path, counts, prediction_path)
+            loaded = statistics_cache.load_counts(cache_path, prediction_path)
+            np.testing.assert_array_equal(loaded, counts)
+
+            prediction_path.write_bytes(b"second")
+            self.assertIsNone(
+                statistics_cache.load_counts(cache_path, prediction_path)
+            )
 
 
 class TestBootstrapAdditiveRegression(TestCase):

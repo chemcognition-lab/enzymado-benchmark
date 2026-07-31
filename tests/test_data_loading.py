@@ -8,10 +8,11 @@ from pathlib import Path
 import numpy as np
 
 from src.data_loading.collators import ProteinResidueCollator, ProteinResidueConcatCollator
-from src.data_loading.datasets import build_dataset_from_config
-from src.data_loading.labels import FlatECLabelBuilder
 from src.data_loading.data_registry import TaskConfig
+from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.features import ResidueEmbeddingStore
+from src.data_loading.labels import FlatECLabelBuilder
+from src.data_loading.task_csv import TaskCSVLoader
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -29,6 +30,37 @@ class DataLoadingTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_prediction_ids_distinguish_rows_with_the_same_protein(self) -> None:
+        dataset_path = self.root / "binding.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "smiles", "binding", "split"],
+            [
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCO",
+                    "binding": "1",
+                    "split": "test",
+                },
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCN",
+                    "binding": "0",
+                    "split": "test",
+                },
+            ],
+        )
+        rows = TaskCSVLoader(
+            dataset_path=dataset_path,
+            index_columns=("uniprot_id",),
+            split_name="test",
+        ).load_rows()
+
+        self.assertEqual(rows[0]["sample_id"], rows[1]["sample_id"])
+        self.assertNotEqual(rows[0]["prediction_id"], rows[1]["prediction_id"])
 
     def test_protein_global_dataset_uses_split_column_and_padding_mask(self) -> None:
         dataset_path = self.root / "solubility.csv"

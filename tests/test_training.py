@@ -145,6 +145,216 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertEqual(target_mask["level_2"].shape, y["level_2"].shape)
         self.assertIsNotNone(model.best_epoch_)
 
+    def test_ec_pooled_route_uses_vocabulary_from_unfiltered_train(self) -> None:
+        import torch
+
+        from data_loading.task_data import (
+            _build_pooled_data,
+            _load_and_filter_rows,
+        )
+
+        dataset_path = self.root / "ec_random_standardized.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "ec_number", "split"],
+            [
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "ec_number": "1.1.1.1",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "P2",
+                    "protein_sequence": "BBBB",
+                    "ec_number": "2.2.2.2",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "P3",
+                    "protein_sequence": "CCCC",
+                    "ec_number": "1.1.1.1",
+                    "split": "val",
+                },
+                {
+                    "uniprot_id": "P4",
+                    "protein_sequence": "DDDD",
+                    "ec_number": "1.1.1.1",
+                    "split": "test",
+                },
+            ],
+        )
+        config = TaskConfig(
+            name="ec_test",
+            batch_kind="protein_global",
+            label_kind="multilabel_ec",
+            dataset_paths={"random": dataset_path},
+            target_column="ec_number",
+            index_columns=("uniprot_id",),
+        )
+        rows = _load_and_filter_rows(
+            config,
+            split_variant="random",
+            allowed_ids={"P1", "P3", "P4"},
+            sequence_to_id={},
+        )
+
+        self.assertEqual(len(rows.train_rows), 1)
+        self.assertEqual(
+            rows.ec_vocabulary["level_4"],
+            ("1.1.1.1", "2.2.2.2"),
+        )
+
+        embeddings = {
+            protein_id: torch.ones(3, dtype=torch.float32)
+            for protein_id in ("P1", "P3", "P4")
+        }
+        with mock.patch(
+            "data_loading.task_data.load_pooled_embedding_subset",
+            return_value=(embeddings, {}),
+        ):
+            task_data = _build_pooled_data(
+                config,
+                "ec_test",
+                "unused.safetensors",
+                "random",
+                rows,
+                embedding_dim=3,
+            )
+
+        self.assertEqual(task_data.y_train["level_4"].shape, (1, 2))
+        self.assertEqual(task_data.y_train_flat.shape, (1, 8))
+
+    def test_ec_loader_route_rejects_missing_filtered_samples(self) -> None:
+        from data_loading.labels import HierarchicalECLabelBuilder
+        from data_loading.task_data import _TaskRows, _build_loader_data
+
+        config = TaskConfig(
+            name="ec_test",
+            batch_kind="protein_global",
+            label_kind="multilabel_ec",
+            dataset_paths={"random": self.root / "unused.csv"},
+            target_column="ec_number",
+            index_columns=("uniprot_id",),
+        )
+        train_rows = [
+            {
+                "uniprot_id": "P1",
+                "protein_sequence": "AAAA",
+                "ec_number": "1.1.1.1",
+            },
+            {
+                "uniprot_id": "P2",
+                "protein_sequence": "BBBB",
+                "ec_number": "2.2.2.2",
+            },
+        ]
+        vocabulary = HierarchicalECLabelBuilder().fit(
+            train_rows
+        ).vocabulary_by_level
+        rows = _TaskRows(
+            train_rows=train_rows,
+            val_rows=[],
+            test_rows=[train_rows[0]],
+            needed_ids={"P1", "P2"},
+            needed_sequences={"AAAA", "BBBB"},
+            ec_vocabulary=vocabulary,
+        )
+        store = ResidueEmbeddingStore(
+            by_id={"P1": np.ones((4, 3), dtype=np.float32)}
+        )
+        store._available_ids = {"P1"}
+        store._seq_to_key = {}
+
+        with (
+            mock.patch(
+                "data_loading.task_data.load_lazy_safetensors_embedding_store",
+                return_value=store,
+            ),
+            mock.patch(
+                "data_loading.datasets.get_task_config",
+                return_value=config,
+            ),
+            self.assertRaisesRegex(ValueError, "Missing residue embedding"),
+        ):
+            _build_loader_data(
+                config,
+                "ec_test",
+                "unused.safetensors",
+                "random",
+                rows,
+                residue_store_mode="auto",
+                embedding_dim=3,
+                sequence_to_id={},
+            )
+
+    def test_ec_loader_route_uses_supplied_rows_and_canonical_vocabulary(
+        self,
+    ) -> None:
+        from data_loading.task_data import _TaskRows, _build_loader_data
+
+        config = TaskConfig(
+            name="ec_test",
+            batch_kind="protein_global",
+            label_kind="multilabel_ec",
+            dataset_paths={"random": self.root / "unused.csv"},
+            target_column="ec_number",
+            index_columns=("uniprot_id",),
+        )
+        kept_row = {
+            "sample_id": "P1",
+            "uniprot_id": "P1",
+            "protein_sequence": "AAAA",
+            "ec_number": "1.1.1.1",
+        }
+        vocabulary = {
+            "level_1": ("1", "2"),
+            "level_2": ("1.1", "2.2"),
+            "level_3": ("1.1.1", "2.2.2"),
+            "level_4": ("1.1.1.1", "2.2.2.2"),
+        }
+        rows = _TaskRows(
+            train_rows=[kept_row],
+            val_rows=[],
+            test_rows=[kept_row],
+            needed_ids={"P1"},
+            needed_sequences={"AAAA"},
+            ec_vocabulary=vocabulary,
+        )
+        store = ResidueEmbeddingStore(
+            by_id={"P1": np.ones((4, 3), dtype=np.float32)}
+        )
+        store._available_ids = {"P1"}
+        store._seq_to_key = {}
+
+        with (
+            mock.patch(
+                "data_loading.task_data.load_lazy_safetensors_embedding_store",
+                return_value=store,
+            ),
+            mock.patch(
+                "data_loading.datasets.get_task_config",
+                return_value=config,
+            ),
+        ):
+            task_data = _build_loader_data(
+                config,
+                "ec_test",
+                "unused.safetensors",
+                "random",
+                rows,
+                residue_store_mode="auto",
+                embedding_dim=3,
+                sequence_to_id={},
+            )
+
+        label_builder = task_data.train_bundle.label_builder
+        self.assertEqual(len(task_data.train_bundle.dataset), 1)
+        self.assertEqual(
+            label_builder.vocabulary_by_level["level_4"],
+            ("1.1.1.1", "2.2.2.2"),
+        )
+
     def test_build_protein_global_Xy_direct(self) -> None:
         from data_loading.features import PooledEmbeddingStore
         from data_loading.stores import build_xy_pooled

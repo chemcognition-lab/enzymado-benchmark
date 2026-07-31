@@ -26,6 +26,7 @@ scripts/logs/
 results/predictions/
 results/analysis/
 results/bootstrap/
+results/evaluation_statistics/
 results/*_audit_report.json
 pytest-of-chemist/
 .claude

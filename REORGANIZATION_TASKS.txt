@@ -51,7 +51,8 @@ enzymado-benchmark/
 │
 ├── scripts/                       # reorganized into subdirectories
 │   ├── slurm/                     # SLURM submission scripts
-│   │   ├── run_training_slurm.sh
+│   │   ├── run_training_cluster.slurm
+│   │   ├── run_training_attention_cluster.slurm
 │   │   ├── run_embeddings_slurm.sh
 │   │   ├── run_pooling_slurm.sh
 │   │   └── run_dataset_cards_slurm.sh

@@ -3,7 +3,7 @@
 
 For each (track, split, model_family) leaderboard:
   - Take only tasks where every expected foundation model has a bootstrap file
-    (default: 14 — same set used in scripts/run_training_slurm.sh).
+    (default: 14 — same set used in scripts/slurm/run_training_cluster.slurm).
   - For each such task, build all pair (a, b) matchups using the Wilcoxon
     signed-rank test on the paired bootstrap distributions of the primary metric.
   - Solve Bradley-Terry MLE once per leaderboard; the alphabetically-first
@@ -70,6 +70,14 @@ def _load_primary_distribution(
     predictions_root: Path,
     primary_metric: str,
 ) -> np.ndarray | None:
+    metrics = read_metrics(exp.run_dir)
+    bootstrap_metadata = metrics.get("test_bootstrap")
+    if (
+        isinstance(bootstrap_metadata, dict)
+        and bootstrap_metadata.get("paired_by_position") is False
+    ):
+        return None
+
     bs_path = bootstrap_root / exp.run_dir.relative_to(predictions_root) / "test.npz"
     if not bs_path.exists():
         return None

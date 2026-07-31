@@ -412,14 +412,28 @@ def _lookup_pooled_embedding(
     return None
 
 
+def _sample_identifier(row: dict, config) -> str:
+    """Return the most informative available identifier for an input row."""
+    for column in ("sample_id", *config.index_columns):
+        identifier = clean_text(row.get(column, ""))
+        if identifier:
+            return identifier
+    sequence = normalize_sequence(row.get(config.sequence_column, ""))
+    return sequence or "<unknown>"
+
+
 def build_ec_arrays(
     rows: list[dict],
     by_id: dict[str, torch.Tensor],
     by_seq: dict[str, torch.Tensor],
     config,
     label_builder: HierarchicalECLabelBuilder,
+    missing_policy: str = "skip",
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """Build pooled EC features plus per-level targets and masks."""
+    if missing_policy not in {"raise", "skip"}:
+        raise ValueError("missing_policy must be either 'raise' or 'skip'.")
+
     level_names = label_builder.level_names()
     X_list: list[torch.Tensor] = []
     targets: dict[str, list[torch.Tensor]] = {level_name: [] for level_name in level_names}
@@ -429,6 +443,11 @@ def build_ec_arrays(
     for row in rows:
         emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
         if emb is None:
+            if missing_policy == "raise":
+                raise ValueError(
+                    "Missing pooled embedding for EC sample "
+                    f"'{_sample_identifier(row, config)}'."
+                )
             skipped += 1
             continue
 
@@ -475,8 +494,12 @@ def build_flat_ec_arrays(
     by_seq: dict[str, torch.Tensor],
     config,
     label_builder: FlatECLabelBuilder,
+    missing_policy: str = "skip",
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Build pooled EC features using flattened targets for XGBoost models."""
+    if missing_policy not in {"raise", "skip"}:
+        raise ValueError("missing_policy must be either 'raise' or 'skip'.")
+
     label_builder._ensure_flat_index()
     X_list: list[torch.Tensor] = []
     targets: list[torch.Tensor] = []
@@ -486,6 +509,11 @@ def build_flat_ec_arrays(
     for row in rows:
         emb = _lookup_pooled_embedding(row, by_id, by_seq, config)
         if emb is None:
+            if missing_policy == "raise":
+                raise ValueError(
+                    "Missing pooled embedding for EC sample "
+                    f"'{_sample_identifier(row, config)}'."
+                )
             skipped += 1
             continue
 

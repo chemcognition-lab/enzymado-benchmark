@@ -122,3 +122,31 @@ Almost.
 - `ec_number` uses a dedicated structured EC pipeline, and XGBoost follows a separate flat-label variant of that pipeline.
 - Residue-level tasks use a different structured pipeline.
 - Unregistered properties are skipped entirely, which currently means `fluorescence`.
+
+## Post-training evaluation
+
+Primary metrics are recomputed from prediction artifacts and do not depend on
+`results_card.json`. The benchmark card supplies the task type when a run no
+longer contains `hparams.json`:
+
+```bash
+python scripts/results/compute_metrics.py --filter-task ec_number
+```
+
+Classification tasks are reduced to per-row TP, FP, FN, and TN counts under
+`results/evaluation_statistics/`. Each cache records the SHA-256 digest of its
+source prediction. Multi-head EC tensors are processed level by level, avoiding
+their dense concatenation. Accuracy, precision, recall, F1, AUROC, and AUPRC are
+computed with global micro aggregation. AUROC and AUPRC use the saved hard-label
+predictions because the current artifacts do not contain probability scores.
+The bootstrap pass reuses these statistics:
+
+```bash
+python scripts/results/compute_bootstrap_metrics.py \
+    --filter-task ec_number --n-replicates 200
+```
+
+Bootstrap units are proteins for EC and residue tasks and rows for other tasks.
+Experiments with the same number of units reuse indices by row position. When
+the unit count differs, the run receives a deterministic independent resample
+and `paired_by_position` is recorded as `false` in `metrics.json`.

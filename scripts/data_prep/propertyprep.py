@@ -533,62 +533,73 @@ def _canonicalize_smiles_column(
     )
 
 
+def prep_biolip_binding():
+    """Prepare the final BioLiP binding dataset without processing other tasks."""
+    print("\nProcessing BioLip Binding...")
+    biol_path = _P.data_processed_datasets / 'biolip_binding' / 'biolip_cleaned_with_negatives.csv'
+    if not biol_path.exists():
+        return None
+
+    biol = pd.read_csv(biol_path, low_memory=False)
+    len_before = len(biol)
+    st = {"datapoints_before_cleaning": len_before, "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
+
+    biol["protein_sequence"] = biol["protein_sequence"].astype(str).str.strip().str.upper()
+    biol["uniprot_id"] = biol["uniprot_id"].replace("", pd.NA)
+
+    seq_to_uniprot = (
+        biol.dropna(subset=["uniprot_id"])
+          .drop_duplicates(subset=["protein_sequence"])
+          .set_index("protein_sequence")["uniprot_id"]
+    )
+    biol["uniprot_id"] = biol["uniprot_id"].fillna(biol["protein_sequence"].map(seq_to_uniprot))
+
+    biol['smiles'] = biol['smiles'].astype(str).str.strip()
+    biol['ligand_id'] = biol['ligand_id'].replace("", pd.NA)
+    biol['ligand_id_raw'] = biol['ligand_id_raw'].replace("", pd.NA)
+    biol['ligand_name'] = biol['ligand_name'].replace("", pd.NA)
+
+    smiles_to_id = (
+        biol.dropna(subset=['ligand_id_raw']).drop_duplicates(subset=['smiles']).set_index('smiles')['ligand_id_raw']
+    )
+    smiles_to_name = (
+        biol.dropna(subset=['ligand_name']).drop_duplicates(subset=['smiles']).set_index('smiles')['ligand_name']
+    )
+
+    biol['ligand_id_raw'] = biol['ligand_id_raw'].fillna(biol['smiles'].map(smiles_to_id))
+    biol['ligand_id'] = biol['ligand_id'].fillna(biol['ligand_id_raw'])
+    biol['ligand_name'] = biol['ligand_name'].fillna(biol['smiles'].map(smiles_to_name))
+
+    final_cols = ['uniprot_id', 'protein_sequence', 'ligand_id', 'ligand_name', 'smiles', 'label']
+    if not all(c in biol.columns for c in final_cols):
+        return None
+
+    biol_final = biol[final_cols].rename(columns={'label': 'binding'}).reset_index(drop=True)
+    canonical_smiles, valid_mask = _canonicalize_smiles_column(biol_final["smiles"])
+    n_invalid = int((~valid_mask).sum())
+    biol_final = biol_final[valid_mask].copy()
+    biol_final["smiles"] = canonical_smiles[valid_mask].values
+    st["smiles_invalid_removed"] = n_invalid
+    st["removed_by_reason"]["other"] += n_invalid
+
+    out_dir = _P.data_processed_properties / 'binding'
+    out_dir.mkdir(parents=True, exist_ok=True)
+    biol_final.to_csv(out_dir / 'biolip_binding.csv', index=False)
+    st["datapoints_after_cleaning"] = len(biol_final)
+    st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
+    st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
+    print("BioLip Binding saved.")
+    return {"amount_of_removed_data": st}
+
+
 def main():
     print("Running Propertyprep Script...")
     
     stats = {}
-    
-    # ---------------------------
-    # Binding (BioLiP)
-    # ---------------------------
-    print("\nProcessing BioLip Binding...")
-    biol_path = _P.data_processed_datasets / 'biolip_binding' / 'biolip_cleaned_with_negatives.csv'
-    if biol_path.exists():
-        biol = pd.read_csv(biol_path, index_col=0)
-        len_before = len(biol)
-        st = {"datapoints_before_cleaning": len_before, "removed_by_reason": {"missing_values": 0, "duplicates": 0, "invalid_sequence": 0, "was_not_enzyme": 0, "other": 0}}
 
-        biol["protein_sequence"] = biol["protein_sequence"].astype(str).str.strip().str.upper()
-        biol["uniprot_id"] = biol["uniprot_id"].replace("", pd.NA)
-
-        
-        len_b = len(biol)
-        seq_to_uniprot = (
-            biol.dropna(subset=["uniprot_id"])
-              .drop_duplicates(subset=["protein_sequence"])
-              .set_index("protein_sequence")["uniprot_id"]
-        )
-        biol["uniprot_id"] = biol["uniprot_id"].fillna(biol["protein_sequence"].map(seq_to_uniprot))
-
-        biol['smiles'] = biol['smiles'].astype(str).str.strip()
-        biol['ligand_id_raw'] = biol['ligand_id_raw'].replace("", pd.NA)
-        biol['ligand_name'] = biol['ligand_name'].replace("", pd.NA)
-
-        smiles_to_id = (
-            biol.dropna(subset=['ligand_id_raw']).drop_duplicates(subset=['smiles']).set_index('smiles')['ligand_id_raw']
-        )
-        smiles_to_name = (
-            biol.dropna(subset=['ligand_name']).drop_duplicates(subset=['smiles']).set_index('smiles')['ligand_name']
-        )
-
-        biol['ligand_id_raw'] = biol['ligand_id_raw'].fillna(biol['smiles'].map(smiles_to_id))
-        biol['ligand_name'] = biol['ligand_name'].fillna(biol['smiles'].map(smiles_to_name))
-
-        final_cols = ['uniprot_id', 'protein_sequence', 'ligand_id', 'ligand_name', 'smiles', 'label']
-        if all(c in biol.columns for c in final_cols):
-            biol_final = biol[final_cols].rename(columns={'label': 'binding'}).reset_index(drop=True)
-            canonical_smiles, valid_mask = _canonicalize_smiles_column(biol_final["smiles"])
-            n_invalid = int((~valid_mask).sum())
-            biol_final = biol_final[valid_mask].copy()
-            biol_final["smiles"] = canonical_smiles[valid_mask].values
-            st["smiles_invalid_removed"] = n_invalid
-            st["removed_by_reason"]["other"] += n_invalid
-            biol_final.to_csv(_P.data_processed_properties / 'binding' / 'biolip_binding.csv', index=False)
-            st["datapoints_after_cleaning"] = len(biol_final)
-            st["datapoints_removed_total"] = st["datapoints_before_cleaning"] - st["datapoints_after_cleaning"]
-            st["removed_percentage"] = (st["datapoints_removed_total"] / st["datapoints_before_cleaning"] * 100) if st["datapoints_before_cleaning"] else 0
-            stats["biolip_binding"] = {"amount_of_removed_data": st}
-            print("BioLip Binding saved.")
+    biolip_stats = prep_biolip_binding()
+    if biolip_stats is not None:
+        stats["biolip_binding"] = biolip_stats
 
 
     # ---------------------------

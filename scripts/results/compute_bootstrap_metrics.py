@@ -1,79 +1,159 @@
 #!/usr/bin/env python
-"""Bootstrap test-set metrics for every discovered experiment.
+"""Bootstrap test metrics directly from prediction artifacts.
 
-For each experiment we:
-  - generate a (n_replicates, n_units) resample-index matrix shared by every
-    embedding model on the same task signature (so matchups are paired);
-  - evaluate every metric in the appropriate task-type suite per replicate;
-  - write the raw replicate arrays under results/bootstrap/<run_path>/test.npz;
-  - augment the experiment's metrics.json with a `test_bootstrap` block holding
-    mean / std / CI per metric.
+Classification reuses cached per-row TP/FP/FN/TN statistics. Regression uses
+the raw payload. Existing metrics are never required: the test point estimate
+is recomputed before bootstrap metadata is written.
 
-Requires scripts/results/compute_metrics.py to have already run for these
-experiments (it computes the primary metrics.json this script augments).
-
-Usage:
-    python scripts/results/compute_bootstrap_metrics.py
-    python scripts/results/compute_bootstrap_metrics.py --n-replicates 200 --seed 0
+Example:
+    python scripts/results/compute_bootstrap_metrics.py --filter-task ec_number
 """
 
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
+import pathlib
 import sys
 import time
-from collections import defaultdict
-from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO))
 
-from src.evaluation.bootstrap import (
-    bootstrap_replicates,
-    make_resample_indices,
-    n_resample_units,
-    summarise_replicates,
+def _repo_root() -> pathlib.Path:
+    """Return the repository root without relying on the launch directory."""
+    return pathlib.Path(__file__).resolve().parents[2]
+
+
+sys.path.insert(0, str(_repo_root()))
+
+from src.evaluation import (
+    binary_statistics,
+    discover,
+    loaders,
+    metrics_registry,
+    statistics_cache,
+    task_types,
 )
-from src.evaluation.discover import discover_experiments, task_signature
-from src.evaluation.loaders import (
-    derive_task_type,
-    load_test_predictions,
-    read_hparams,
-    read_metrics,
-    write_metrics,
-)
-from src.evaluation.metrics_registry import metric_set_for, primary_metric_for
+from src.evaluation import bootstrap as bootstrap_lib
 
 
-def _resolve_task_type(run_dir: Path) -> str | None:
-    """Infer task_type, preferring hparams.json over metrics.json (older runs)."""
-    task_type = derive_task_type(read_hparams(run_dir))
-    if task_type is not None:
-        return task_type
-    md = read_metrics(run_dir)
-    for split in ("test", "val", "train"):
-        block = md.get(split)
-        if isinstance(block, dict) and block.get("task_type") in {"regression", "classification"}:
-            return block["task_type"]
-    return None
+def _task_seed(seed_root: int, signature: tuple[str, ...]) -> int:
+    """Derive a deterministic int32 seed from a task signature."""
+    generator = np.random.default_rng(seed_root)
+    payload = json.dumps(signature, separators=(",", ":")).encode()
+    digest = hashlib.blake2b(payload, digest_size=8).digest()
+    salt = int.from_bytes(digest, "little") % (2**31 - 1)
+    return int(generator.integers(0, 2**31 - 1)) ^ salt
 
 
-def _per_task_seed(seed_root: int, signature: tuple) -> int:
-    """Hash signature deterministically into an int32 seed."""
-    rng = np.random.default_rng(seed_root)
-    payload = json.dumps(signature, separators=(",", ":"), sort_keys=False).encode()
-    salt = int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "little") % (2**31 - 1)
-    return int(rng.integers(0, 2**31 - 1)) ^ salt
+def _classification_evaluation(
+    experiment: discover.Experiment,
+    indices: binary_statistics.CountArray,
+    predictions_root: pathlib.Path,
+    statistics_root: pathlib.Path,
+) -> tuple[dict[str, object], binary_statistics.MetricArrays, int] | None:
+    """Calculate point and bootstrap classification metrics from counts."""
+    counts = statistics_cache.load_or_create_counts(
+        statistics_root,
+        predictions_root,
+        experiment.run_dir,
+        "test",
+    )
+    if counts is None:
+        return None
+    point_metrics = binary_statistics.evaluate(counts, split="test")
+    replicates = binary_statistics.bootstrap(counts, indices)
+    return point_metrics, replicates, counts.shape[0]
 
 
-def main() -> None:
+def _regression_evaluation(
+    experiment: discover.Experiment,
+    indices: binary_statistics.CountArray,
+) -> tuple[dict[str, object], dict[str, np.ndarray], int] | None:
+    """Calculate point and bootstrap regression metrics from raw arrays."""
+    payload = loaders.load_test_predictions(experiment.run_dir)
+    if payload is None:
+        return None
+    point_metrics = metrics_registry.evaluate_predictions(
+        payload.y_true,
+        payload.predictions,
+        "regression",
+        payload.target_mask,
+        split="test",
+    )
+    metric_set = metrics_registry.metric_set_for("regression")
+    replicates = bootstrap_lib.bootstrap_replicates(
+        payload,
+        indices,
+        metric_set,
+        "regression",
+    )
+    return point_metrics, replicates, bootstrap_lib.n_resample_units(payload)
+
+
+def _n_units(
+    experiment: discover.Experiment,
+    task_type: str,
+    predictions_root: pathlib.Path,
+    statistics_root: pathlib.Path,
+) -> int | None:
+    """Load only enough evaluation data to determine the resampling size."""
+    if task_type == "classification":
+        counts = statistics_cache.load_or_create_counts(
+            statistics_root,
+            predictions_root,
+            experiment.run_dir,
+            "test",
+        )
+        return None if counts is None else counts.shape[0]
+
+    payload = loaders.load_test_predictions(experiment.run_dir)
+    return None if payload is None else bootstrap_lib.n_resample_units(payload)
+
+
+def _test_sample_identity(
+    experiment: discover.Experiment,
+) -> tuple[int, str] | None:
+    """Read the ordered test-sample fingerprint from training metadata."""
+    return loaders.read_sample_identity(experiment.run_dir, "test")
+
+
+def _independent_seed(
+    seed_root: int,
+    signature: tuple[str, ...],
+    relative_run: pathlib.Path,
+) -> int:
+    """Derive a deterministic fallback seed for one unpaired experiment."""
+    return _task_seed(seed_root, (*signature, relative_run.as_posix()))
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line configuration."""
+    repo = _repo_root()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--predictions-root", type=Path, default=REPO / "results" / "predictions")
-    parser.add_argument("--bootstrap-root", type=Path, default=REPO / "results" / "bootstrap")
+    parser.add_argument(
+        "--predictions-root",
+        type=pathlib.Path,
+        default=repo / "results" / "predictions",
+    )
+    parser.add_argument(
+        "--bootstrap-root",
+        type=pathlib.Path,
+        default=repo / "results" / "bootstrap",
+    )
+    parser.add_argument(
+        "--statistics-root",
+        type=pathlib.Path,
+        default=repo / "results" / "evaluation_statistics",
+    )
+    parser.add_argument(
+        "--benchmark-card",
+        type=pathlib.Path,
+        default=repo / "benchmark_card.json",
+    )
     parser.add_argument("--n-replicates", type=int, default=200)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--confidence-level", type=float, default=0.95)
@@ -81,119 +161,191 @@ def main() -> None:
         "--filter-task",
         action="append",
         default=None,
-        help=(
-            "Only compute bootstrap metrics for this task name. "
-            "May be provided multiple times."
-        ),
+        help="Only bootstrap this task. May be repeated.",
     )
     parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="Do not recompute if results/bootstrap/<run>/test.npz already exists.",
+        help="Do not recompute an existing bootstrap test.npz.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    experiments = discover_experiments(args.predictions_root)
-    if args.filter_task:
-        selected_tasks = set(args.filter_task)
-        before = len(experiments)
-        experiments = [e for e in experiments if e.task in selected_tasks]
-        print(
-            f"Filtering to task(s): {', '.join(sorted(selected_tasks))} "
-            f"({len(experiments)}/{before} experiments)"
-        )
+
+def _select_experiments(
+    experiments: list[discover.Experiment],
+    selected_tasks: list[str] | None,
+) -> list[discover.Experiment]:
+    """Apply an optional task filter and report its effect."""
+    if not selected_tasks:
+        return experiments
+    selected = set(selected_tasks)
+    filtered = [item for item in experiments if item.task in selected]
+    names = ", ".join(sorted(selected))
+    print(f"Filtering to task(s): {names} ({len(filtered)}/{len(experiments)})")
+    return filtered
+
+
+def main() -> None:
+    """Compute bootstrap distributions and confidence intervals."""
+    args = _parse_args()
+    experiments = discover.discover_experiments(args.predictions_root)
+    experiments = _select_experiments(experiments, args.filter_task)
     print(f"Discovered {len(experiments)} experiments under {args.predictions_root}")
     if not experiments:
         return
 
-    # Group by task signature so all experiments on the same task share resamples.
-    by_task: dict[tuple, list] = defaultdict(list)
-    for e in experiments:
-        by_task[task_signature(e)].append(e)
+    grouped: dict[tuple[str, ...], list[discover.Experiment]] = collections.defaultdict(
+        list
+    )
+    for experiment in experiments:
+        grouped[discover.task_signature(experiment)].append(experiment)
 
-    n_tasks_total = len(by_task)
     args.bootstrap_root.mkdir(parents=True, exist_ok=True)
-
-    for task_idx, (signature, exps) in enumerate(sorted(by_task.items()), start=1):
-        # Find a reference n_units from the first experiment with predictions.
-        ref_n: int | None = None
-        ref_payload = None
-        for e in exps:
-            payload = load_test_predictions(e.run_dir)
-            if payload is None:
-                continue
-            ref_n = n_resample_units(payload)
-            ref_payload = payload
-            break
-        if ref_n is None or ref_n == 0:
-            print(f"[{task_idx}/{n_tasks_total}] {signature}: no test predictions; skipping")
-            continue
-
-        seed = _per_task_seed(args.seed, signature)
-        indices = make_resample_indices(ref_n, args.n_replicates, seed)
+    for task_index, (signature, task_experiments) in enumerate(
+        sorted(grouped.items()),
+        start=1,
+    ):
+        seed = _task_seed(args.seed, signature)
+        reference_identity: tuple[int, str] | None = None
+        shared_indices: binary_statistics.CountArray | None = None
         print(
-            f"[{task_idx}/{n_tasks_total}] task={signature} "
-            f"n_units={ref_n} n_exps={len(exps)} seed={seed}"
+            f"[{task_index}/{len(grouped)}] task={signature} "
+            f"n_exps={len(task_experiments)} seed={seed}"
         )
 
-        for e in exps:
-            run_relative = e.run_dir.relative_to(args.predictions_root)
-            bs_dir = args.bootstrap_root / run_relative
-            bs_path = bs_dir / "test.npz"
-            if args.skip_existing and bs_path.exists():
-                print(f"    skip-existing: {run_relative}")
+        for experiment in task_experiments:
+            relative_run = experiment.run_dir.relative_to(args.predictions_root)
+            bootstrap_dir = args.bootstrap_root / relative_run
+            bootstrap_path = bootstrap_dir / "test.npz"
+            if args.skip_existing and bootstrap_path.exists():
+                print(f"    skip-existing: {relative_run}")
                 continue
 
-            task_type = _resolve_task_type(e.run_dir)
+            task_type = task_types.resolve(
+                experiment.task,
+                args.benchmark_card,
+                loaders.read_hparams(experiment.run_dir),
+            )
             if task_type is None:
-                print(f"    {e.embedding_model}: missing task_type in hparams.json/metrics.json; skipping")
+                print(f"    {experiment.embedding_model}: unknown task type; skipping")
                 continue
 
-            md = read_metrics(e.run_dir)
-            if not md:
+            n_units = _n_units(
+                experiment,
+                task_type,
+                args.predictions_root,
+                args.statistics_root,
+            )
+            if n_units is None or not n_units:
                 print(
-                    f"    {e.embedding_model}: metrics.json not found —"
-                    " run compute_metrics.py first; skipping"
+                    f"    {experiment.embedding_model}: no test predictions; skipping"
                 )
                 continue
-
-            payload = load_test_predictions(e.run_dir)
-            if payload is None:
-                print(f"    {e.embedding_model}: missing test predictions; skipping")
-                continue
-            if n_resample_units(payload) != ref_n:
-                print(
-                    f"    {e.embedding_model}: n_units mismatch "
-                    f"({n_resample_units(payload)} vs {ref_n}); skipping"
+            identity = _test_sample_identity(experiment)
+            if identity is not None and identity[0] != n_units:
+                raise ValueError(
+                    f"Sample identity metadata reports {identity[0]} rows but "
+                    f"predictions contain {n_units} for {relative_run}."
                 )
+            if reference_identity is None and identity is not None:
+                reference_identity = identity
+                shared_indices = bootstrap_lib.make_resample_indices(
+                    n_units,
+                    args.n_replicates,
+                    seed,
+                )
+
+            paired_by_sample_id = (
+                identity is not None and identity == reference_identity
+            )
+            if paired_by_sample_id:
+                if shared_indices is None:
+                    raise RuntimeError(
+                        "Paired bootstrap indices were not initialized."
+                    )
+                indices = shared_indices
+                identity_status = "verified"
+                resample_seed = seed
+            else:
+                resample_seed = _independent_seed(
+                    args.seed,
+                    signature,
+                    relative_run,
+                )
+                indices = bootstrap_lib.make_resample_indices(
+                    n_units,
+                    args.n_replicates,
+                    resample_seed,
+                )
+                identity_status = (
+                    "missing" if identity is None else "different_from_reference"
+                )
+                print(
+                    f"    {experiment.embedding_model}: sample IDs are "
+                    f"{identity_status}; using an independent resample"
+                )
+
+            started = time.perf_counter()
+            if task_type == "classification":
+                evaluation = _classification_evaluation(
+                    experiment,
+                    indices,
+                    args.predictions_root,
+                    args.statistics_root,
+                )
+            else:
+                evaluation = _regression_evaluation(experiment, indices)
+            if evaluation is None:
+                print(f"    {experiment.embedding_model}: evaluation failed; skipping")
                 continue
 
-            metric_set = metric_set_for(task_type)
-            primary_metric = primary_metric_for(task_type)
-            t0 = time.perf_counter()
-            replicates = bootstrap_replicates(payload, indices, metric_set, task_type)
-            elapsed = time.perf_counter() - t0
-            summary = summarise_replicates(replicates, confidence_level=args.confidence_level)
+            point_metrics, replicates, evaluated_n = evaluation
+            if evaluated_n != n_units:
+                raise ValueError(
+                    f"Evaluation rows changed from {n_units} to {evaluated_n} for "
+                    f"{relative_run}."
+                )
+            summary = bootstrap_lib.summarise_replicates(
+                replicates,
+                confidence_level=args.confidence_level,
+            )
+            primary_metric = metrics_registry.primary_metric_for(task_type)
+            if primary_metric is None:
+                raise ValueError(f"No primary metric registered for {task_type}.")
 
-            bs_dir.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(bs_path, **{k: v.astype(np.float64) for k, v in replicates.items()})
+            bootstrap_dir.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(
+                bootstrap_path,
+                **{
+                    name: values.astype(np.float64)
+                    for name, values in replicates.items()
+                },
+            )
 
-            md["test_bootstrap"] = {
+            metrics = loaders.read_metrics(experiment.run_dir)
+            metrics["test"] = point_metrics
+            metrics["test_bootstrap"] = {
                 "n_replicates": args.n_replicates,
                 "confidence_level": args.confidence_level,
                 "primary_metric": primary_metric,
                 "task_type": task_type,
-                "seed": seed,
+                "seed": resample_seed,
+                "n_units": n_units,
+                "sample_identity_status": identity_status,
+                "sample_identity_sha256": identity[1] if identity else None,
+                "paired_by_sample_id": paired_by_sample_id,
+                "paired_by_position": paired_by_sample_id,
                 "metrics": summary,
             }
-            write_metrics(e.run_dir, md)
+            loaders.write_metrics(experiment.run_dir, metrics)
 
+            elapsed = time.perf_counter() - started
+            primary_summary = summary[primary_metric]
             print(
-                f"    {e.embedding_model}: {task_type} "
-                f"primary={primary_metric}={summary[primary_metric]['mean']:.4f} "
-                f"({summary[primary_metric]['ci_lo']:.4f}, "
-                f"{summary[primary_metric]['ci_hi']:.4f}) "
-                f"in {elapsed:.1f}s"
+                f"    {experiment.embedding_model}: {task_type} "
+                f"{primary_metric}={primary_summary['mean']:.4f} "
+                f"({primary_summary['ci_lo']:.4f}, "
+                f"{primary_summary['ci_hi']:.4f}) in {elapsed:.1f}s"
             )
 
     print("\nBootstrap complete.")

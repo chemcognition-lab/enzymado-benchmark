@@ -1,10 +1,27 @@
 import json
+import re
 
 import numpy as np
 import pandas as pd
 from rdkit import Chem
 
 from src.paths_and_constants import Paths
+
+
+EC_NUMBER_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])"
+    r"[1-7]\."
+    r"(?:\d+|-)\."
+    r"(?:\d+|-)\."
+    r"(?:\d+|-|n\d+)"
+    r"(?![A-Za-z0-9])",
+    flags=re.IGNORECASE,
+)
+
+
+def has_explicit_ec_number(ec_values: pd.Series) -> pd.Series:
+    """Return whether each value contains a complete, partial, or provisional EC."""
+    return ec_values.astype("string").str.contains(EC_NUMBER_PATTERN, na=False)
 
 
 def is_ion_smiles(smiles: str) -> bool:
@@ -111,7 +128,7 @@ def prep_biolip(p: Paths):
     }
     
     len_before = len(biol)
-    biol = biol[biol['ec_number'].notna()]
+    biol = biol[has_explicit_ec_number(biol["ec_number"])].copy()
     stats["removed_by_reason"]["was_not_enzyme"] += len_before - len(biol)
     
     len_before = len(biol)
@@ -212,7 +229,8 @@ def prep_biolip(p: Paths):
         max_tries=1000,
     )
     
-    out_dir = p.data_processed_datasets
+    out_dir = p.data_processed_datasets / "biolip_binding"
+    out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "biolip_cleaned_with_negatives.csv"
     
     neg_df.to_csv(out_path, index=False)

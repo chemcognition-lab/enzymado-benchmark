@@ -1,4 +1,8 @@
-"""Benchmark orchestration: run all model/task/embedding combinations."""
+"""Run model, task, and embedding combinations for the benchmark.
+
+Example:
+    python scripts/run_benchmark.py --help
+"""
 from __future__ import annotations
 
 import argparse
@@ -29,6 +33,7 @@ from data_loading import (
     log,
     resolve_sequence_index_path,
 )
+from evaluation import sample_identity, task_types
 from evaluation.artifacts import (
     read_json,
     save_model,
@@ -69,6 +74,7 @@ from training.train import (
 def save_split_predictions(
     outputs: ModelRunOutputs,
     *,
+    prepared: PooledTaskData | LoaderTaskData,
     run_dir: Path,
     task_name: str,
     emb_name: str,
@@ -77,10 +83,22 @@ def save_split_predictions(
     use_validation: bool,
 ) -> dict[str, Path]:
     """Save raw predictions for each split. Metrics are computed later by evaluation."""
-    split_payloads = [("train", outputs.y_train, outputs.pred_train, outputs.target_mask_train)]
+    sample_ids_by_split = _prepared_sample_ids(prepared)
+    split_payloads = [
+        (
+            "train",
+            outputs.y_train,
+            outputs.pred_train,
+            outputs.target_mask_train,
+        )
+    ]
     if use_validation:
-        split_payloads.append(("val", outputs.y_val, outputs.pred_val, outputs.target_mask_val))
-    split_payloads.append(("test", outputs.y_test, outputs.pred_test, outputs.target_mask_test))
+        split_payloads.append(
+            ("val", outputs.y_val, outputs.pred_val, outputs.target_mask_val)
+        )
+    split_payloads.append(
+        ("test", outputs.y_test, outputs.pred_test, outputs.target_mask_test)
+    )
 
     saved_paths: dict[str, Path] = {}
     for split_name, y_true, pred, target_mask in split_payloads:
@@ -94,8 +112,50 @@ def save_split_predictions(
             model_name=model_name,
             split_variant=split_variant,
             split_name=split_name,
+            sample_ids=sample_ids_by_split[split_name],
         )
     return saved_paths
+
+
+def _bundle_sample_ids(bundle: Any) -> tuple[str, ...]:
+    """Return identifiers in the exact order exposed by one dataset bundle."""
+    rows = getattr(bundle.dataset, "rows", None)
+    if rows is None:
+        raise TypeError("Dataset does not expose validated rows for sample IDs.")
+    return sample_identity.normalize(
+        [row.get("prediction_id") or row.get("sample_id", "") for row in rows]
+    )
+
+
+def _prepared_sample_ids(
+    prepared: PooledTaskData | LoaderTaskData,
+) -> dict[str, tuple[str, ...]]:
+    """Collect ordered identifiers for every prepared prediction split."""
+    if isinstance(prepared, PooledTaskData):
+        return {
+            "train": prepared.sample_ids_train,
+            "val": prepared.sample_ids_val,
+            "test": prepared.sample_ids_test,
+        }
+    return {
+        "train": _bundle_sample_ids(prepared.train_bundle),
+        "val": (
+            _bundle_sample_ids(prepared.val_bundle)
+            if prepared.val_bundle is not None
+            else ()
+        ),
+        "test": _bundle_sample_ids(prepared.test_bundle),
+    }
+
+
+def _sample_identity_manifest(
+    prepared: PooledTaskData | LoaderTaskData,
+) -> dict[str, dict[str, int | str]]:
+    """Build compact ordered-ID provenance for hparams.json."""
+    return {
+        split_name: sample_identity.manifest(sample_ids)
+        for split_name, sample_ids in _prepared_sample_ids(prepared).items()
+    }
 
 
 def save_residue_predictions(
@@ -116,13 +176,19 @@ def save_residue_predictions(
         ("test", prepared.test_bundle, trained_payload.loaders.test_loader),
     ]
     if use_validation:
-        split_jobs.insert(1, ("val", prepared.val_bundle, trained_payload.loaders.val_loader))
+        split_jobs.insert(
+            1,
+            ("val", prepared.val_bundle, trained_payload.loaders.val_loader),
+        )
 
     saved_paths: dict[str, Path] = {}
     for split_name, bundle, loader in split_jobs:
         log(f"      Predicting/saving split='{split_name}'...")
         y_true, target_mask = get_target_payload(bundle)
-        pred = trained_payload.trained.predict_loader(loader, batch_kind=config.batch_kind)
+        pred = trained_payload.trained.predict_loader(
+            loader,
+            batch_kind=config.batch_kind,
+        )
         saved_paths[split_name] = save_raw_predictions(
             y_true,
             pred,
@@ -133,6 +199,7 @@ def save_residue_predictions(
             model_name=model_name,
             split_variant=split_variant,
             split_name=split_name,
+            sample_ids=_bundle_sample_ids(bundle),
         )
         del y_true, target_mask, pred
         gc.collect()
@@ -205,7 +272,11 @@ def run_model(
             use_validation,
             config.batch_kind,
         )
-        prediction_paths = save_split_predictions(outputs, **save_kwargs)
+        prediction_paths = save_split_predictions(
+            outputs,
+            prepared=prepared,
+            **save_kwargs,
+        )
         trained = outputs.trained
 
     else:  # GlobalRoute
@@ -221,7 +292,11 @@ def run_model(
             use_validation,
             m_tr, m_va, m_te,
         )
-        prediction_paths = save_split_predictions(outputs, **save_kwargs)
+        prediction_paths = save_split_predictions(
+            outputs,
+            prepared=prepared,
+            **save_kwargs,
+        )
         trained = outputs.trained
 
     return SavedModelRun(
@@ -305,7 +380,9 @@ def _run_task(
 ) -> None:
     """Train all selected models for one task/embedding pair."""
     config = get_task_config(task_name)
-    task_type = "classification" if config.label_kind == "binary" else "regression"
+    task_type = task_types.from_label_kind(str(config.label_kind))
+    if task_type is None:
+        raise ValueError(f"Unsupported label kind '{config.label_kind}'.")
 
     if config.label_kind in skip_label_kinds:
         log(f"  Skipping '{task_name}' (label_kind='{config.label_kind}' filtered by CLI)")
@@ -405,6 +482,7 @@ def _run_task(
                 split_variant=split_variant,
                 model_info=model_info,
                 task_config=config,
+                sample_identity_manifest=_sample_identity_manifest(prepared),
             )
             saved_run = run_model(
                 training_route,

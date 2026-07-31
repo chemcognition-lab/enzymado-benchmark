@@ -1,12 +1,12 @@
-"""Paired bootstrap of test-set metrics for a single experiment.
+"""Compute paired bootstrap metrics for a single experiment.
 
 The same `(n_replicates, n_units)` index matrix is reused across every experiment of
 the same task so embedding models are scored on identical resamples; the caller is
 responsible for generating and supplying that matrix.
 
-Metrics that reduce to a sum of precomputed per-row values (classification's
-accuracy/precision/recall/f1 via TP/FP/FN/TN counts; regression's mae/rmse via
-per-row error sums) are evaluated for all replicates in one vectorized NumPy call
+Metrics that reduce to precomputed per-row values (classification metrics via
+TP/FP/FN/TN counts; regression MAE/RMSE via per-row error sums) are evaluated
+for all replicates in one vectorized NumPy call
 instead of a Python loop calling the metric function once per replicate — the
 per-row values are summed once per replicate via `stats[indices].sum(axis=1)`,
 then combined into the final metric. r2 and kendall_tau cannot be reduced this
@@ -17,22 +17,20 @@ contributions, so both are recomputed directly on each replicate's resampled
 values. The caller passes `task_type` explicitly; it is never inferred from the
 numeric range of the data (a normalized regression target living in [0, 1] would
 be indistinguishable from binary labels by value alone).
+
+Example:
+    Call ``bootstrap_replicates(payload, indices, metric_set, task_type)``.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from src.evaluation.loaders import PredictionPayload
-from src.evaluation.metrics_registry import MetricFn, metric_set_for
+from src.evaluation import binary_statistics, loaders, metrics_registry
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-def n_resample_units(payload: PredictionPayload) -> int:
-    """Number of units that bootstrap resamples (proteins for per-residue, rows otherwise)."""
+def n_resample_units(payload: loaders.PredictionPayload) -> int:
+    """Return resampling units: proteins for residue tasks, rows otherwise."""
     return int(payload.y_true.shape[0])
 
 
@@ -43,7 +41,12 @@ def make_resample_indices(
 ) -> np.ndarray:
     """Deterministic (n_replicates, n_units) integer index matrix."""
     rng = np.random.default_rng(seed)
-    return rng.integers(low=0, high=n_units, size=(n_replicates, n_units), dtype=np.int64)
+    return rng.integers(
+        low=0,
+        high=n_units,
+        size=(n_replicates, n_units),
+        dtype=np.int64,
+    )
 
 
 def summarise_replicates(
@@ -76,78 +79,28 @@ def summarise_replicates(
     return summary
 
 
-# ---------------------------------------------------------------------------
-# Additive path — classification (accuracy/precision/recall/f1 from TP/FP/FN/TN)
-# ---------------------------------------------------------------------------
-
-def _precompute_binary_counts(payload: PredictionPayload) -> np.ndarray:
-    """Aggregate per-row [TP, FP, FN, TN] counts — computed once before the loop.
-
-    Returns int64 array of shape (n_units, 4). Each bootstrap replicate sums
-    selected rows to get global totals in O(N) with no sklearn calls.
-    """
-    y = payload.y_true
-    p = payload.predictions
-    m = payload.target_mask
-
-    valid = np.asarray(m, dtype=bool) if m is not None else np.ones(y.shape, dtype=bool)
-
-    with np.errstate(invalid="ignore"):
-        y_int = np.rint(y).astype(np.int8, copy=False)
-        p_int = np.rint(p).astype(np.int8, copy=False)
-
-    tp_mask = (y_int == 1) & (p_int == 1) & valid
-    fp_mask = (y_int == 0) & (p_int == 1) & valid
-    fn_mask = (y_int == 1) & (p_int == 0) & valid
-    tn_mask = (y_int == 0) & (p_int == 0) & valid
-
-    if y_int.ndim == 1:
-        tp = tp_mask.astype(np.int64)
-        fp = fp_mask.astype(np.int64)
-        fn = fn_mask.astype(np.int64)
-        tn = tn_mask.astype(np.int64)
-    else:
-        tp = tp_mask.sum(axis=1, dtype=np.int64)
-        fp = fp_mask.sum(axis=1, dtype=np.int64)
-        fn = fn_mask.sum(axis=1, dtype=np.int64)
-        tn = tn_mask.sum(axis=1, dtype=np.int64)
-
-    return np.stack([tp, fp, fn, tn], axis=1)
+def _precompute_binary_counts(
+    payload: loaders.PredictionPayload,
+) -> np.ndarray:
+    """Aggregate per-row TP, FP, FN, and TN counts."""
+    return binary_statistics.count_payload(payload)
 
 
 def _bootstrap_classification_counts(
     counts: np.ndarray,
     indices: np.ndarray,
 ) -> dict[str, np.ndarray]:
-    """Compute accuracy/precision/recall/f1 per replicate from pre-aggregated counts."""
-    totals = counts[indices].sum(axis=1, dtype=np.int64)
-    tp = totals[:, 0].astype(np.float64)
-    fp = totals[:, 1].astype(np.float64)
-    fn = totals[:, 2].astype(np.float64)
-    tn = totals[:, 3].astype(np.float64)
+    """Compute classification metrics from pre-aggregated counts."""
+    return binary_statistics.bootstrap(counts, indices)
 
-    pred_pos = tp + fp
-    actual_pos = tp + fn
-    total = tp + fp + fn + tn
-
-    precision = np.where(pred_pos > 0, tp / np.where(pred_pos > 0, pred_pos, 1.0), 0.0)
-    recall = np.where(actual_pos > 0, tp / np.where(actual_pos > 0, actual_pos, 1.0), 0.0)
-    denom = precision + recall
-    f1 = np.where(denom > 0, 2.0 * precision * recall / np.where(denom > 0, denom, 1.0), 0.0)
-    accuracy = np.where(total > 0, (tp + tn) / np.where(total > 0, total, 1.0), 0.0)
-
-    return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
-
-
-# ---------------------------------------------------------------------------
-# Additive path — regression (mae/rmse from per-row error sums)
-# ---------------------------------------------------------------------------
 
 _ADDITIVE_REGRESSION_METRICS = {"mae", "rmse"}
 
 
-def _precompute_regression_errors(payload: PredictionPayload) -> np.ndarray:
-    """Aggregate per-row [n_valid, sum_abs_error, sum_sq_error] — computed once before the loop.
+def _precompute_regression_errors(
+    payload: loaders.PredictionPayload,
+) -> np.ndarray:
+    """Aggregate row-level valid counts and absolute/squared error sums.
 
     mae/rmse are masked, flattened means (see metrics_registry._flatten_known):
     summing these three per-row totals across a resampled set of rows and dividing
@@ -196,15 +149,10 @@ def _bootstrap_additive_regression(
     return out
 
 
-# ---------------------------------------------------------------------------
-# Per-replicate path — r2 and kendall_tau, recomputed on each replicate's
-# actual resampled values (not reducible to summed per-row statistics)
-# ---------------------------------------------------------------------------
-
 def _bootstrap_per_replicate(
-    payload: PredictionPayload,
+    payload: loaders.PredictionPayload,
     indices: np.ndarray,
-    metric_set: dict[str, MetricFn],
+    metric_set: dict[str, metrics_registry.MetricFn],
 ) -> dict[str, np.ndarray]:
     """Evaluate every metric function per replicate via row slicing."""
     n_rep, n_units = indices.shape
@@ -224,14 +172,10 @@ def _bootstrap_per_replicate(
     return out
 
 
-# ---------------------------------------------------------------------------
-# Unified entry point
-# ---------------------------------------------------------------------------
-
 def bootstrap_replicates(
-    payload: PredictionPayload,
+    payload: loaders.PredictionPayload,
     indices: np.ndarray,
-    metric_set: dict[str, MetricFn],
+    metric_set: dict[str, metrics_registry.MetricFn],
     task_type: str,
 ) -> dict[str, np.ndarray]:
     """Compute bootstrap replicates for every metric in metric_set.
@@ -249,7 +193,11 @@ def bootstrap_replicates(
         stats = _precompute_regression_errors(payload)
         out.update(_bootstrap_additive_regression(stats, indices, additive_names))
 
-    remaining = {name: fn for name, fn in metric_set.items() if name not in additive_names}
+    remaining = {
+        name: function
+        for name, function in metric_set.items()
+        if name not in additive_names
+    }
     if remaining:
         out.update(_bootstrap_per_replicate(payload, indices, remaining))
     return out

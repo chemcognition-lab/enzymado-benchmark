@@ -7,22 +7,29 @@ To add a new metric, create a function with the signature:
 Then call register_metric() with the appropriate task_type, higher_is_better, and
 is_primary flags. The metric will automatically appear in training metrics.json and
 in the bootstrap post-training evaluation.
+
+Example:
+    Call ``evaluate_predictions(y_true, y_pred, task_type, split="test")``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
+import collections.abc
+import dataclasses
 
 import numpy as np
-from scipy.stats import kendalltau
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+import numpy.typing as npt
+import scipy.stats
+import sklearn.metrics
+
+MetricFn = collections.abc.Callable[
+    [np.ndarray, np.ndarray, np.ndarray | None],
+    float,
+]
+Array = npt.NDArray[np.generic]
 
 
-MetricFn = Callable[[np.ndarray, np.ndarray, np.ndarray | None], float]
-
-
-@dataclass
+@dataclasses.dataclass
 class MetricEntry:
     name: str
     task_type: str
@@ -56,7 +63,9 @@ def register_metric(
 
 def metric_set_for(task_type: str) -> dict[str, MetricFn]:
     """Return all registered metric functions for the given task type."""
-    metrics = {entry.name: entry.fn for entry in _REGISTRY if entry.task_type == task_type}
+    metrics = {
+        entry.name: entry.fn for entry in _REGISTRY if entry.task_type == task_type
+    }
     if not metrics:
         raise ValueError(f"No metrics registered for task_type '{task_type}'.")
     return metrics
@@ -79,15 +88,11 @@ def primary_metric_for(task_type: str) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _flatten_known(
-    y_true: np.ndarray,
-    pred: np.ndarray,
-    target_mask=None,
-) -> tuple[np.ndarray, np.ndarray]:
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> tuple[Array, Array]:
     """Flatten and optionally mask arrays to 1D float64."""
     y = np.asarray(y_true, dtype=np.float64).ravel()
     p = np.asarray(pred, dtype=np.float64).ravel()
@@ -100,31 +105,40 @@ def _flatten_known(
 
 
 def _binary_or_macro(
-    y: np.ndarray,
-    p: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, str]:
+    y: Array,
+    p: Array,
+) -> tuple[Array, Array, str]:
     y_label = np.rint(y).astype(np.int8)
     p_label = np.rint(p).astype(np.int8)
     labels = np.unique(np.concatenate([y_label, p_label]))
-    average = "binary" if labels.size <= 2 and set(labels.tolist()) <= {0, 1} else "macro"
+    is_binary = labels.size <= 2 and set(labels.tolist()) <= {0, 1}
+    average = "binary" if is_binary else "macro"
     return y_label, p_label, average
 
 
-# ---------------------------------------------------------------------------
-# Regression metrics
-# ---------------------------------------------------------------------------
-
-def regression_mae(y_true, pred, target_mask=None) -> float:
+def regression_mae(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     return float("nan") if y.size == 0 else float(np.mean(np.abs(p - y)))
 
 
-def regression_rmse(y_true, pred, target_mask=None) -> float:
+def regression_rmse(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     return float("nan") if y.size == 0 else float(np.sqrt(np.mean((p - y) ** 2)))
 
 
-def regression_r2(y_true, pred, target_mask=None) -> float:
+def regression_r2(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size < 2:
         return float("nan")
@@ -132,70 +146,182 @@ def regression_r2(y_true, pred, target_mask=None) -> float:
     return float("nan") if ss_tot == 0.0 else float(1.0 - np.sum((p - y) ** 2) / ss_tot)
 
 
-def regression_kendall_tau(y_true, pred, target_mask=None) -> float:
+def regression_kendall_tau(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size < 2 or np.unique(y).size < 2 or np.unique(p).size < 2:
         return float("nan")
-    tau = kendalltau(y, p).statistic
+    tau = scipy.stats.kendalltau(y, p).statistic
     return float("nan") if tau is None or not np.isfinite(tau) else float(tau)
 
 
-# ---------------------------------------------------------------------------
-# Classification metrics
-# ---------------------------------------------------------------------------
-
-def classification_accuracy(y_true, pred, target_mask=None) -> float:
+def classification_accuracy(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size == 0:
         return float("nan")
     y_label, p_label, _ = _binary_or_macro(y, p)
-    return float(accuracy_score(y_label, p_label))
+    return float(sklearn.metrics.accuracy_score(y_label, p_label))
 
 
-def classification_precision(y_true, pred, target_mask=None) -> float:
+def classification_precision(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size == 0:
         return float("nan")
     y_label, p_label, average = _binary_or_macro(y, p)
-    return float(precision_score(y_label, p_label, average=average, zero_division=0))
+    return float(
+        sklearn.metrics.precision_score(
+            y_label,
+            p_label,
+            average=average,
+            zero_division=0,
+        )
+    )
 
 
-def classification_recall(y_true, pred, target_mask=None) -> float:
+def classification_recall(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size == 0:
         return float("nan")
     y_label, p_label, average = _binary_or_macro(y, p)
-    return float(recall_score(y_label, p_label, average=average, zero_division=0))
+    return float(
+        sklearn.metrics.recall_score(
+            y_label,
+            p_label,
+            average=average,
+            zero_division=0,
+        )
+    )
 
 
-def classification_f1(y_true, pred, target_mask=None) -> float:
+def classification_f1(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size == 0:
         return float("nan")
     y_label, p_label, average = _binary_or_macro(y, p)
-    return float(f1_score(y_label, p_label, average=average, zero_division=0))
+    return float(
+        sklearn.metrics.f1_score(
+            y_label,
+            p_label,
+            average=average,
+            zero_division=0,
+        )
+    )
 
 
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
+def classification_auroc(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
+    """Calculate binary AUROC from saved hard-label predictions."""
+    y, p = _flatten_known(y_true, pred, target_mask)
+    if y.size == 0:
+        return float("nan")
+    y_label, p_label, _ = _binary_or_macro(y, p)
+    if np.unique(y_label).size < 2:
+        return float("nan")
+    return float(sklearn.metrics.roc_auc_score(y_label, p_label))
 
-register_metric("mae",          "regression",     regression_mae,          higher_is_better=False, is_primary=True)
-register_metric("rmse",         "regression",     regression_rmse,         higher_is_better=False)
-register_metric("r2",           "regression",     regression_r2,           higher_is_better=True)
-register_metric("kendall_tau",  "regression",     regression_kendall_tau,  higher_is_better=True)
 
-register_metric("accuracy",     "classification", classification_accuracy,  higher_is_better=True)
-register_metric("precision",    "classification", classification_precision, higher_is_better=True)
-register_metric("recall",       "classification", classification_recall,    higher_is_better=True)
-register_metric("f1",           "classification", classification_f1,        higher_is_better=True, is_primary=True)
+def classification_auprc(
+    y_true: Array,
+    pred: Array,
+    target_mask: Array | None = None,
+) -> float:
+    """Calculate binary AUPRC from saved hard-label predictions."""
+    y, p = _flatten_known(y_true, pred, target_mask)
+    if y.size == 0:
+        return float("nan")
+    y_label, p_label, _ = _binary_or_macro(y, p)
+    if not np.any(y_label == 1):
+        return 0.0
+    return float(sklearn.metrics.average_precision_score(y_label, p_label))
 
 
-# ---------------------------------------------------------------------------
-# evaluate_predictions — single entry point used by training and bootstrap
-# ---------------------------------------------------------------------------
+register_metric(
+    "mae",
+    "regression",
+    regression_mae,
+    higher_is_better=False,
+    is_primary=True,
+)
+register_metric(
+    "rmse",
+    "regression",
+    regression_rmse,
+    higher_is_better=False,
+)
+register_metric("r2", "regression", regression_r2, higher_is_better=True)
+register_metric(
+    "kendall_tau",
+    "regression",
+    regression_kendall_tau,
+    higher_is_better=True,
+)
 
-def _flatten_for_eval(y_true, pred, target_mask=None):
+register_metric(
+    "accuracy",
+    "classification",
+    classification_accuracy,
+    higher_is_better=True,
+)
+register_metric(
+    "precision",
+    "classification",
+    classification_precision,
+    higher_is_better=True,
+)
+register_metric(
+    "recall",
+    "classification",
+    classification_recall,
+    higher_is_better=True,
+)
+register_metric(
+    "f1",
+    "classification",
+    classification_f1,
+    higher_is_better=True,
+    is_primary=True,
+)
+register_metric(
+    "auroc",
+    "classification",
+    classification_auroc,
+    higher_is_better=True,
+)
+register_metric(
+    "auprc",
+    "classification",
+    classification_auprc,
+    higher_is_better=True,
+)
+
+
+def _flatten_for_eval(
+    y_true: object,
+    pred: object,
+    target_mask: object = None,
+) -> tuple[Array, Array]:
     """Flatten potentially nested (EC, residue) payloads into 1D arrays."""
     if isinstance(y_true, dict):
         y_chunks, p_chunks = [], []
@@ -232,16 +358,20 @@ def _flatten_for_eval(y_true, pred, target_mask=None):
 
 
 def evaluate_predictions(
-    y_true,
-    pred,
+    y_true: object,
+    pred: object,
     task_type: str,
-    target_mask=None,
+    target_mask: object = None,
     *,
     split: str,
-) -> dict:
+) -> dict[str, object]:
     """Compute all registered metrics for one split. Used by training and bootstrap."""
     y_flat, pred_flat = _flatten_for_eval(y_true, pred, target_mask)
-    result: dict = {"split": split, "task_type": task_type, "n": int(y_flat.size)}
+    result: dict[str, object] = {
+        "split": split,
+        "task_type": task_type,
+        "n": int(y_flat.size),
+    }
     if y_flat.size == 0:
         return result
     for name, fn in metric_set_for(task_type).items():
@@ -252,17 +382,19 @@ def evaluate_predictions(
 __all__ = [
     "MetricEntry",
     "MetricFn",
+    "classification_accuracy",
+    "classification_auprc",
+    "classification_auroc",
+    "classification_f1",
+    "classification_precision",
+    "classification_recall",
     "evaluate_predictions",
     "higher_is_better_for",
     "metric_set_for",
     "primary_metric_for",
     "register_metric",
-    "regression_mae",
-    "regression_rmse",
-    "regression_r2",
     "regression_kendall_tau",
-    "classification_accuracy",
-    "classification_precision",
-    "classification_recall",
-    "classification_f1",
+    "regression_mae",
+    "regression_r2",
+    "regression_rmse",
 ]

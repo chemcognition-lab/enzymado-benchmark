@@ -312,10 +312,17 @@ def build_dataset_from_config(
     missing_policy: str = "raise",
     ligand_featurizer: Any | None = None,
     ec_vocabulary: dict[str, tuple[str, ...]] | None = None,
+    rows: list[dict[str, str]] | None = None,
 ) -> TaskDatasetBundle:
-    """Build a split-specific dataset bundle from a registered task config."""
-    adapter = _build_adapter(config, split_name=split_name, split_variant=split_variant)
-    rows = adapter.load_rows()
+    """Build a split-specific dataset bundle from configured or supplied rows."""
+    dataset_rows = rows
+    if dataset_rows is None:
+        adapter = _build_adapter(
+            config,
+            split_name=split_name,
+            split_variant=split_variant,
+        )
+        dataset_rows = adapter.load_rows()
 
     if config.label_kind == "multilabel_ec" and split_name not in (None, "train") and ec_vocabulary is None:
         raise ValueError(
@@ -325,7 +332,11 @@ def build_dataset_from_config(
 
     # Features and labels are instantiated after rows are loaded so train-derived
     # vocabularies or split-specific checks can depend on the actual payload.
-    label_builder = _build_label_builder(config, rows=rows, ec_vocabulary=ec_vocabulary)
+    label_builder = _build_label_builder(
+        config,
+        rows=dataset_rows,
+        ec_vocabulary=ec_vocabulary,
+    )
     protein_builder = ProteinResidueEmbeddingBuilder(
         embedding_store=embedding_store,
         sequence_column=config.sequence_column,
@@ -334,7 +345,7 @@ def build_dataset_from_config(
 
     if config.batch_kind == "protein_global":
         dataset = ProteinGlobalDataset(
-            rows=rows,
+            rows=dataset_rows,
             protein_builder=protein_builder,
             label_builder=label_builder,
             missing_policy=missing_policy,
@@ -346,7 +357,7 @@ def build_dataset_from_config(
             featurize_smiles=ligand_featurizer,
         )
         dataset = ProteinLigandGlobalDataset(
-            rows=rows,
+            rows=dataset_rows,
             protein_builder=protein_builder,
             ligand_builder=ligand_builder,
             label_builder=label_builder,
@@ -361,7 +372,7 @@ def build_dataset_from_config(
             index_columns=config.index_columns,
         )
         dataset = MutationDeltaGlobalDataset(
-            rows=rows,
+            rows=dataset_rows,
             mutation_builder=mutation_builder,
             label_builder=label_builder,
             missing_policy=missing_policy,
@@ -369,7 +380,7 @@ def build_dataset_from_config(
         collator = MutationDeltaGlobalCollator()
     elif config.batch_kind == "protein_residue":
         dataset = ProteinResidueDataset(
-            rows=rows,
+            rows=dataset_rows,
             protein_builder=protein_builder,
             label_builder=label_builder,
             missing_policy=missing_policy,
@@ -380,7 +391,7 @@ def build_dataset_from_config(
 
     return TaskDatasetBundle(
         config=config,
-        rows=rows,
+        rows=dataset_rows,
         dataset=dataset,
         collator=collator,
         label_builder=label_builder,
@@ -395,6 +406,7 @@ def build_task_dataset(
     missing_policy: str = "raise",
     ligand_featurizer: Any | None = None,
     ec_vocabulary: dict[str, tuple[str, ...]] | None = None,
+    rows: list[dict[str, str]] | None = None,
 ) -> TaskDatasetBundle:
     """Convenience wrapper around `build_dataset_from_config` keyed by task name."""
     return build_dataset_from_config(
@@ -405,4 +417,5 @@ def build_task_dataset(
         missing_policy=missing_policy,
         ligand_featurizer=ligand_featurizer,
         ec_vocabulary=ec_vocabulary,
+        rows=rows,
     )
