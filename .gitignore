@@ -37,3 +37,4 @@ data/embeddings_mean_pooled/
 *.h5
 data/fastas
 external/Profluent-E1/
+.codex/

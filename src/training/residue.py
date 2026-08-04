@@ -52,6 +52,7 @@ def build_residue_aware_loaders(
     """Create loaders for residue-aware training and prediction."""
     residue_batch_size = int(model_info.get("loader_batch_size", 64))
     num_workers = int(model_info.get("loader_num_workers", 4))
+    loader_seed = int(model_info.get("loader_seed", 0))
     log(f"      Using residue-aware loader batch_size={residue_batch_size} num_workers={num_workers}")
     residue_collate_fn = None
     if model_info.get("concat_residue_batch", False):
@@ -71,6 +72,7 @@ def build_residue_aware_loaders(
         batch_size=residue_batch_size,
         collate_fn=residue_collate_fn,
         shuffle=not model_info.get("concat_residue_batch", False),
+        seed=loader_seed,
         num_workers=num_workers,
     )
     train_predict_loader = get_dataloader(

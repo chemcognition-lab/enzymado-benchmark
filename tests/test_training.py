@@ -36,6 +36,88 @@ class StructuredTrainingTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def test_training_seed_reproducibly_resets_all_rngs(self) -> None:
+        import random
+
+        import torch
+
+        from models.common import seed_random_generators
+
+        seed_random_generators(42)
+        first = (
+            random.random(),
+            np.random.random(3),
+            torch.rand(3),
+        )
+        seed_random_generators(42)
+        second = (
+            random.random(),
+            np.random.random(3),
+            torch.rand(3),
+        )
+
+        self.assertEqual(first[0], second[0])
+        np.testing.assert_array_equal(first[1], second[1])
+        torch.testing.assert_close(first[2], second[2], rtol=0.0, atol=0.0)
+
+    def test_model_seed_is_propagated_without_mutating_registry(self) -> None:
+        from scripts.run_benchmark import _model_info_with_seed
+
+        class TorchWrapper:
+            pass
+
+        class XGBWrapper:
+            pass
+
+        torch_info = {"wrap": TorchWrapper, "params": {"epochs": 3}}
+        xgb_info = {"wrap": XGBWrapper, "params": {"n_estimators": 10}}
+
+        seeded_torch = _model_info_with_seed(torch_info, 42)
+        seeded_xgb = _model_info_with_seed(xgb_info, 42)
+
+        self.assertEqual(seeded_torch["loader_seed"], 42)
+        self.assertNotIn("random_state", seeded_torch["params"])
+        self.assertEqual(seeded_xgb["params"]["random_state"], 42)
+        self.assertNotIn("loader_seed", torch_info)
+        self.assertNotIn("random_state", xgb_info["params"])
+
+    def test_early_stopping_can_restore_epoch_zero(self) -> None:
+        import torch
+
+        from models.common import run_training_with_early_stopping
+
+        model = torch.nn.Linear(1, 1, bias=False)
+        with torch.no_grad():
+            model.weight.zero_()
+        callback_epochs = []
+
+        def train_epoch() -> None:
+            with torch.no_grad():
+                model.weight.add_(1.0)
+
+        def val_loss() -> float:
+            return float(model.weight.square().item())
+
+        best_epoch, best_val_loss = run_training_with_early_stopping(
+            model,
+            epochs=3,
+            train_epoch_fn=train_epoch,
+            val_loss_fn=val_loss,
+            patience=1,
+            log_every=100,
+            epoch_callback=lambda epoch, *_: callback_epochs.append(epoch),
+        )
+
+        self.assertEqual(best_epoch, 0)
+        self.assertEqual(best_val_loss, 0.0)
+        self.assertEqual(callback_epochs, [0, 1])
+        torch.testing.assert_close(
+            model.weight,
+            torch.zeros_like(model.weight),
+            rtol=0.0,
+            atol=0.0,
+        )
+
     def test_ec_multihead_training_and_prediction_serialization(self) -> None:
         from training.torch_structured_wrappers import ECMultiHeadClassifierTorch
         from data_loading.stores import get_target_payload
@@ -946,6 +1028,48 @@ class StructuredTrainingTests(unittest.TestCase):
 
         np.testing.assert_allclose(normalized.mean(axis=0), np.zeros(2, dtype=np.float32), atol=1e-6)
         np.testing.assert_allclose(normalized.std(axis=0), np.ones(2, dtype=np.float32), atol=1e-6)
+
+    def test_attention_sequence_scaler_is_stable_and_neutralizes_constants(self) -> None:
+        import torch
+
+        from training.attention_wrappers import AttentionRegressorTorch
+
+        model = AttentionRegressorTorch(
+            hidden_dims=(),
+            lr=1e-3,
+            epochs=1,
+            optimizer_name="adamw",
+            device="cpu",
+        )
+        batches = [
+            (
+                torch.tensor([[[3.0, 10_000.0], [3.0, 10_000.0]]]),
+                torch.tensor([[True, True]]),
+            ),
+            (
+                torch.tensor([[[3.0, 10_001.0], [3.0, 10_001.0]]]),
+                torch.tensor([[True, True]]),
+            ),
+        ]
+
+        model._fit_sequence_scaler_from_batches(
+            batches,
+            lambda batch, device: (batch[0].to(device), batch[1].to(device)),
+        )
+
+        torch.testing.assert_close(
+            model.seq_mean_.flatten(),
+            torch.tensor([3.0, 10_000.5]),
+        )
+        torch.testing.assert_close(
+            model.seq_scale_.flatten(),
+            torch.tensor([1.0, 0.5]),
+        )
+        normalized = model._normalize_sequence(
+            torch.tensor([[[3.001, 10_000.5]]])
+        )
+        self.assertAlmostEqual(float(normalized[0, 0, 0]), 0.001, places=6)
+        self.assertEqual(float(normalized[0, 0, 1]), 0.0)
 
     def test_attention_resume_skips_scaler_refit(self) -> None:
         """A resumed attention fit must not re-run the full-dataset scaler passes.

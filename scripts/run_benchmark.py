@@ -49,6 +49,7 @@ from evaluation.results_layout import (
     canonical_embedding_mode,
     is_run_complete,
 )
+from models.common import seed_random_generators
 from training.model_registry import get_attention_model_map, get_model_map
 from training.predict import (
     ModelRunOutputs,
@@ -69,6 +70,9 @@ from training.train import (
     train_global,
     train_residue,
 )
+
+
+_DEFAULT_RANDOM_SEED = 42
 
 
 def save_split_predictions(
@@ -341,6 +345,29 @@ def _filter_model_map_by_embedding_modes(
     }
 
 
+def _model_info_with_seed(model_info: dict, random_seed: int) -> dict:
+    """Return an isolated registry entry with one seed for loaders and estimators."""
+    seeded_info = {
+        **model_info,
+        "params": dict(model_info["params"]),
+        "loader_seed": int(random_seed),
+    }
+    wrapper_name = getattr(model_info["wrap"], "__name__", "")
+    if "random_state" in seeded_info["params"] or wrapper_name.startswith("XGB"):
+        seeded_info["params"]["random_state"] = int(random_seed)
+    return seeded_info
+
+
+def _with_attention_overrides(model_info: dict, overrides: dict | None) -> dict:
+    """Apply opt-in attention experiment controls without mutating the registry."""
+    if not overrides:
+        return model_info
+    return {
+        **model_info,
+        "params": {**model_info["params"], **overrides},
+    }
+
+
 def _completed_models(
     model_map: dict[str, dict],
     output_dir: Path,
@@ -375,6 +402,8 @@ def _run_task(
     split_variant_filter: str | None,
     embedding_mode_filters: set[str],
     overwrite_results: bool,
+    random_seed: int,
+    attention_overrides: dict | None = None,
     training_route_override: TrainingRouteSpec | None = None,
     model_map_fn=None,
 ) -> None:
@@ -473,6 +502,12 @@ def _run_task(
             log(f"    [{model_name}] n_train={n_train}, n_test={n_test} | route={training_route.name}")
             run_dir.mkdir(parents=True, exist_ok=True)
             artifact_stem = build_artifact_stem(task_name, emb_name, model_name, split_variant)
+            seeded_model_info = _model_info_with_seed(model_info, random_seed)
+            if training_route is ATTENTION_ROUTE:
+                seeded_model_info = _with_attention_overrides(
+                    seeded_model_info, attention_overrides
+                )
+            seed_random_generators(random_seed)
 
             write_hparams_file(
                 run_dir,
@@ -480,15 +515,16 @@ def _run_task(
                 emb_name=emb_name,
                 model_name=model_name,
                 split_variant=split_variant,
-                model_info=model_info,
+                model_info=seeded_model_info,
                 task_config=config,
                 sample_identity_manifest=_sample_identity_manifest(prepared),
+                random_seed=random_seed,
             )
             saved_run = run_model(
                 training_route,
                 model_name=model_name,
                 emb_name=emb_name,
-                model_info=model_info,
+                model_info=seeded_model_info,
                 prepared=prepared,
                 config=config,
                 use_validation=use_validation,
@@ -553,9 +589,46 @@ def main(
     embedding_mode_filters: set[str] | None = None,
     overwrite_results: bool = False,
     attention_embeddings_json: str | None = None,
+    random_seed: int = _DEFAULT_RANDOM_SEED,
+    attention_lr: float | None = None,
+    attention_gradient_clip_norm: float | None = None,
+    attention_pre_layer_norm: bool = False,
+    attention_batch_diagnostics: bool = False,
+    diagnostic_loss_threshold: float = 100.0,
+    diagnostic_z_threshold: float = 20.0,
+    diagnostic_grad_norm_threshold: float = 1000.0,
 ) -> None:
     """Train all selected embedding-model and task combinations from the task registry."""
     log(f"[startup] Python started. emb_name={emb_name_filter}")
+    log(f"[startup] Training random seed: {random_seed}")
+    attention_overrides = {}
+    if attention_lr is not None:
+        if attention_lr <= 0:
+            raise ValueError("attention_lr must be positive when provided.")
+        attention_overrides["lr"] = float(attention_lr)
+    if attention_gradient_clip_norm is not None:
+        if attention_gradient_clip_norm <= 0:
+            raise ValueError(
+                "attention_gradient_clip_norm must be positive when provided."
+            )
+        attention_overrides["gradient_clip_norm"] = float(
+            attention_gradient_clip_norm
+        )
+    if attention_pre_layer_norm:
+        attention_overrides["pre_attention_layer_norm"] = True
+    if attention_batch_diagnostics:
+        attention_overrides.update(
+            {
+                "record_batch_diagnostics": True,
+                "diagnostic_loss_threshold": float(diagnostic_loss_threshold),
+                "diagnostic_z_threshold": float(diagnostic_z_threshold),
+                "diagnostic_grad_norm_threshold": float(
+                    diagnostic_grad_norm_threshold
+                ),
+            }
+        )
+    if attention_overrides:
+        log(f"[startup] Attention experiment overrides: {attention_overrides}")
     if model_prefix_filter is not None:
         log(f"[startup] Filtering model names by prefix: {model_prefix_filter}")
 
@@ -626,6 +699,7 @@ def main(
                 split_variant_filter=split_variant_filter,
                 embedding_mode_filters=embedding_mode_filters,
                 overwrite_results=overwrite_results,
+                random_seed=random_seed,
             )
 
     if attention_embeddings_json is not None:
@@ -657,6 +731,8 @@ def main(
                     split_variant_filter=split_variant_filter,
                     embedding_mode_filters=embedding_mode_filters,
                     overwrite_results=overwrite_results,
+                    random_seed=random_seed,
+                    attention_overrides=attention_overrides,
                     training_route_override=ATTENTION_ROUTE,
                     model_map_fn=_select_attention_model_map,
                 )
@@ -734,6 +810,52 @@ if __name__ == "__main__":
         default=None,
         help="Path to a per-residue embeddings JSON. When provided, also trains attention models.",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=_DEFAULT_RANDOM_SEED,
+        help=f"Training seed used for every model run (default: {_DEFAULT_RANDOM_SEED}).",
+    )
+    parser.add_argument(
+        "--attention_lr",
+        type=float,
+        default=None,
+        help="Optional learning-rate override for attention models only.",
+    )
+    parser.add_argument(
+        "--attention_gradient_clip_norm",
+        type=float,
+        default=None,
+        help="Optional max gradient norm for attention models only.",
+    )
+    parser.add_argument(
+        "--attention_pre_layer_norm",
+        action="store_true",
+        help="Enable the experimental LayerNorm immediately before pooled attention.",
+    )
+    parser.add_argument(
+        "--attention_batch_diagnostics",
+        action="store_true",
+        help="Stream per-batch attention diagnostics into each run directory.",
+    )
+    parser.add_argument(
+        "--diagnostic_loss_threshold",
+        type=float,
+        default=100.0,
+        help="Batch loss threshold used to identify the first problematic batch.",
+    )
+    parser.add_argument(
+        "--diagnostic_z_threshold",
+        type=float,
+        default=20.0,
+        help="Normalized input magnitude threshold for a problematic batch.",
+    )
+    parser.add_argument(
+        "--diagnostic_grad_norm_threshold",
+        type=float,
+        default=1000.0,
+        help="Gradient norm threshold for a problematic batch.",
+    )
     args = parser.parse_args()
     main(
         args.embeddings_json,
@@ -749,4 +871,12 @@ if __name__ == "__main__":
         embedding_mode_filters=set(args.embedding_mode),
         overwrite_results=args.overwrite_results,
         attention_embeddings_json=args.attention_embeddings_json,
+        random_seed=args.seed,
+        attention_lr=args.attention_lr,
+        attention_gradient_clip_norm=args.attention_gradient_clip_norm,
+        attention_pre_layer_norm=args.attention_pre_layer_norm,
+        attention_batch_diagnostics=args.attention_batch_diagnostics,
+        diagnostic_loss_threshold=args.diagnostic_loss_threshold,
+        diagnostic_z_threshold=args.diagnostic_z_threshold,
+        diagnostic_grad_norm_threshold=args.diagnostic_grad_norm_threshold,
     )

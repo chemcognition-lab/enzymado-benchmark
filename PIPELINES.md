@@ -34,14 +34,14 @@ For each property in `benchmark_card.json`, training follows this order:
 
 ## CLI Filters For SLURM
 
-`models/train.py` accepts three positional arguments followed by filters:
+`scripts/run_benchmark.py` accepts an embeddings manifest followed by filters:
 
 ```bash
-python models/train.py benchmark_card.json embeddings_models_output.json results/predictions \
-  --results_card results/results_card.json \
+python scripts/run_benchmark.py embeddings_models_output.json \
+  --output_dir results/predictions \
   --emb_name ankh_base \
   --model_prefix mlp_ \
-  --task_name phopt \
+  --task_name ph_opt \
   --split_variant random
 ```
 
@@ -125,9 +125,9 @@ Almost.
 
 ## Post-training evaluation
 
-Primary metrics are recomputed from prediction artifacts and do not depend on
-`results_card.json`. The benchmark card supplies the task type when a run no
-longer contains `hparams.json`:
+Primary metrics are recomputed directly from the prediction artifacts; no
+separate results manifest is required. The benchmark card supplies the task
+type when a run no longer contains `hparams.json`:
 
 ```bash
 python scripts/results/compute_metrics.py --filter-task ec_number

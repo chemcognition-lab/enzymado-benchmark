@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import math
+import random
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,19 @@ import torch.nn as nn
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def seed_random_generators(seed: int) -> None:
+    """Seed the RNGs used by benchmark model initialization and training."""
+    seed = int(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
 
 
 def masked_mean_pool(out: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
@@ -213,6 +227,27 @@ def run_training_with_early_stopping(
     best_val_loss = float(initial_best_val_loss) if initial_best_val_loss is not None else float("inf")
     epochs_without_improvement = 0
 
+    # Make the untrained (or currently resumed) model a real early-stopping
+    # candidate. Without this baseline, one catastrophic optimizer step could
+    # become the best checkpoint simply because every later step was worse.
+    if initial_best_val_loss is None:
+        baseline_epoch = int(start_epoch)
+        best_val_loss = float(val_loss_fn())
+        if not math.isfinite(best_val_loss):
+            raise RuntimeError(
+                f"Training produced a non-finite validation loss at epoch "
+                f"{baseline_epoch}: {best_val_loss}."
+            )
+        best_epoch = baseline_epoch
+        best_state = copy.deepcopy(model.state_dict())
+        print(
+            f"        epoch {baseline_epoch}/{epochs}  "
+            f"val_loss={best_val_loss:.4f}  (baseline)",
+            flush=True,
+        )
+        if epoch_callback is not None:
+            epoch_callback(baseline_epoch, best_epoch, best_val_loss, best_state)
+
     for epoch in range(start_epoch, epochs):
         t0 = _time.time()
         train_epoch_fn()
@@ -287,5 +322,4 @@ def compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
     if not loss_terms:
         return None
     return torch.stack(loss_terms).mean()
-
 

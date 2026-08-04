@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import json
 import lzma
+from pathlib import Path
 import tempfile
 import types
 import unittest
-from pathlib import Path
 
 import numpy as np
 
 from evaluation.artifacts import (
     evaluate_predictions,
-    make_result_entry,
     make_safetensors_predictions_file,
     save_raw_predictions,
     write_hparams_file,
@@ -47,7 +46,7 @@ class TrainOutputTests(unittest.TestCase):
         self.assertEqual(metrics["n"], 3)
         self.assertAlmostEqual(metrics["accuracy"], 2.0 / 3.0)
 
-    def test_experiment_artifact_helpers_are_linked_from_result_entry(self) -> None:
+    def test_experiment_artifact_helpers_write_self_contained_metadata(self) -> None:
         class FakeWrapper:
             pass
 
@@ -75,44 +74,22 @@ class TrainOutputTests(unittest.TestCase):
                 sample_identity_manifest={
                     "test": {"count": 2, "ordered_sha256": "a" * 64}
                 },
+                random_seed=42,
             )
             metrics_file = write_metrics_file(run_dir, {"val": {"mae": 0.1}})
             training_log_file = write_training_log_file(FakeTrained(), run_dir)
 
-            entry = make_result_entry(
-                "ankh_base",
-                "mlp_regressor",
-                model_info,
-                run_dir,
-                run_dir / "model.pt",
-                task_name="phopt",
-                split_variant="random",
-                train_pred_safetensors_file=run_dir / "train_predictions.safetensors.xz",
-                test_pred_safetensors_file=run_dir / "test_predictions.safetensors.xz",
-                model_safetensors_file=run_dir / "model.safetensors",
-                metrics={"val": {"mae": 0.1}},
-                metrics_file=metrics_file,
-                hparams_file=hparams_file,
-                training_log_file=training_log_file,
-            )
-
-            self.assertEqual(entry["metrics"]["val"]["mae"], 0.1)
-            self.assertEqual(entry["hparams_file"], str(hparams_file))
-            self.assertEqual(entry["metrics_file"], str(metrics_file))
-            self.assertEqual(entry["training_log_file"], str(training_log_file))
-            self.assertEqual(
-                entry["train_pred_safetensors_file"],
-                str(run_dir / "train_predictions.safetensors.xz"),
-            )
-            self.assertEqual(
-                entry["train_pred_file"],
-                str(run_dir / "train_predictions.safetensors.xz"),
-            )
-            self.assertEqual(entry["model_safetensors_file"], str(run_dir / "model.safetensors"))
+            self.assertEqual(metrics_file, run_dir / "metrics.json")
+            self.assertEqual(training_log_file, run_dir / "training_log.csv")
+            self.assertEqual(json.loads(metrics_file.read_text())["val"]["mae"], 0.1)
+            self.assertIn("epoch", training_log_file.read_text())
             hparams = json.loads(hparams_file.read_text())
             self.assertEqual(hparams["params"]["epochs"], 3)
-            self.assertEqual(hparams["task_config"]["target_column"], "phopt_median_standardized")
+            self.assertEqual(
+                hparams["task_config"]["target_column"], "phopt_median_standardized"
+            )
             self.assertEqual(hparams["sample_identity"]["test"]["count"], 2)
+            self.assertEqual(hparams["random_seed"], 42)
             self.assertFalse((run_dir / "target_audit_invalid.json").exists())
 
     def test_safetensors_prediction_file_is_compressed(self) -> None:

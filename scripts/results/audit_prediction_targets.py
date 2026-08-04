@@ -7,8 +7,8 @@ import argparse
 import csv
 import json
 import lzma
-import sys
 from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
@@ -19,8 +19,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from data_loading import TASK_REGISTRY  # noqa: E402
-from evaluation.results_layout import INVALIDATION_MARKER  # noqa: E402
-
+from evaluation.discover import discover_experiments  # noqa: E402
+from evaluation.results_layout import (  # noqa: E402
+    INVALIDATION_MARKER,
+    find_prediction_artifact,
+)
 
 SPLIT_TO_DATASET_VARIANT = {
     "random": "random",
@@ -41,26 +44,9 @@ def _json_ready(value: Any) -> Any:
     return value
 
 
-def _iter_result_entries(card: dict[str, Any]):
-    predictions = card.get("predictions", {})
-    for mode, mode_bucket in predictions.items():
-        if not isinstance(mode_bucket, dict):
-            continue
-        for split_family, split_bucket in mode_bucket.items():
-            if not isinstance(split_bucket, dict):
-                continue
-            for model_family, model_bucket in split_bucket.items():
-                if not isinstance(model_bucket, dict):
-                    continue
-                for task_name, task_bucket in model_bucket.items():
-                    if not isinstance(task_bucket, dict):
-                        continue
-                    for emb_name, entry in task_bucket.items():
-                        if isinstance(entry, dict):
-                            yield (mode, split_family, model_family, task_name, emb_name), entry
-
-
-def _load_split_targets(config, dataset_variant: str, split_name: str) -> np.ndarray | None:
+def _load_split_targets(
+    config, dataset_variant: str, split_name: str
+) -> np.ndarray | None:
     dataset_path = config.dataset_paths.get(dataset_variant)
     if dataset_path is None or config.target_column is None:
         return None
@@ -75,12 +61,8 @@ def _load_split_targets(config, dataset_variant: str, split_name: str) -> np.nda
     return np.asarray(values, dtype=np.float64)
 
 
-def _prediction_path(entry: dict[str, Any], split_name: str) -> Path | None:
-    for key in (f"{split_name}_pred_safetensors_file", f"{split_name}_pred_file"):
-        value = entry.get(key)
-        if value and str(value).endswith(".safetensors.xz"):
-            return Path(value)
-    return None
+def _prediction_path(run_dir: Path, split_name: str) -> Path | None:
+    return find_prediction_artifact(run_dir, split_name)
 
 
 def _load_y_true(prediction_path: Path) -> np.ndarray:
@@ -135,40 +117,58 @@ def _target_mismatch(
     expected_std = max(float(expected_summary["std"]), 1e-6)
     observed_max_abs = float(observed_summary["max_abs"])
     expected_max_abs = max(float(expected_summary["max_abs"]), 1e-6)
-    severe_mean_shift = abs(observed_mean - expected_mean) > max(5.0, 5.0 * expected_std)
+    severe_mean_shift = abs(observed_mean - expected_mean) > max(
+        5.0, 5.0 * expected_std
+    )
     severe_scale_shift = observed_max_abs > max(50.0, 10.0 * expected_max_abs)
     if severe_mean_shift or severe_scale_shift:
         return True, "count_and_scale_mismatch"
     return False, "count_mismatch_warning"
 
 
-def audit_results_card(card: dict[str, Any]) -> list[dict[str, Any]]:
+def audit_prediction_targets(predictions_root: Path) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     expected_cache: dict[tuple[str, str, str], np.ndarray | None] = {}
 
-    for path_tokens, entry in _iter_result_entries(card):
-        mode, split_family, model_family, task_name, emb_name = path_tokens
-        registry_name = "ph_opt" if task_name == "phopt" else task_name
+    for experiment in discover_experiments(predictions_root):
+        task_name = experiment.task
+        registry_name = {"phopt": "ph_opt", "binding_site": "binding_sites"}.get(
+            task_name, task_name
+        )
         config = TASK_REGISTRY.get(registry_name)
         if config is None or config.label_kind != "scalar_regression":
             continue
 
+        split_family = experiment.split
         dataset_variant = SPLIT_TO_DATASET_VARIANT.get(split_family, split_family)
         if dataset_variant not in config.dataset_paths:
             continue
 
         split_findings = []
         for split_name in ("train", "val", "test"):
-            prediction_path = _prediction_path(entry, split_name)
-            if prediction_path is None or not prediction_path.exists():
+            prediction_path = _prediction_path(experiment.run_dir, split_name)
+            if prediction_path is None:
                 continue
             cache_key = (registry_name, dataset_variant, split_name)
             if cache_key not in expected_cache:
-                expected_cache[cache_key] = _load_split_targets(config, dataset_variant, split_name)
+                expected_cache[cache_key] = _load_split_targets(
+                    config, dataset_variant, split_name
+                )
             expected = expected_cache[cache_key]
             if expected is None:
                 continue
-            observed = _load_y_true(prediction_path)
+            try:
+                observed = _load_y_true(prediction_path)
+            except Exception as exc:  # noqa: BLE001 - corrupt artifacts are audit findings.
+                split_findings.append(
+                    {
+                        "split": split_name,
+                        "status": "invalid",
+                        "reason": f"prediction_load_error: {exc}",
+                        "prediction_file": prediction_path,
+                    }
+                )
+                continue
             is_bad, reason = _target_mismatch(observed, expected)
             if is_bad or reason:
                 split_findings.append(
@@ -187,13 +187,14 @@ def audit_results_card(card: dict[str, Any]) -> list[dict[str, Any]]:
                 {
                     "status": "invalid",
                     "path": {
-                        "mode": mode,
+                        "task_scope": experiment.task_scope,
+                        "mode": experiment.pool_type,
                         "split_family": split_family,
-                        "model_family": model_family,
+                        "model_family": experiment.model_family,
                         "task_name": task_name,
-                        "embedding_model": emb_name,
+                        "embedding_model": experiment.embedding_model,
                     },
-                    "run_dir": entry.get("run_dir"),
+                    "run_dir": experiment.run_dir,
                     "splits": split_findings,
                 }
             )
@@ -201,48 +202,34 @@ def audit_results_card(card: dict[str, Any]) -> list[dict[str, Any]]:
     return findings
 
 
-def invalidate_findings(card: dict[str, Any], findings: list[dict[str, Any]]) -> None:
-    by_key = {
-        (
-            finding["path"]["mode"],
-            finding["path"]["split_family"],
-            finding["path"]["model_family"],
-            finding["path"]["task_name"],
-            finding["path"]["embedding_model"],
-        ): finding
-        for finding in findings
-    }
-    for path_tokens, entry in _iter_result_entries(card):
-        finding = by_key.get(path_tokens)
-        if finding is None:
-            continue
+def invalidate_findings(findings: list[dict[str, Any]]) -> None:
+    for finding in findings:
         invalidation = {
             "reason": "target_payload_mismatch_current_dataset",
             "audit": finding,
         }
-        entry["invalidated"] = invalidation
-        run_dir = entry.get("run_dir")
-        if run_dir:
-            marker_path = Path(run_dir) / INVALIDATION_MARKER
-            marker_path.parent.mkdir(parents=True, exist_ok=True)
-            marker_path.write_text(
-                json.dumps(_json_ready(invalidation), indent=4) + "\n",
-                encoding="utf-8",
-            )
+        marker_path = Path(finding["run_dir"]) / INVALIDATION_MARKER
+        marker_path.write_text(
+            json.dumps(_json_ready(invalidation), indent=4) + "\n",
+            encoding="utf-8",
+        )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--results-card", default=PROJECT_ROOT / "results_card.json", type=Path)
-    parser.add_argument("--report", default=PROJECT_ROOT / "results/target_audit_report.json", type=Path)
+    parser.add_argument(
+        "--predictions-root", default=PROJECT_ROOT / "results/predictions", type=Path
+    )
+    parser.add_argument(
+        "--report", default=PROJECT_ROOT / "results/target_audit_report.json", type=Path
+    )
     parser.add_argument("--invalidate", action="store_true")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    card = json.loads(args.results_card.read_text(encoding="utf-8"))
-    findings = audit_results_card(card)
+    findings = audit_prediction_targets(args.predictions_root)
     report_payload = {
         "n_invalid_entries": len(findings),
         "invalid_entries": findings,
@@ -253,14 +240,10 @@ def main() -> int:
         encoding="utf-8",
     )
     if args.invalidate and findings:
-        invalidate_findings(card, findings)
-        args.results_card.write_text(
-            json.dumps(_json_ready(card), indent=4) + "\n",
-            encoding="utf-8",
-        )
+        invalidate_findings(findings)
     print(f"invalid_entries={len(findings)} report={args.report}")
     if args.invalidate:
-        print(f"invalidated={len(findings)} results_card={args.results_card}")
+        print(f"invalidated={len(findings)} predictions_root={args.predictions_root}")
     return 1 if findings and not args.invalidate else 0
 
 

@@ -59,11 +59,16 @@ class AttentionAggregation(nn.Module):
         embed_dim: int,
         num_heads: int = 1,
         dropout_rate: float = 0.0,
+        pre_layer_norm: bool = False,
     ):
         super().__init__()
         self.input_dim = embed_dim
         self.num_heads = num_heads
         self.dropout_rate = dropout_rate
+        self.pre_layer_norm = bool(pre_layer_norm)
+        self.input_layer_norm = (
+            nn.LayerNorm(embed_dim) if self.pre_layer_norm else nn.Identity()
+        )
         self.cross_attn_layer = nn.MultiheadAttention(
             embed_dim=embed_dim,
             num_heads=num_heads,
@@ -77,11 +82,12 @@ class AttentionAggregation(nn.Module):
         x: torch.Tensor,
         key_padding_mask: torch.Tensor | None = None,
     ):
-        avg_emb = self.mean_agg(x, key_padding_mask).unsqueeze(1)
+        attn_input = self.input_layer_norm(x)
+        avg_emb = self.mean_agg(attn_input, key_padding_mask).unsqueeze(1)
         global_emb, _ = self.cross_attn_layer(
             query=avg_emb,
-            key=x,
-            value=x,
+            key=attn_input,
+            value=attn_input,
             key_padding_mask=key_padding_mask,
             need_weights=False,
         )
@@ -119,12 +125,14 @@ class AttentionPredictor(nn.Module):
         num_attention_heads: int = 1,
         attention_dropout_rate: float = 0.0,
         dropout: float = 0.0,
+        pre_attention_layer_norm: bool = False,
     ):
         super().__init__()
         self.pooler = AttentionAggregation(
             input_dim,
             num_heads=num_attention_heads,
             dropout_rate=attention_dropout_rate,
+            pre_layer_norm=pre_attention_layer_norm,
         )
         self.extra_dim = extra_dim
         self.head = MLPModel(input_dim + extra_dim, hidden_dims, output_dim, dropout=dropout)
@@ -163,12 +171,14 @@ class AttentionMultiHeadPredictor(nn.Module):
         num_attention_heads: int = 1,
         attention_dropout_rate: float = 0.0,
         dropout: float = 0.0,
+        pre_attention_layer_norm: bool = False,
     ):
         super().__init__()
         self.pooler = AttentionAggregation(
             input_dim,
             num_heads=num_attention_heads,
             dropout_rate=attention_dropout_rate,
+            pre_layer_norm=pre_attention_layer_norm,
         )
         self.extra_dim = extra_dim
         self.backbone = SharedMLPBackbone(input_dim + extra_dim, hidden_dims, dropout=dropout)

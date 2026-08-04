@@ -44,6 +44,7 @@ fi
 : "${RESIDUE_STORE_MODE:=auto}"
 : "${EMBEDDING_MODES:=}"
 : "${OVERWRITE_RESULTS:=0}"
+: "${SEED:=42}"
 
 if [[ -z "${UV_CACHE_DIR:-}" || "${UV_CACHE_DIR}" == /scratch/* ]]; then
     UV_CACHE_DIR="${CLUSTER_RUNTIME_ROOT}/uv-cache"
@@ -168,11 +169,13 @@ if [[ -n "${EMBEDDING_MODES}" ]]; then
     echo "Embedding modes: ${EMBEDDING_MODES}"
 fi
 echo "Overwrite results: ${OVERWRITE_RESULTS}"
+echo "Training seed: ${SEED}"
 
 TRAIN_ARGS=(
     "${EMBEDDINGS_JSON}"
     --output_dir "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
+    --seed "${SEED}"
 )
 
 if [[ -n "${MODEL_PREFIX}" ]]; then

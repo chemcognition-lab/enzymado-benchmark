@@ -45,6 +45,15 @@ mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${T
 : "${EMBEDDINGS_JSON:=${REPO}/embeddings_models_output.json}"
 : "${ATTENTION_EMBEDDINGS_JSON:=${EMBEDDINGS_JSON}}"
 : "${OUTPUT_DIR:=${REPO}/results/predictions}"
+: "${SEED:=42}"
+: "${EXPERIMENT_NAME:=}"
+: "${ATTENTION_LR:=}"
+: "${ATTENTION_GRADIENT_CLIP_NORM:=}"
+: "${ATTENTION_PRE_LAYER_NORM:=0}"
+: "${ATTENTION_BATCH_DIAGNOSTICS:=0}"
+: "${DIAGNOSTIC_LOSS_THRESHOLD:=100}"
+: "${DIAGNOSTIC_Z_THRESHOLD:=20}"
+: "${DIAGNOSTIC_GRAD_NORM_THRESHOLD:=1000}"
 : "${MODEL_PREFIX:=}"
 : "${TASK_NAMES:=}"
 : "${TASK_SCOPES:=}"
@@ -59,6 +68,14 @@ mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${T
 # embeddings_json.
 : "${EMBEDDING_MODES:=attention}"
 : "${OVERWRITE_RESULTS:=0}"
+
+if [[ -n "${EXPERIMENT_NAME}" ]]; then
+    if [[ ! "${EXPERIMENT_NAME}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        echo "ERROR: EXPERIMENT_NAME may contain only letters, numbers, dot, underscore, and dash." >&2
+        exit 1
+    fi
+    OUTPUT_DIR="${OUTPUT_DIR%/}/experiments/${EXPERIMENT_NAME}/seed_${SEED}"
+fi
 
 for _write_path in "${OUTPUT_DIR}" "${CLUSTER_RUNTIME_ROOT}" "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${TMPDIR}"; do
     if [[ "${_write_path}" == /scratch/* ]]; then
@@ -135,6 +152,18 @@ echo "Embedding model: ${EMBEDDING_NAME}"
 echo "Embeddings json: ${EMBEDDINGS_JSON}"
 echo "Attention embeddings json: ${ATTENTION_EMBEDDINGS_JSON}"
 echo "Output dir: ${OUTPUT_DIR}"
+echo "Training seed: ${SEED}"
+if [[ -n "${EXPERIMENT_NAME}" ]]; then
+    echo "Experiment name: ${EXPERIMENT_NAME}"
+fi
+if [[ -n "${ATTENTION_LR}" ]]; then
+    echo "Attention LR override: ${ATTENTION_LR}"
+fi
+if [[ -n "${ATTENTION_GRADIENT_CLIP_NORM}" ]]; then
+    echo "Attention gradient clip norm: ${ATTENTION_GRADIENT_CLIP_NORM}"
+fi
+echo "Attention pre-LayerNorm: ${ATTENTION_PRE_LAYER_NORM}"
+echo "Attention batch diagnostics: ${ATTENTION_BATCH_DIAGNOSTICS}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
     echo "Model prefix: ${MODEL_PREFIX}"
 fi
@@ -163,7 +192,29 @@ TRAIN_ARGS=(
     --output_dir "${OUTPUT_DIR}"
     --emb_name "${EMBEDDING_NAME}"
     --attention_embeddings_json "${ATTENTION_EMBEDDINGS_JSON}"
+    --seed "${SEED}"
 )
+
+if [[ -n "${ATTENTION_LR}" ]]; then
+    TRAIN_ARGS+=(--attention_lr "${ATTENTION_LR}")
+fi
+
+if [[ -n "${ATTENTION_GRADIENT_CLIP_NORM}" ]]; then
+    TRAIN_ARGS+=(--attention_gradient_clip_norm "${ATTENTION_GRADIENT_CLIP_NORM}")
+fi
+
+if [[ "${ATTENTION_PRE_LAYER_NORM}" == "1" || "${ATTENTION_PRE_LAYER_NORM}" == "true" || "${ATTENTION_PRE_LAYER_NORM}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(--attention_pre_layer_norm)
+fi
+
+if [[ "${ATTENTION_BATCH_DIAGNOSTICS}" == "1" || "${ATTENTION_BATCH_DIAGNOSTICS}" == "true" || "${ATTENTION_BATCH_DIAGNOSTICS}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(
+        --attention_batch_diagnostics
+        --diagnostic_loss_threshold "${DIAGNOSTIC_LOSS_THRESHOLD}"
+        --diagnostic_z_threshold "${DIAGNOSTIC_Z_THRESHOLD}"
+        --diagnostic_grad_norm_threshold "${DIAGNOSTIC_GRAD_NORM_THRESHOLD}"
+    )
+fi
 
 if [[ -n "${MODEL_PREFIX}" ]]; then
     TRAIN_ARGS+=(--model_prefix "${MODEL_PREFIX}")
