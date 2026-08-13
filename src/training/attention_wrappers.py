@@ -25,9 +25,9 @@ from models.common import (
     make_optimizer,
     make_torch_checkpoint_callback,
     maybe_resume_torch_wrapper,
-    mean_losses,
     pad_1d_array_list,
     run_training_with_early_stopping,
+    validation_score,
 )
 
 
@@ -50,6 +50,8 @@ _BATCH_DIAGNOSTIC_FIELDS = (
 class _BaseAttentionWrapper:
     """Shared training boilerplate for attention-based wrappers."""
 
+    validation_metric: str
+
     def __init__(
         self,
         hidden_dims: tuple[int, ...],
@@ -62,6 +64,7 @@ class _BaseAttentionWrapper:
         dropout: float = 0.0,
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
+        validation_interval: int = 1,
         gradient_clip_norm: float | None = None,
         pre_attention_layer_norm: bool = False,
         record_batch_diagnostics: bool = False,
@@ -80,6 +83,7 @@ class _BaseAttentionWrapper:
         self.dropout = dropout
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
+        self.validation_interval = validation_interval
         if gradient_clip_norm is not None and gradient_clip_norm <= 0:
             raise ValueError("gradient_clip_norm must be positive when provided.")
         self.gradient_clip_norm = gradient_clip_norm
@@ -91,7 +95,8 @@ class _BaseAttentionWrapper:
         self.device = torch.device(device) if device else DEVICE
         self.model = None
         self.best_epoch_ = None
-        self.best_val_loss_ = None
+        self.best_val_score_ = None
+        self.validation_metric_ = self.validation_metric
         self.input_dim_ = None
         self.extra_dim_ = 0
         self.batch_kind_ = None
@@ -349,20 +354,29 @@ class _BaseAttentionWrapper:
         if self.extra_dim_ > 0:
             self._fit_extra_scaler(dataloader, batch_kind)
 
-    def _run_early_stopping(self, train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path):
+    def _run_early_stopping(
+        self,
+        train_epoch,
+        val_score,
+        val_dataloader,
+        start_epoch,
+        checkpoint_path,
+    ):
         """Shared early-stopping loop plumbing used by every attention wrapper."""
         try:
-            self.best_epoch_, self.best_val_loss_ = run_training_with_early_stopping(
+            self.best_epoch_, self.best_val_score_ = run_training_with_early_stopping(
                 self.model,
                 self.epochs,
                 train_epoch,
-                val_loss_fn=val_loss if val_dataloader is not None else None,
+                val_score_fn=val_score if val_dataloader is not None else None,
+                metric_name=self.validation_metric_,
                 patience=self.early_stopping_patience,
                 min_delta=self.early_stopping_min_delta,
+                validation_interval=self.validation_interval,
                 start_epoch=start_epoch,
                 initial_best_state=self.best_model_state_,
                 initial_best_epoch=self.best_epoch_,
-                initial_best_val_loss=self.best_val_loss_,
+                initial_best_val_score=self.best_val_score_,
                 epoch_callback=make_torch_checkpoint_callback(self, checkpoint_path),
             )
         finally:
@@ -385,6 +399,7 @@ class _BaseAttentionWrapper:
             "dropout": self.dropout,
             "early_stopping_patience": self.early_stopping_patience,
             "early_stopping_min_delta": self.early_stopping_min_delta,
+            "validation_interval": self.validation_interval,
             "gradient_clip_norm": self.gradient_clip_norm,
             "pre_attention_layer_norm": self.pre_attention_layer_norm,
             "record_batch_diagnostics": self.record_batch_diagnostics,
@@ -396,7 +411,8 @@ class _BaseAttentionWrapper:
             "extra_dim": self.extra_dim_,
             "batch_kind": self.batch_kind_,
             "best_epoch": self.best_epoch_,
-            "best_val_loss": self.best_val_loss_,
+            "validation_metric": self.validation_metric_,
+            "best_val_score": self.best_val_score_,
             "seq_mean": self.seq_mean_.detach().cpu() if self.seq_mean_ is not None else None,
             "seq_scale": self.seq_scale_.detach().cpu() if self.seq_scale_ is not None else None,
             "extra_mean": self.extra_mean_.detach().cpu() if self.extra_mean_ is not None else None,
@@ -418,6 +434,9 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
         raise NotImplementedError
 
     def _activate_predictions(self, logits: torch.Tensor) -> np.ndarray:
+        raise NotImplementedError
+
+    def _validation_predictions(self, logits: torch.Tensor) -> np.ndarray:
         raise NotImplementedError
 
     def fit_loader(self, dataloader, batch_kind: str, val_dataloader=None, checkpoint_path=None):
@@ -474,19 +493,27 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
                 )
                 optimizer.step()
 
-        def val_loss():
+        def val_score():
             self.model.eval()
-            losses = []
+            targets = []
+            predictions = []
             with torch.no_grad():
                 for batch in val_dataloader:
                     seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
-                    y_t = torch.from_numpy(np.asarray(batch.target, dtype=np.float32)).unsqueeze(1).to(self.device)
                     seq_t = self._normalize_sequence(seq_t)
                     extra_t = self._normalize_extra(extra_t)
-                    losses.append(float(criterion(forward_logits(seq_t, mask_t, extra_t), y_t).item()))
-            return mean_losses(losses)
+                    logits = forward_logits(seq_t, mask_t, extra_t)
+                    targets.append(np.asarray(batch.target, dtype=np.float32))
+                    predictions.append(self._validation_predictions(logits))
+            return validation_score(
+                np.concatenate(targets),
+                np.concatenate(predictions),
+                self.validation_metric_,
+            )
 
-        return self._run_early_stopping(train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path)
+        return self._run_early_stopping(
+            train_epoch, val_score, val_dataloader, start_epoch, checkpoint_path
+        )
 
     def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
         if self.model is None:
@@ -507,15 +534,22 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
 class AttentionRegressorTorch(_PooledAttentionWrapper):
     """Attention-pooled regressor for global tasks."""
 
+    validation_metric = "kendall_tau"
+
     def _make_criterion(self):
         return nn.MSELoss()
 
     def _activate_predictions(self, logits: torch.Tensor) -> np.ndarray:
-        return logits.squeeze(1).cpu().numpy()
+        return logits.float().squeeze(1).cpu().numpy()
+
+    def _validation_predictions(self, logits: torch.Tensor) -> np.ndarray:
+        return logits.float().squeeze(1).cpu().numpy()
 
 
 class AttentionBinaryClassifierTorch(_PooledAttentionWrapper):
     """Attention-pooled binary classifier for global tasks."""
+
+    validation_metric = "auprc"
 
     def _make_criterion(self):
         return nn.BCEWithLogitsLoss()
@@ -523,9 +557,32 @@ class AttentionBinaryClassifierTorch(_PooledAttentionWrapper):
     def _activate_predictions(self, logits: torch.Tensor) -> np.ndarray:
         return (torch.sigmoid(logits).squeeze(1) >= 0.5).cpu().numpy().astype(np.float32)
 
+    def _validation_predictions(self, logits: torch.Tensor) -> np.ndarray:
+        return torch.sigmoid(logits.float()).squeeze(1).cpu().numpy()
+
+    def predict_scores_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+        """Return positive-class probabilities for loader-based inference."""
+        if self.model is None:
+            raise ValueError("Model must be fit before prediction.")
+        self.model.eval()
+        scores = []
+        with torch.no_grad():
+            for batch in dataloader:
+                seq_t, mask_t, extra_t = batch_to_attention_tensors(
+                    batch, batch_kind, self.device
+                )
+                seq_t = self._normalize_sequence(seq_t)
+                extra_t = self._normalize_extra(extra_t)
+                with attention_autocast(self.device):
+                    logits = self.model(seq_t, mask_t, extra_t).float()
+                scores.append(torch.sigmoid(logits).squeeze(1).cpu().numpy())
+        return np.concatenate(scores).astype(np.float32, copy=False)
+
 
 class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
     """Attention-pooled multi-head classifier for EC prediction."""
+
+    validation_metric = "auprc"
 
     def __init__(
         self,
@@ -540,6 +597,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
         dropout: float = 0.0,
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
+        validation_interval: int = 1,
         gradient_clip_norm: float | None = None,
         pre_attention_layer_norm: bool = False,
         record_batch_diagnostics: bool = False,
@@ -559,6 +617,7 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
             dropout=dropout,
             early_stopping_patience=early_stopping_patience,
             early_stopping_min_delta=early_stopping_min_delta,
+            validation_interval=validation_interval,
             gradient_clip_norm=gradient_clip_norm,
             pre_attention_layer_norm=pre_attention_layer_norm,
             record_batch_diagnostics=record_batch_diagnostics,
@@ -638,33 +697,55 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
                 )
                 optimizer.step()
 
-        def val_loss():
+        def val_score():
             self.model.eval()
-            losses = []
+            targets = {level_name: [] for level_name in self.output_dims_}
+            target_masks = {level_name: [] for level_name in self.output_dims_}
+            predictions = {level_name: [] for level_name in self.output_dims_}
             with torch.no_grad():
                 for batch in val_dataloader:
-                    seq_t, mask_t, extra_t = batch_to_attention_tensors(batch, batch_kind, self.device)
-                    y_t = {
-                        level_name: torch.from_numpy(np.asarray(target, dtype=np.float32)).to(self.device)
-                        for level_name, target in batch.target.items()
-                    }
-                    target_mask_t = {
-                        level_name: torch.from_numpy(np.asarray(mask_arr, dtype=bool)).to(self.device)
-                        for level_name, mask_arr in batch.target_mask.items()
-                    }
+                    seq_t, mask_t, extra_t = batch_to_attention_tensors(
+                        batch, batch_kind, self.device
+                    )
                     seq_t = self._normalize_sequence(seq_t)
                     extra_t = self._normalize_extra(extra_t)
                     logits_by_level = forward_logits(seq_t, mask_t, extra_t)
-                    loss = compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
-                    if loss is not None:
-                        losses.append(float(loss.item()))
-            return mean_losses(losses)
+                    for level_name, logits in logits_by_level.items():
+                        targets[level_name].append(
+                            np.asarray(batch.target[level_name], dtype=np.float32)
+                        )
+                        target_masks[level_name].append(
+                            np.asarray(batch.target_mask[level_name], dtype=bool)
+                        )
+                        predictions[level_name].append(
+                            torch.sigmoid(logits.float()).cpu().numpy()
+                        )
+            y_val = {
+                level_name: np.concatenate(chunks)
+                for level_name, chunks in targets.items()
+            }
+            pred_val = {
+                level_name: np.concatenate(chunks)
+                for level_name, chunks in predictions.items()
+            }
+            mask_val = {
+                level_name: np.concatenate(chunks)
+                for level_name, chunks in target_masks.items()
+            }
+            return validation_score(
+                y_val,
+                pred_val,
+                self.validation_metric_,
+                mask_val,
+            )
 
-        return self._run_early_stopping(train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path)
+        return self._run_early_stopping(
+            train_epoch, val_score, val_dataloader, start_epoch, checkpoint_path
+        )
 
-    def predict_loader(self, dataloader, batch_kind: str) -> dict[str, np.ndarray]:
+    def predict_scores_loader(self, dataloader, batch_kind: str) -> dict[str, np.ndarray]:
         if self.model is None or self.output_dims_ is None:
-            raise ValueError("Model must be fit before calling predict_loader().")
+            raise ValueError("Model must be fit before prediction.")
         preds_by_level = {level_name: [] for level_name in self.output_dims_}
         self.model.eval()
         with torch.no_grad():
@@ -676,12 +757,19 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
                     logits_by_level = self.model(seq_t, mask_t, extra_t)
                 for level_name, logits in logits_by_level.items():
                     preds_by_level[level_name].append(
-                        (torch.sigmoid(logits.float()) >= 0.5).cpu().numpy().astype(np.float32)
+                        torch.sigmoid(logits.float()).cpu().numpy().astype(np.float32)
                     )
         return {
             level_name: np.concatenate(chunks, axis=0)
             if chunks else np.zeros((0, self.output_dims_[level_name]), dtype=np.float32)
             for level_name, chunks in preds_by_level.items()
+        }
+
+    def predict_loader(self, dataloader, batch_kind: str) -> dict[str, np.ndarray]:
+        """Return thresholded labels while preserving the estimator API."""
+        return {
+            level_name: (scores >= 0.5).astype(np.float32)
+            for level_name, scores in self.predict_scores_loader(dataloader, batch_kind).items()
         }
 
     def build_checkpoint(self) -> dict[str, Any]:
@@ -693,6 +781,8 @@ class AttentionECMultiHeadClassifierTorch(_BaseAttentionWrapper):
 
 class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
     """Per-residue binary classifier with self-attention over residues (no pooling)."""
+
+    validation_metric = "auprc"
 
     @staticmethod
     def _batch_to_input(batch, device: torch.device):
@@ -772,20 +862,34 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
                 )
                 optimizer.step()
 
-        def val_loss():
+        def val_score():
             self.model.eval()
-            losses = []
+            targets = []
+            predictions = []
             with torch.no_grad():
                 for batch in val_dataloader:
-                    X_t, mask_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
+                    X_t, mask_t, y_t, target_mask_t = self._batch_to_input(
+                        batch, self.device
+                    )
                     X_t = self._normalize_sequence(X_t)
                     logits = forward_logits(X_t, mask_t)
-                    losses.append(float(compute_batch_loss(logits, y_t, target_mask_t).item()))
-            return mean_losses(losses)
+                    # forward_logits runs under BF16 autocast, and numpy has no
+                    # bfloat16 dtype, so cast before leaving torch.
+                    targets.append(y_t[target_mask_t].float().cpu().numpy())
+                    predictions.append(
+                        torch.sigmoid(logits[target_mask_t].float()).cpu().numpy()
+                    )
+            return validation_score(
+                np.concatenate(targets),
+                np.concatenate(predictions),
+                self.validation_metric_,
+            )
 
-        return self._run_early_stopping(train_epoch, val_loss, val_dataloader, start_epoch, checkpoint_path)
+        return self._run_early_stopping(
+            train_epoch, val_score, val_dataloader, start_epoch, checkpoint_path
+        )
 
-    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+    def predict_scores_loader(self, dataloader, batch_kind: str) -> np.ndarray:
         if batch_kind != "protein_residue":
             raise ValueError(
                 f"AttentionResidueBinaryClassifierTorch does not support batch_kind='{batch_kind}'"
@@ -800,11 +904,16 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
                 X_t = self._normalize_sequence(X_t)
                 with attention_autocast(self.device):
                     logits = self.model(X_t, mask_t).squeeze(-1).float()
-                batch_pred = (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
+                batch_pred = torch.sigmoid(logits).cpu().numpy().astype(np.float32)
                 batch_mask = target_mask_t.cpu().numpy().astype(bool)
                 for pred_row, mask_row in zip(batch_pred, batch_mask):
                     pred_rows.append(pred_row[mask_row])
         return pad_1d_array_list(pred_rows, dtype=np.float32)
+
+    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+        """Return thresholded labels while preserving the estimator API."""
+        scores = self.predict_scores_loader(dataloader, batch_kind)
+        return (scores >= 0.5).astype(np.float32)
 
     def build_checkpoint(self) -> dict[str, Any]:
         if self.model is None:
@@ -832,7 +941,8 @@ class AttentionResidueBinaryClassifierTorch(_BaseAttentionWrapper):
             "extra_dim": self.extra_dim_,
             "batch_kind": self.batch_kind_,
             "best_epoch": self.best_epoch_,
-            "best_val_loss": self.best_val_loss_,
+            "validation_metric": self.validation_metric_,
+            "best_val_score": self.best_val_score_,
             "seq_mean": self.seq_mean_.detach().cpu() if self.seq_mean_ is not None else None,
             "seq_scale": self.seq_scale_.detach().cpu() if self.seq_scale_ is not None else None,
             "model_state_dict": self.model.state_dict(),

@@ -1,3 +1,4 @@
+import ast
 import csv
 import json
 from pathlib import Path
@@ -6,7 +7,9 @@ from src.dataset_splitting import (
     build_metadata_path,
     build_mmseqs_cluster_command,
     build_output_csv_path,
+    build_random_split_specs,
     build_standardized_dataset_rows,
+    generate_point_stratified_split_rows,
     generate_random_split_rows,
     generate_similarity_split_from_clusters,
     resolve_standardization_columns,
@@ -88,6 +91,206 @@ def test_random_split_keeps_grouped_rows_together():
     assert split_by_protein["P1"] == split_rows[1]["split"]
     assert set(summary) == {"train", "val", "test"}
     assert sum(split["rows"] for split in summary.values()) == len(rows)
+
+
+def test_point_stratified_split_mixes_proteins_and_preserves_target_range():
+    fieldnames = ["dataset_id", "protein_sequence", "target"]
+    rows = [
+        {
+            "dataset_id": f"row_{index}",
+            "protein_sequence": "AAAA" if index < 50 else "CCCC",
+            "target": str(index),
+        }
+        for index in range(100)
+    ]
+
+    _, split_rows, summary = generate_point_stratified_split_rows(
+        rows,
+        fieldnames,
+        0.8,
+        0.1,
+        0.1,
+        sequence_col="protein_sequence",
+        stratify_col="target",
+        stratify_kind="regression",
+        n_bins=5,
+        seed=42,
+    )
+
+    assert {split["rows"] for split in summary.values()} == {10, 80}
+    for split_name in ("train", "val", "test"):
+        selected = [row for row in split_rows if row["split"] == split_name]
+        assert {row["protein_sequence"] for row in selected} == {"AAAA", "CCCC"}
+        targets = [float(row["target"]) for row in selected]
+        assert min(targets) < 20
+        assert max(targets) > 80
+
+
+def test_point_stratified_split_preserves_binary_class_counts():
+    fieldnames = ["dataset_id", "protein_sequence", "target"]
+    rows = [
+        {
+            "dataset_id": f"row_{index}",
+            "protein_sequence": f"SEQ{index}",
+            "target": "1" if index < 20 else "0",
+        }
+        for index in range(100)
+    ]
+
+    _, split_rows, summary = generate_point_stratified_split_rows(
+        rows,
+        fieldnames,
+        0.8,
+        0.1,
+        0.1,
+        sequence_col="protein_sequence",
+        stratify_col="target",
+        stratify_kind="binary",
+        seed=42,
+    )
+
+    assert {
+        split: values["rows"]
+        for split, values in summary.items()
+    } == {"train": 80, "val": 10, "test": 10}
+    positives = {
+        split: sum(
+            row["target"] == "1"
+            for row in split_rows
+            if row["split"] == split
+        )
+        for split in ("train", "val", "test")
+    }
+    assert positives == {"train": 16, "val": 2, "test": 2}
+
+
+def test_point_stratified_split_preserves_hierarchical_ec_marginals():
+    fieldnames = ["uniprot_id", "protein_sequence", "ec_number"]
+    rows = []
+    for index in range(100):
+        ec_number = "1.1.1.1" if index < 50 else "2.2.2.2"
+        if index % 10 == 0:
+            ec_number += "; 3.3.3.3"
+        rows.append(
+            {
+                "uniprot_id": f"P{index}",
+                "protein_sequence": f"SEQ{index}",
+                "ec_number": ec_number,
+            }
+        )
+
+    _, split_rows, summary = generate_point_stratified_split_rows(
+        rows,
+        fieldnames,
+        0.8,
+        0.1,
+        0.1,
+        sequence_col="protein_sequence",
+        stratify_col="ec_number",
+        stratify_kind="multilabel_ec",
+        seed=42,
+    )
+
+    assert {
+        split: values["rows"]
+        for split, values in summary.items()
+    } == {"train": 80, "val": 10, "test": 10}
+    rare_counts = {
+        split: sum(
+            "3.3.3.3" in row["ec_number"]
+            for row in split_rows
+            if row["split"] == split
+        )
+        for split in ("train", "val", "test")
+    }
+    assert rare_counts == {"train": 8, "val": 1, "test": 1}
+
+
+def test_point_stratified_split_preserves_residue_density_range():
+    fieldnames = ["uniprot_id", "protein_sequence", "active_site"]
+    rows = [
+        {
+            "uniprot_id": f"P{index}",
+            "protein_sequence": "A" * 100,
+            "active_site": str(list(range(1, index % 10 + 2))),
+        }
+        for index in range(100)
+    ]
+
+    _, split_rows, summary = generate_point_stratified_split_rows(
+        rows,
+        fieldnames,
+        0.8,
+        0.1,
+        0.1,
+        sequence_col="protein_sequence",
+        stratify_col="active_site",
+        stratify_kind="residue_density",
+        n_bins=5,
+        seed=42,
+    )
+
+    assert {
+        split: values["rows"]
+        for split, values in summary.items()
+    } == {"train": 80, "val": 10, "test": 10}
+    for split in ("train", "val", "test"):
+        counts = [
+            len(ast.literal_eval(row["active_site"]))
+            for row in split_rows
+            if row["split"] == split
+        ]
+        assert min(counts) <= 2
+        assert max(counts) >= 9
+
+
+def test_random_split_specs_cover_all_benchmark_tasks():
+    specs = build_random_split_specs()
+    tasks = {spec.task for spec in specs}
+
+    assert len(specs) == 18
+    assert tasks == {
+        "active_sites",
+        "align_amylase_activity",
+        "align_amylase_expression",
+        "align_amylase_stability",
+        "align_glucosidase_activity",
+        "align_glucosidase_expression",
+        "align_glucosidase_melting",
+        "binding",
+        "binding_site",
+        "cleeveland_galox",
+        "ddg",
+        "dtm",
+        "ec_number",
+        "erickson_petase",
+        "kcat",
+        "km",
+        "ph_opt",
+        "solubility",
+    }
+
+
+def test_random_split_specs_match_task_label_kinds():
+    specs = {spec.task: spec for spec in build_random_split_specs()}
+
+    assert specs["solubility"].stratify_kind == "binary"
+    assert specs["binding"].stratify_kind == "binary"
+    assert specs["ec_number"].stratify_kind == "multilabel_ec"
+    assert specs["active_sites"].stratify_kind == "residue_density"
+    assert specs["binding_site"].stratify_kind == "residue_density"
+
+    regression_tasks = set(specs) - {
+        "active_sites",
+        "binding",
+        "binding_site",
+        "ec_number",
+        "solubility",
+    }
+    assert all(
+        specs[task].stratify_kind == "regression"
+        for task in regression_tasks
+    )
 
 
 def test_similarity_split_assigns_whole_clusters_to_one_split():

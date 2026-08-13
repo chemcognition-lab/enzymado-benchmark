@@ -15,9 +15,9 @@ from models.common import (
     fit_feature_scaler,
     make_optimizer,
     maybe_resume_torch_wrapper,
-    mean_losses,
     pad_1d_array_list,
     run_wrapper_training,
+    validation_score,
 )
 from models.nn_blocks import MLPModel, MultiHeadMLPModel
 
@@ -36,6 +36,7 @@ class ECMultiHeadClassifierTorch:
         batch_size=256,
         early_stopping_patience=None,
         early_stopping_min_delta=0.0,
+        validation_interval=1,
         device=None,
     ):
         self.hidden_dims = hidden_dims
@@ -47,11 +48,13 @@ class ECMultiHeadClassifierTorch:
         self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
+        self.validation_interval = validation_interval
         self.device = torch.device(device) if device else DEVICE
         self.model = None
         self.output_dims = None
         self.best_epoch_ = None
-        self.best_val_loss_ = None
+        self.best_val_score_ = None
+        self.validation_metric_ = "auprc"
         self.current_epoch_ = 0
         self.best_model_state_ = None
         self.x_mean_ = None
@@ -74,7 +77,7 @@ class ECMultiHeadClassifierTorch:
             raise ValueError(f"ECMultiHeadClassifierTorch expects pooled 2D inputs, got shape {tuple(X_t.shape)}")
         return self.model(X_t)
 
-    def fit(self, X, y, target_mask, X_val=None, y_val=None, target_mask_val=None, checkpoint_path=None):
+    def fit(self, X, y, target_mask, x_val=None, y_val=None, target_mask_val=None, checkpoint_path=None):
         if target_mask is None:
             raise ValueError("ECMultiHeadClassifierTorch.fit requires target_mask.")
 
@@ -83,8 +86,8 @@ class ECMultiHeadClassifierTorch:
             raise ValueError(f"X must be pooled 2D, got shape {X_np.shape}")
         self.x_mean_, self.x_scale_ = fit_feature_scaler(X_np)
         X_np = apply_feature_scaler(X_np, self.x_mean_, self.x_scale_)
-        if X_val is not None:
-            X_val = apply_feature_scaler(np.asarray(X_val, dtype=np.float32), self.x_mean_, self.x_scale_)
+        if x_val is not None:
+            x_val = apply_feature_scaler(np.asarray(x_val, dtype=np.float32), self.x_mean_, self.x_scale_)
         input_dim = X_np.shape[1]
 
         self.output_dims = {
@@ -97,9 +100,9 @@ class ECMultiHeadClassifierTorch:
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
         val_payload = None
-        if X_val is not None and y_val is not None and target_mask_val is not None:
+        if x_val is not None and y_val is not None and target_mask_val is not None:
             val_payload = (
-                np.asarray(X_val, dtype=np.float32),
+                np.asarray(x_val, dtype=np.float32),
                 {level_name: np.asarray(target, dtype=np.float32) for level_name, target in y_val.items()},
                 {level_name: np.asarray(mask_arr, dtype=bool) for level_name, mask_arr in target_mask_val.items()},
             )
@@ -126,26 +129,40 @@ class ECMultiHeadClassifierTorch:
                 loss.backward()
                 optimizer.step()
 
-        def val_loss():
+        def val_score():
             self.model.eval()
-            losses = []
+            scores = {level_name: [] for level_name in self.output_dims}
             with torch.no_grad():
-                X_val_np, y_val_np, target_mask_val_np = val_payload
-                for X_t, y_t, target_mask_t in iter_minibatches(X_val_np, y_val_np, target_mask_val_np):
+                x_val_np, y_val_np, target_mask_val_np = val_payload
+                for X_t, y_t, target_mask_t in iter_minibatches(x_val_np, y_val_np, target_mask_val_np):
                     logits_by_level = self._forward(X_t)
-                    loss = compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion)
-                    if loss is not None:
-                        losses.append(float(loss.item()))
-            return mean_losses(losses)
+                    for level_name, logits in logits_by_level.items():
+                        scores[level_name].append(
+                            torch.sigmoid(logits).cpu().numpy()
+                        )
+            pred = {
+                level_name: np.concatenate(chunks)
+                for level_name, chunks in scores.items()
+            }
+            return validation_score(
+                y_val_np,
+                pred,
+                self.validation_metric_,
+                target_mask_val_np,
+            )
 
         run_wrapper_training(
-            self, train_epoch, val_loss if val_payload is not None else None, start_epoch, checkpoint_path
+            self,
+            train_epoch,
+            val_score if val_payload is not None else None,
+            start_epoch,
+            checkpoint_path,
         )
         return self
 
-    def predict(self, X) -> dict[str, np.ndarray]:
+    def predict_scores(self, X) -> dict[str, np.ndarray]:
         if self.output_dims is None:
-            raise ValueError("ECMultiHeadClassifierTorch must be fit before calling predict().")
+            raise ValueError("ECMultiHeadClassifierTorch must be fit before prediction.")
 
         X_np = np.asarray(X, dtype=np.float32)
         if X_np.ndim != 2:
@@ -162,7 +179,7 @@ class ECMultiHeadClassifierTorch:
                 logits_by_level = self._forward(X_t)
                 for level_name, logits in logits_by_level.items():
                     preds_by_level[level_name].append(
-                        (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
+                        torch.sigmoid(logits).cpu().numpy().astype(np.float32)
                     )
 
         return {
@@ -170,6 +187,13 @@ class ECMultiHeadClassifierTorch:
             if chunks
             else np.zeros((0, self.output_dims[level_name]), dtype=np.float32)
             for level_name, chunks in preds_by_level.items()
+        }
+
+    def predict(self, X) -> dict[str, np.ndarray]:
+        """Return thresholded labels while preserving the estimator API."""
+        return {
+            level_name: (scores >= 0.5).astype(np.float32)
+            for level_name, scores in self.predict_scores(X).items()
         }
 
 
@@ -199,7 +223,8 @@ class ResidueBinaryClassifierTorch:
         self.device = torch.device(device) if device else DEVICE
         self.model = None
         self.best_epoch_ = None
-        self.best_val_loss_ = None
+        self.best_val_score_ = None
+        self.validation_metric_ = "auprc"
         self.current_epoch_ = 0
         self.best_model_state_ = None
 
@@ -254,23 +279,35 @@ class ResidueBinaryClassifierTorch:
                 loss.backward()
                 optimizer.step()
 
-        def val_loss():
+        def val_score():
             self.model.eval()
-            losses = []
+            y_chunks = []
+            pred_chunks = []
             with torch.no_grad():
                 for batch in val_dataloader:
                     X_t, y_t, target_mask_t = self._batch_to_input(batch, self.device)
                     logits = forward_batch(X_t)
-                    loss = compute_batch_loss(logits, y_t, target_mask_t)
-                    losses.append(float(loss.item()))
-            return mean_losses(losses)
+                    keep = target_mask_t.bool()
+                    y_chunks.append(y_t[keep].cpu().numpy())
+                    pred_chunks.append(
+                        torch.sigmoid(logits[keep].float()).cpu().numpy()
+                    )
+            return validation_score(
+                np.concatenate(y_chunks),
+                np.concatenate(pred_chunks),
+                self.validation_metric_,
+            )
 
         run_wrapper_training(
-            self, train_epoch, val_loss if val_dataloader is not None else None, start_epoch, checkpoint_path
+            self,
+            train_epoch,
+            val_score if val_dataloader is not None else None,
+            start_epoch,
+            checkpoint_path,
         )
         return self
 
-    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+    def predict_scores_loader(self, dataloader, batch_kind: str) -> np.ndarray:
         if batch_kind != "protein_residue":
             raise ValueError(f"ResidueBinaryClassifierTorch does not support batch_kind='{batch_kind}'")
 
@@ -281,11 +318,16 @@ class ResidueBinaryClassifierTorch:
                 X_t, _, target_mask_t = self._batch_to_input(batch, self.device)
                 with self._autocast_context(self.device):
                     logits = self.model(X_t).squeeze(-1)
-                batch_pred = (torch.sigmoid(logits) >= 0.5).cpu().numpy().astype(np.float32)
+                batch_pred = torch.sigmoid(logits.float()).cpu().numpy().astype(np.float32)
                 batch_mask = target_mask_t.cpu().numpy().astype(bool)
                 for pred_row, mask_row in zip(batch_pred, batch_mask):
                     pred_rows.append(pred_row[mask_row])
         return pad_1d_array_list(pred_rows, dtype=np.float32)
+
+    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+        """Return thresholded labels while preserving the estimator API."""
+        scores = self.predict_scores_loader(dataloader, batch_kind)
+        return (scores >= 0.5).astype(np.float32)
 
 
 __all__ = [

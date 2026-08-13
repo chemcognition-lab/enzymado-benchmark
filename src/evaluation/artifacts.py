@@ -20,6 +20,7 @@ from .results_layout import (
     INVALIDATION_MARKER,
     build_prediction_artifact_path,
 )
+from .task_types import from_label_kind
 
 
 def _flatten_safetensors_payload(prefix: str, payload) -> dict[str, torch.Tensor]:
@@ -118,6 +119,8 @@ def save_raw_predictions(
     Training only writes raw predictions; metrics.json is computed later by
     scripts/results/compute_metrics.py reading these files plus hparams.json,
     not inline during training.
+    Classification predictions are continuous positive-class probabilities;
+    regression predictions are continuous target values.
     """
     prediction_path = build_prediction_artifact_path(
         run_dir,
@@ -186,10 +189,16 @@ def write_hparams_file(
     if random_seed is not None:
         payload["random_seed"] = int(random_seed)
     if task_config is not None:
+        label_kind = getattr(task_config, "label_kind", None)
+        payload["prediction_kind"] = (
+            "probability"
+            if from_label_kind(label_kind) == "classification"
+            else "value"
+        )
         payload["task_config"] = {
             "registry_name": getattr(task_config, "name", None),
             "batch_kind": getattr(task_config, "batch_kind", None),
-            "label_kind": getattr(task_config, "label_kind", None),
+            "label_kind": label_kind,
             "target_column": getattr(task_config, "target_column", None),
             "dataset_paths": getattr(task_config, "dataset_paths", {}),
         }
@@ -217,7 +226,8 @@ def write_training_log_file(trained, run_dir: Path) -> Path:
         rows = [
             {
                 "best_epoch": getattr(trained, "best_epoch_", None),
-                "best_val_loss": getattr(trained, "best_val_loss_", None),
+                "validation_metric": getattr(trained, "validation_metric_", None),
+                "best_val_score": getattr(trained, "best_val_score_", None),
                 "best_iteration": getattr(trained, "best_iteration", None),
                 "best_score": getattr(trained, "best_score", None),
             }
@@ -230,7 +240,7 @@ def write_training_log_file(trained, run_dir: Path) -> Path:
             if key not in fieldnames:
                 fieldnames.append(key)
     if not fieldnames:
-        fieldnames = ["best_epoch", "best_val_loss"]
+        fieldnames = ["validation_metric", "best_epoch", "best_val_score"]
 
     path = run_dir / "training_log.csv"
     with path.open("w", encoding="utf-8", newline="") as handle:

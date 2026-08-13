@@ -42,6 +42,7 @@ from .xgb_wrappers import (
     XGBFlatECClassifier,
     XGBRegressor,
     XGBResidueBinaryClassifier,
+    negative_kendall_tau,
 )
 
 
@@ -110,6 +111,7 @@ def _ec_linear_classifier_entry() -> dict:
             "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "validation_interval": 5,
         },
         residue_aware=False,
     )
@@ -184,6 +186,7 @@ def _ec_mlp_classifier_entry() -> dict:
             "batch_size": 256,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "validation_interval": 5,
         },
         residue_aware=False,
     )
@@ -220,6 +223,8 @@ def _standard_xgb_classifier_entry() -> dict:
             "learning_rate": 0.1,
             "n_jobs": -1,
             "device": "cuda",
+            "eval_metric": "aucpr",
+            "early_stopping_rounds": 20,
         },
     )
 
@@ -233,6 +238,8 @@ def _standard_xgb_regressor_entry() -> dict:
             "learning_rate": 0.1,
             "n_jobs": -1,
             "device": "cuda",
+            "eval_metric": negative_kendall_tau,
+            "early_stopping_rounds": 20,
         },
     )
 
@@ -252,6 +259,11 @@ def _ec_xgb_classifier_entry() -> dict:
             "n_jobs": -1,
             "device": "cuda" if torch.cuda.is_available() else "cpu",
             "random_state": 0,
+            # Not "aucpr" like the other classifiers: XGBoost's CUDA AUC-PR
+            # reduction aborts with cudaErrorIllegalAddress on the flattened EC
+            # label blocks (many blocks are all-negative, so the ranking metric
+            # has no positive to reduce over). Logloss is well defined there and
+            # keeps early stopping on the GPU.
             "eval_metric": "logloss",
             "early_stopping_rounds": 20,
         },
@@ -280,7 +292,7 @@ def _residue_xgb_classifier_entry() -> dict:
             # across xgboost versions.
             "device": "cpu",
             "random_state": 0,
-            "eval_metric": "logloss",
+            "eval_metric": "aucpr",
             "early_stopping_rounds": 10,
             # Spill the binned matrix to on-disk cache whenever the embedding
             # store is lazy (too large to hold in RAM), so the biggest residue
@@ -343,18 +355,37 @@ def get_model_map(task_type: str, label_kind: str) -> dict[str, dict]:
     return MODEL_MAP[task_type]
 
 
-def train_model(model_info: dict, X_train, y_train, X_val=None, y_val=None, **extra_fit_kwargs):
+def train_model(
+    model_info: dict,
+    x_train,
+    y_train,
+    x_val=None,
+    y_val=None,
+    **extra_fit_kwargs,
+):
     """Instantiate and fit a model wrapper using only supported keyword args."""
     model = model_info["wrap"](**model_info["params"])
     fit_signature = inspect.signature(model.fit)
     fit_kwargs = {}
-    if X_val is not None and y_val is not None and "X_val" in fit_signature.parameters:
-        fit_kwargs["X_val"] = X_val
+    if (
+        x_val is not None
+        and y_val is not None
+        and "x_val" in fit_signature.parameters
+    ):
+        fit_kwargs["x_val"] = x_val
         fit_kwargs["y_val"] = y_val
+    elif (
+        x_val is not None
+        and y_val is not None
+        and "eval_set" in fit_signature.parameters
+    ):
+        fit_kwargs["eval_set"] = [(x_val, y_val)]
+        if "verbose" in fit_signature.parameters:
+            fit_kwargs["verbose"] = False
     for key, value in extra_fit_kwargs.items():
         if value is not None and key in fit_signature.parameters:
             fit_kwargs[key] = value
-    model.fit(X_train, y_train, **fit_kwargs)
+    model.fit(x_train, y_train, **fit_kwargs)
     return model
 
 
@@ -399,6 +430,8 @@ def _attention_linear_classifier_entry() -> dict[str, Any]:
             "lr": 0.001,
             "epochs": 200,
             "optimizer_name": "adamw",
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -413,6 +446,8 @@ def _attention_linear_regressor_entry() -> dict[str, Any]:
             "lr": 0.001,
             "epochs": 200,
             "optimizer_name": "adamw",
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -427,8 +462,11 @@ def _attention_ec_linear_entry() -> dict[str, Any]:
             "lr": 0.001,
             "epochs": 200,
             "optimizer_name": "adamw",
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "validation_interval": 5,
         },
     )
 
@@ -441,6 +479,8 @@ def _attention_residue_linear_entry() -> dict[str, Any]:
             "lr": 0.001,
             "epochs": 200,
             "optimizer_name": "adamw",
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -457,6 +497,8 @@ def _attention_mlp_classifier_entry() -> dict[str, Any]:
             "optimizer_name": "adamw",
             "weight_decay": 0.1,
             "dropout": 0.1,
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -473,6 +515,8 @@ def _attention_mlp_regressor_entry() -> dict[str, Any]:
             "optimizer_name": "adamw",
             "weight_decay": 0.1,
             "dropout": 0.1,
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },
@@ -490,8 +534,11 @@ def _attention_ec_mlp_entry() -> dict[str, Any]:
             "weight_decay": 0.1,
             "dropout": 0.1,
             "batch_size": 256,
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "validation_interval": 5,
         },
     )
 
@@ -506,6 +553,8 @@ def _attention_residue_mlp_entry() -> dict[str, Any]:
             "optimizer_name": "adamw",
             "weight_decay": 0.1,
             "dropout": 0.1,
+            "gradient_clip_norm": 1.0,
+            "pre_attention_layer_norm": True,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
         },

@@ -30,8 +30,10 @@ source "${REPO}/.venv/bin/activate"
 
 : "${FILTER_TASKS:=}"
 : "${SKIP_EXISTING:=1}"
+: "${SHARD_COUNT:=1}"
+: "${SHARD_INDEX:=${SLURM_ARRAY_TASK_ID:-0}}"
 
-ARGS=()
+ARGS=(--shard-count "${SHARD_COUNT}" --shard-index "${SHARD_INDEX}")
 if [[ "${SKIP_EXISTING}" == "1" || "${SKIP_EXISTING}" == "true" || "${SKIP_EXISTING}" == "TRUE" ]]; then
     ARGS+=(--skip-existing)
 fi
@@ -46,4 +48,5 @@ fi
 
 echo "Filter tasks: ${FILTER_TASKS:-<none>}"
 echo "Skip existing: ${SKIP_EXISTING}"
+echo "Shard: ${SHARD_INDEX}/${SHARD_COUNT}"
 python -u "${REPO}/scripts/results/compute_metrics.py" "${ARGS[@]}"

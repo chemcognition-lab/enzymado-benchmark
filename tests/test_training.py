@@ -95,27 +95,135 @@ class StructuredTrainingTests(unittest.TestCase):
             with torch.no_grad():
                 model.weight.add_(1.0)
 
-        def val_loss() -> float:
-            return float(model.weight.square().item())
+        def val_score() -> float:
+            # Checkpoint selection is higher-is-better, so a score that only
+            # degrades as training proceeds keeps the untrained baseline.
+            return -float(model.weight.square().item())
 
-        best_epoch, best_val_loss = run_training_with_early_stopping(
+        best_epoch, best_val_score = run_training_with_early_stopping(
             model,
             epochs=3,
             train_epoch_fn=train_epoch,
-            val_loss_fn=val_loss,
+            val_score_fn=val_score,
             patience=1,
             log_every=100,
             epoch_callback=lambda epoch, *_: callback_epochs.append(epoch),
         )
 
         self.assertEqual(best_epoch, 0)
-        self.assertEqual(best_val_loss, 0.0)
+        self.assertEqual(best_val_score, 0.0)
         self.assertEqual(callback_epochs, [0, 1])
         torch.testing.assert_close(
             model.weight,
             torch.zeros_like(model.weight),
             rtol=0.0,
             atol=0.0,
+        )
+
+    def test_early_stopping_validates_at_configured_interval(self) -> None:
+        import torch
+
+        from models.common import run_training_with_early_stopping
+
+        model = torch.nn.Linear(1, 1, bias=False)
+        with torch.no_grad():
+            model.weight.zero_()
+        validation_epochs = []
+        callback_epochs = []
+
+        def train_epoch() -> None:
+            with torch.no_grad():
+                model.weight.add_(1.0)
+
+        def val_score() -> float:
+            epoch = int(model.weight.item())
+            validation_epochs.append(epoch)
+            return -float(epoch)
+
+        best_epoch, _ = run_training_with_early_stopping(
+            model,
+            epochs=10,
+            train_epoch_fn=train_epoch,
+            val_score_fn=val_score,
+            patience=4,
+            validation_interval=2,
+            log_every=100,
+            epoch_callback=lambda epoch, *_: callback_epochs.append(epoch),
+        )
+
+        self.assertEqual(best_epoch, 0)
+        self.assertEqual(validation_epochs, [0, 2, 4])
+        self.assertEqual(callback_epochs, [0, 1, 2, 3, 4])
+
+    def test_validation_score_computes_only_requested_ec_metric(self) -> None:
+        from evaluation import metrics_registry
+        from models.common import validation_score
+
+        y_true = {
+            "level_1": np.asarray([[1], [0]], dtype=np.float32),
+            "level_2": np.asarray([[0], [1]], dtype=np.float32),
+        }
+        pred = {
+            "level_1": np.asarray([[0.9], [0.1]], dtype=np.float32),
+            "level_2": np.asarray([[0.4], [0.8]], dtype=np.float32),
+        }
+        target_mask = {
+            level_name: np.ones_like(target, dtype=bool)
+            for level_name, target in y_true.items()
+        }
+
+        with (
+            mock.patch.object(
+                metrics_registry,
+                "evaluate_metric",
+                side_effect=[0.25, 0.75],
+            ) as evaluate_metric,
+            mock.patch.object(
+                metrics_registry,
+                "evaluate_predictions",
+                side_effect=AssertionError("full metric registry was evaluated"),
+            ),
+        ):
+            score = validation_score(
+                y_true,
+                pred,
+                "auprc",
+                target_mask,
+            )
+
+        self.assertEqual(score, 0.5)
+        self.assertEqual(evaluate_metric.call_count, 2)
+        for call in evaluate_metric.call_args_list:
+            self.assertEqual(call.args[2:4], ("classification", "auprc"))
+
+    def test_only_ec_torch_models_use_sparse_validation(self) -> None:
+        from training.model_registry import (
+            ATTENTION_MODEL_MAP,
+            ATTENTION_STRUCTURED_MODEL_MAP,
+            MODEL_MAP,
+            STRUCTURED_MODEL_MAP,
+        )
+
+        ec_entries = [
+            *(
+                entry
+                for name, entry in STRUCTURED_MODEL_MAP["multilabel_ec"].items()
+                if not name.startswith("xgb_")
+            ),
+            *ATTENTION_STRUCTURED_MODEL_MAP["multilabel_ec"].values(),
+        ]
+        standard_entries = [
+            *MODEL_MAP["classification"].values(),
+            *MODEL_MAP["regression"].values(),
+            *ATTENTION_MODEL_MAP["classification"].values(),
+            *ATTENTION_MODEL_MAP["regression"].values(),
+        ]
+
+        self.assertTrue(
+            all(entry["params"]["validation_interval"] == 5 for entry in ec_entries)
+        )
+        self.assertTrue(
+            all("validation_interval" not in entry["params"] for entry in standard_entries)
         )
 
     def test_ec_multihead_training_and_prediction_serialization(self) -> None:
@@ -163,7 +271,7 @@ class StructuredTrainingTests(unittest.TestCase):
             epochs=3,
             early_stopping_patience=1,
         )
-        model.fit(X, y_true, target_mask, X_val=X, y_val=y_true, target_mask_val=target_mask)
+        model.fit(X, y_true, target_mask, x_val=X, y_val=y_true, target_mask_val=target_mask)
         preds = model.predict(X)
 
         self.assertEqual(set(preds), {"level_1", "level_2", "level_3", "level_4"})
@@ -215,7 +323,7 @@ class StructuredTrainingTests(unittest.TestCase):
             X,
             y,
             target_mask,
-            X_val=X,
+            x_val=X,
             y_val=y,
             target_mask_val=target_mask,
         )
@@ -1329,6 +1437,48 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertEqual(preds.shape, y.shape)
         np.testing.assert_array_equal(preds[:, :4], np.ones((4, 4), dtype=np.float32))
         np.testing.assert_array_equal(preds[:, 4], np.ones(4, dtype=np.float32))
+
+    def test_train_model_passes_lowercase_validation_arrays(self) -> None:
+        from training.model_registry import train_model
+
+        calls: dict[str, object] = {}
+
+        class DummyArrayModel:
+            def __init__(self, alpha: int) -> None:
+                self.alpha = alpha
+
+            def fit(
+                self,
+                x_train,
+                y_train,
+                x_val=None,
+                y_val=None,
+                progress_label: str | None = None,
+            ) -> None:
+                calls["alpha"] = self.alpha
+                calls["x_train"] = x_train
+                calls["y_train"] = y_train
+                calls["x_val"] = x_val
+                calls["y_val"] = y_val
+                calls["progress_label"] = progress_label
+
+        model = train_model(
+            {"wrap": DummyArrayModel, "params": {"alpha": 7}},
+            x_train="train-features",
+            y_train="train-targets",
+            x_val="val-features",
+            y_val="val-targets",
+            progress_label="demo/mlp",
+            ignored_kw="ignored",
+        )
+
+        self.assertIsInstance(model, DummyArrayModel)
+        self.assertEqual(calls["alpha"], 7)
+        self.assertEqual(calls["x_train"], "train-features")
+        self.assertEqual(calls["y_train"], "train-targets")
+        self.assertEqual(calls["x_val"], "val-features")
+        self.assertEqual(calls["y_val"], "val-targets")
+        self.assertEqual(calls["progress_label"], "demo/mlp")
 
     def test_train_model_loader_passes_supported_extra_kwargs(self) -> None:
         from training.model_registry import train_model_loader

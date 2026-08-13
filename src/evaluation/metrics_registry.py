@@ -109,7 +109,7 @@ def _binary_or_macro(
     p: Array,
 ) -> tuple[Array, Array, str]:
     y_label = np.rint(y).astype(np.int8)
-    p_label = np.rint(p).astype(np.int8)
+    p_label = (p >= 0.5).astype(np.int8)
     labels = np.unique(np.concatenate([y_label, p_label]))
     is_binary = labels.size <= 2 and set(labels.tolist()) <= {0, 1}
     average = "binary" if is_binary else "macro"
@@ -232,14 +232,14 @@ def classification_auroc(
     pred: Array,
     target_mask: Array | None = None,
 ) -> float:
-    """Calculate binary AUROC from saved hard-label predictions."""
+    """Calculate binary AUROC from continuous positive-class scores."""
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size == 0:
         return float("nan")
-    y_label, p_label, _ = _binary_or_macro(y, p)
+    y_label = np.rint(y).astype(np.int8)
     if np.unique(y_label).size < 2:
         return float("nan")
-    return float(sklearn.metrics.roc_auc_score(y_label, p_label))
+    return float(sklearn.metrics.roc_auc_score(y_label, p))
 
 
 def classification_auprc(
@@ -247,14 +247,14 @@ def classification_auprc(
     pred: Array,
     target_mask: Array | None = None,
 ) -> float:
-    """Calculate binary AUPRC from saved hard-label predictions."""
+    """Calculate binary AUPRC from continuous positive-class scores."""
     y, p = _flatten_known(y_true, pred, target_mask)
     if y.size == 0:
         return float("nan")
-    y_label, p_label, _ = _binary_or_macro(y, p)
+    y_label = np.rint(y).astype(np.int8)
     if not np.any(y_label == 1):
         return 0.0
-    return float(sklearn.metrics.average_precision_score(y_label, p_label))
+    return float(sklearn.metrics.average_precision_score(y_label, p))
 
 
 register_metric(
@@ -340,7 +340,13 @@ def _flatten_for_eval(
     y_np = np.asarray(y_true, dtype=np.float32)
     p_np = np.asarray(pred, dtype=np.float32)
     if y_np.shape != p_np.shape:
-        return np.array([], dtype=np.float32), np.array([], dtype=np.float32)
+        # Never fall back to "no metrics": a shape mismatch is a caller bug, and
+        # returning empty arrays here silently produces a metrics payload with
+        # n=0 and no metric keys instead of failing.
+        raise ValueError(
+            f"Shape mismatch between targets {y_np.shape} and "
+            f"predictions {p_np.shape}."
+        )
 
     known = np.ones(y_np.shape, dtype=bool)
     if target_mask is not None:
@@ -379,6 +385,19 @@ def evaluate_predictions(
     return result
 
 
+def evaluate_metric(
+    y_true: object,
+    pred: object,
+    task_type: str,
+    metric_name: str,
+    target_mask: object = None,
+) -> float:
+    """Compute one requested metric without evaluating the full registry."""
+    y_flat, pred_flat = _flatten_for_eval(y_true, pred, target_mask)
+    metric_fn = metric_set_for(task_type)[metric_name]
+    return float(metric_fn(y_flat, pred_flat))
+
+
 __all__ = [
     "MetricEntry",
     "MetricFn",
@@ -388,6 +407,7 @@ __all__ = [
     "classification_f1",
     "classification_precision",
     "classification_recall",
+    "evaluate_metric",
     "evaluate_predictions",
     "higher_is_better_for",
     "metric_set_for",

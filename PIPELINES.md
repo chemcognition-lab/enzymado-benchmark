@@ -133,13 +133,13 @@ type when a run no longer contains `hparams.json`:
 python scripts/results/compute_metrics.py --filter-task ec_number
 ```
 
-Classification tasks are reduced to per-row TP, FP, FN, and TN counts under
-`results/evaluation_statistics/`. Each cache records the SHA-256 digest of its
-source prediction. Multi-head EC tensors are processed level by level, avoiding
-their dense concatenation. Accuracy, precision, recall, F1, AUROC, and AUPRC are
-computed with global micro aggregation. AUROC and AUPRC use the saved hard-label
-predictions because the current artifacts do not contain probability scores.
-The bootstrap pass reuses these statistics:
+Classification artifacts store continuous positive-class probabilities.
+Accuracy, precision, recall, and F1 use a 0.5 threshold and global micro
+aggregation. AUROC and AUPRC operate directly on the continuous scores. During
+bootstrap, threshold metrics reuse per-row TP/FP/FN/TN sufficient statistics,
+while ranking metrics are recomputed from the resampled probabilities. This
+preserves the protein-level resampling unit for EC and residue tasks without
+approximating ranking metrics from a single confusion matrix:
 
 ```bash
 python scripts/results/compute_bootstrap_metrics.py \

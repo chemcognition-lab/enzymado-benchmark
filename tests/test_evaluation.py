@@ -9,11 +9,15 @@ from unittest import TestCase
 
 import numpy as np
 
-from src.evaluation import binary_statistics
-from src.evaluation import metrics_registry as metrics_module
-from src.evaluation import statistics_cache
-from src.evaluation import task_types
-
+from src.evaluation import (
+    binary_statistics,
+    ec_evaluation,
+    statistics_cache,
+    task_types,
+)
+from src.evaluation import (
+    metrics_registry as metrics_module,
+)
 from src.evaluation.bootstrap import (
     _bootstrap_additive_regression,
     _bootstrap_classification_counts,
@@ -30,9 +34,12 @@ from src.evaluation.discover import (
     assign_track,
     discover_experiments,
     group_into_tracks,
+    task_signature,
 )
 from src.evaluation.loaders import PredictionPayload, derive_task_type
 from src.evaluation.metrics_registry import (
+    classification_auprc,
+    classification_auroc,
     classification_f1,
     higher_is_better_for,
     metric_set_for,
@@ -58,6 +65,14 @@ class TestMetrics(TestCase):
         y = np.array([1, 0, 1, 0, 1, 1, 0, 0], dtype=np.float32)
         p = np.array([1, 0, 1, 1, 0, 1, 0, 0], dtype=np.float32)
         self.assertAlmostEqual(classification_f1(y, p, None), 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4))
+
+    def test_ranking_metrics_use_continuous_scores(self) -> None:
+        y = np.asarray([0, 0, 1, 1], dtype=np.float32)
+        scores = np.asarray([0.1, 0.2, 0.3, 0.4], dtype=np.float32)
+
+        self.assertEqual(classification_auroc(y, scores), 1.0)
+        self.assertEqual(classification_auprc(y, scores), 1.0)
+        self.assertEqual(classification_f1(y, scores), 0.0)
 
     def test_metric_set_dispatch(self) -> None:
         self.assertIn("mae", metric_set_for("regression"))
@@ -87,8 +102,96 @@ class TestMetrics(TestCase):
             "classification",
             split="test",
         )
-        for name in ("accuracy", "precision", "recall", "f1", "auroc", "auprc"):
+        for name in ("accuracy", "precision", "recall", "f1"):
             self.assertAlmostEqual(count_metrics[name], direct_metrics[name])
+
+
+class TestECMetrics(TestCase):
+    def test_validation_threshold_maximizes_level_f1(self) -> None:
+        payload = PredictionPayload(
+            y_true=np.asarray([[1], [0], [1], [0]], dtype=np.float32),
+            predictions=np.asarray([[0.8], [0.7], [0.6], [0.55]], dtype=np.float32),
+            target_mask=np.ones((4, 1), dtype=bool),
+        )
+
+        calibration = ec_evaluation.calibrate_f1_threshold(
+            payload,
+            grid_size=11,
+        )
+
+        self.assertAlmostEqual(calibration["threshold"], 0.6)
+        self.assertAlmostEqual(calibration["validation_f1"], 0.8)
+
+    def test_flat_xgboost_payload_is_split_by_train_vocabulary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            dataset_path = root / "ec.csv"
+            dataset_path.write_text(
+                "split,ec_number\n"
+                "train,1.1.1.1;2.2.2.2\n"
+                "val,1.1.1.1\n"
+                "test,2.2.2.2\n",
+                encoding="utf-8",
+            )
+            (root / "hparams.json").write_text(
+                json.dumps(
+                    {
+                        "split_variant": "random",
+                        "task_config": {
+                            "target_column": "ec_number",
+                            "dataset_paths": {"random": str(dataset_path)},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            np.savez(
+                root / "test_predictions.npz",
+                y_true=np.zeros((3, 8), dtype=np.float32),
+                predictions=np.full((3, 8), 0.25, dtype=np.float32),
+                target_mask=np.ones((3, 8), dtype=bool),
+            )
+
+            blocks = ec_evaluation.load_level_blocks(root, "test")
+
+        self.assertIsNotNone(blocks)
+        assert blocks is not None
+        self.assertEqual(tuple(blocks), ec_evaluation.LEVEL_NAMES)
+        self.assertEqual(
+            tuple(block.y_true.shape for block in blocks.values()),
+            ((3, 2), (3, 2), (3, 2), (3, 2)),
+        )
+
+    def test_ec_bootstrap_reports_level_mean_as_primary_f1(self) -> None:
+        from unittest import mock
+
+        blocks = {
+            level_name: PredictionPayload(
+                y_true=np.asarray([[1, 0], [0, 1]], dtype=np.float32),
+                predictions=np.asarray([[0.9, 0.2], [0.4, 0.8]], dtype=np.float32),
+                target_mask=np.ones((2, 2), dtype=bool),
+            )
+            for level_name in ec_evaluation.LEVEL_NAMES
+        }
+        indices = np.tile(np.arange(2, dtype=np.int64), (5, 1))
+        thresholds = {level_name: 0.5 for level_name in ec_evaluation.LEVEL_NAMES}
+
+        with mock.patch.object(
+            ec_evaluation,
+            "load_level_blocks",
+            return_value=blocks,
+        ):
+            replicates = ec_evaluation.bootstrap_split(
+                Path("unused"),
+                indices,
+                thresholds,
+            )
+
+        np.testing.assert_allclose(replicates["f1"], 1.0)
+        self.assertNotIn("auroc", replicates)
+        self.assertNotIn("auprc", replicates)
+        for level_name in ec_evaluation.LEVEL_NAMES:
+            np.testing.assert_allclose(replicates[f"{level_name}_f1"], 1.0)
 
 
 class TestBootstrap(TestCase):
@@ -134,6 +237,24 @@ class TestBootstrap(TestCase):
         out = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
         # Across replicates the F1 should vary (some samples include only good proteins).
         self.assertGreater(out["f1"].std(), 0.0)
+
+    def test_classification_bootstrap_preserves_ranking_scores(self) -> None:
+        payload = PredictionPayload(
+            y_true=np.asarray([0, 0, 1, 1], dtype=np.float32),
+            predictions=np.asarray([0.1, 0.2, 0.3, 0.4], dtype=np.float32),
+            target_mask=None,
+        )
+        indices = np.tile(np.arange(4, dtype=np.int64), (3, 1))
+
+        out = bootstrap_replicates(
+            payload,
+            indices,
+            metric_set_for("classification"),
+            "classification",
+        )
+
+        np.testing.assert_allclose(out["auroc"], 1.0)
+        np.testing.assert_allclose(out["auprc"], 1.0)
 
     def test_summarise_replicates_handles_nan(self) -> None:
         arr = np.array([0.5, 0.6, np.nan, 0.55])
@@ -249,17 +370,24 @@ class TestBootstrapClassificationCounts(TestCase):
     per-replicate call to the metric functions themselves."""
 
     def _assert_metrics_match(self, direct: dict, additive: dict, atol: float = 1e-12) -> None:
-        for name in (
-            "accuracy",
-            "precision",
-            "recall",
-            "f1",
-            "auroc",
-            "auprc",
-        ):
+        for name in ("accuracy", "precision", "recall", "f1"):
             np.testing.assert_allclose(
                 additive[name], direct[name], atol=atol, err_msg=f"{name} mismatch"
             )
+
+    def test_count_payload_respects_explicit_threshold(self) -> None:
+        payload = PredictionPayload(
+            y_true=np.asarray([[1, 0], [1, 0]], dtype=np.float32),
+            predictions=np.asarray([[0.8, 0.7], [0.6, 0.1]], dtype=np.float32),
+            target_mask=np.ones((2, 2), dtype=bool),
+        )
+
+        counts = binary_statistics.count_payload(payload, threshold=0.7)
+
+        np.testing.assert_array_equal(
+            counts,
+            np.asarray([[1, 1, 0, 0], [0, 0, 1, 1]], dtype=np.int64),
+        )
 
     def test_additive_path_matches_direct_for_1d_binary(self) -> None:
         rng = np.random.default_rng(0)
@@ -389,6 +517,32 @@ class TestBootstrapAdditiveRegression(TestCase):
 
 
 class TestDiscover(TestCase):
+    def test_task_signature_pairs_all_baselines_on_the_same_task(self) -> None:
+        linear = Experiment(
+            "real_case",
+            "no_attention",
+            "random",
+            "linear",
+            "erickson_petase",
+            "ankh_base",
+            Path("/tmp/linear"),
+        )
+        attention = Experiment(
+            "real_case",
+            "attention",
+            "random",
+            "mlp",
+            "erickson_petase",
+            "esm2_3B",
+            Path("/tmp/attention"),
+        )
+
+        self.assertEqual(task_signature(linear), task_signature(attention))
+        self.assertEqual(
+            task_signature(linear),
+            ("real_case", "random", "erickson_petase"),
+        )
+
     def test_discover_experiments_round_trip(self) -> None:
         import tempfile
 

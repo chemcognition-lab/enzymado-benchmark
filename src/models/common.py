@@ -5,11 +5,14 @@ from __future__ import annotations
 import copy
 import math
 import random
+import time
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+from evaluation import metrics_registry
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -124,6 +127,64 @@ def prepare_inputs(
     return torch.from_numpy(X).to(device), mask_t, input_dim
 
 
+# Worst attainable value per checkpoint-selection metric (both higher-is-better).
+_WORST_VALIDATION_SCORE = {"kendall_tau": -1.0, "auprc": 0.0}
+
+
+def validation_score(
+    y_true,
+    pred,
+    metric_name: str,
+    target_mask=None,
+) -> float:
+    """Calculate the checkpoint-selection score from validation predictions."""
+    match metric_name:
+        case "auprc":
+            task_type = "classification"
+        case "kendall_tau":
+            task_type = "regression"
+        case _:
+            raise ValueError(f"Unsupported validation metric: {metric_name}.")
+
+    if isinstance(y_true, dict):
+        scores = []
+        for level_name, level_y in y_true.items():
+            level_mask = (
+                target_mask[level_name] if isinstance(target_mask, dict) else None
+            )
+            scores.append(
+                metrics_registry.evaluate_metric(
+                    level_y,
+                    pred[level_name],
+                    task_type,
+                    metric_name,
+                    level_mask,
+                )
+            )
+        finite_scores = [value for value in scores if math.isfinite(value)]
+        score = (
+            float(np.mean(finite_scores))
+            if finite_scores
+            else float("nan")
+        )
+    else:
+        score = metrics_registry.evaluate_metric(
+            y_true,
+            pred,
+            task_type,
+            metric_name,
+            target_mask,
+        )
+    if not math.isfinite(score):
+        # Both metrics are undefined on degenerate predictions (Kendall tau is
+        # NaN when every prediction is identical, which a freshly initialised
+        # attention model routinely produces at the epoch-0 baseline). Score it
+        # as the worst possible value instead of aborting training: it stays a
+        # valid checkpoint candidate that any real epoch beats.
+        return _WORST_VALIDATION_SCORE[metric_name]
+    return score
+
+
 def _atomic_torch_save(payload, path: str | Path) -> None:
     """Write a torch-serialized payload atomically to avoid partial checkpoints."""
     path_obj = Path(path)
@@ -175,18 +236,26 @@ def make_torch_checkpoint_callback(wrapper, path: str | Path | None, checkpoint_
 
     checkpoint_every = max(1, int(checkpoint_every))
 
-    def _callback(epoch: int, best_epoch, best_val_loss, best_state) -> None:
+    def _callback(
+        epoch: int,
+        val_score,
+        best_epoch,
+        best_val_score,
+        best_state,
+    ) -> None:
         wrapper.current_epoch_ = int(epoch)
         wrapper.best_epoch_ = best_epoch
-        wrapper.best_val_loss_ = best_val_loss
+        wrapper.best_val_score_ = best_val_score
         wrapper.best_model_state_ = copy.deepcopy(best_state) if best_state is not None else None
         if not hasattr(wrapper, "training_log_") or wrapper.training_log_ is None:
             wrapper.training_log_ = []
         wrapper.training_log_.append(
             {
                 "epoch": int(epoch),
+                "validation_metric": wrapper.validation_metric_,
+                "val_score": val_score,
                 "best_epoch": best_epoch,
-                "best_val_loss": best_val_loss,
+                "best_val_score": best_val_score,
             }
         )
         if epoch % checkpoint_every == 0:
@@ -199,110 +268,163 @@ def run_training_with_early_stopping(
     model: nn.Module,
     epochs: int,
     train_epoch_fn,
-    val_loss_fn=None,
+    val_score_fn=None,
+    metric_name: str = "validation_score",
     patience: int | None = None,
     min_delta: float = 0.0,
+    validation_interval: int = 1,
     log_every: int = 10,
     start_epoch: int = 0,
     initial_best_state: dict | None = None,
     initial_best_epoch: int | None = None,
-    initial_best_val_loss: float | None = None,
+    initial_best_val_score: float | None = None,
     epoch_callback=None,
 ) -> tuple[int | None, float | None]:
     """Run a training loop and optionally restore the best validation checkpoint."""
-    import time as _time
-
-    if val_loss_fn is None or patience is None or patience <= 0:
+    validation_interval = max(1, int(validation_interval))
+    if val_score_fn is None or patience is None or patience <= 0:
         for ep in range(start_epoch, epochs):
-            t0 = _time.time()
+            t0 = time.time()
             train_epoch_fn()
             if (ep + 1) % log_every == 0 or ep == 0:
-                print(f"        epoch {ep+1}/{epochs}  ({_time.time()-t0:.1f}s/epoch)", flush=True)
+                elapsed = time.time() - t0
+                print(
+                    f"        epoch {ep + 1}/{epochs}  ({elapsed:.1f}s/epoch)",
+                    flush=True,
+                )
             if epoch_callback is not None:
-                epoch_callback(ep + 1, None, None, None)
+                epoch_callback(ep + 1, None, None, None, None)
         return None, None
 
-    best_state = copy.deepcopy(initial_best_state) if initial_best_state is not None else copy.deepcopy(model.state_dict())
+    best_state = (
+        copy.deepcopy(initial_best_state)
+        if initial_best_state is not None
+        else copy.deepcopy(model.state_dict())
+    )
     best_epoch: int | None = initial_best_epoch
-    best_val_loss = float(initial_best_val_loss) if initial_best_val_loss is not None else float("inf")
+    best_val_score = (
+        float(initial_best_val_score)
+        if initial_best_val_score is not None
+        else float("-inf")
+    )
     epochs_without_improvement = 0
 
-    # Make the untrained (or currently resumed) model a real early-stopping
-    # candidate. Without this baseline, one catastrophic optimizer step could
-    # become the best checkpoint simply because every later step was worse.
-    if initial_best_val_loss is None:
+    if initial_best_val_score is None:
         baseline_epoch = int(start_epoch)
-        best_val_loss = float(val_loss_fn())
-        if not math.isfinite(best_val_loss):
+        best_val_score = float(val_score_fn())
+        if not math.isfinite(best_val_score):
             raise RuntimeError(
-                f"Training produced a non-finite validation loss at epoch "
-                f"{baseline_epoch}: {best_val_loss}."
+                f"Training produced a non-finite validation {metric_name} "
+                f"at epoch {baseline_epoch}: {best_val_score}."
             )
         best_epoch = baseline_epoch
         best_state = copy.deepcopy(model.state_dict())
         print(
             f"        epoch {baseline_epoch}/{epochs}  "
-            f"val_loss={best_val_loss:.4f}  (baseline)",
+            f"val_{metric_name}={best_val_score:.4f}  (baseline)",
             flush=True,
         )
         if epoch_callback is not None:
-            epoch_callback(baseline_epoch, best_epoch, best_val_loss, best_state)
+            epoch_callback(
+                baseline_epoch,
+                best_val_score,
+                best_epoch,
+                best_val_score,
+                best_state,
+            )
 
     for epoch in range(start_epoch, epochs):
-        t0 = _time.time()
+        t0 = time.time()
         train_epoch_fn()
-        val_loss = float(val_loss_fn())
-        if not math.isfinite(val_loss):
-            raise RuntimeError(f"Training produced a non-finite validation loss: {val_loss}.")
-        epoch_time = _time.time() - t0
+        epoch_number = epoch + 1
+        should_validate = (
+            epoch_number % validation_interval == 0 or epoch_number == epochs
+        )
+        if not should_validate:
+            if epoch == 0 or epoch_number % log_every == 0:
+                epoch_time = time.time() - t0
+                print(
+                    f"        epoch {epoch_number}/{epochs}  "
+                    f"({epoch_time:.1f}s training; validation every "
+                    f"{validation_interval} epochs)",
+                    flush=True,
+                )
+            if epoch_callback is not None:
+                epoch_callback(
+                    epoch_number,
+                    None,
+                    best_epoch,
+                    best_val_score,
+                    best_state,
+                )
+            continue
 
-        if (epoch + 1) % log_every == 0 or epoch == 0:
+        val_score = float(val_score_fn())
+        if not math.isfinite(val_score):
+            raise RuntimeError(
+                f"Training produced a non-finite validation "
+                f"{metric_name}: {val_score}."
+            )
+        epoch_time = time.time() - t0
+        if val_score > (best_val_score + min_delta):
+            best_val_score = val_score
+            best_epoch = epoch_number
+            best_state = copy.deepcopy(model.state_dict())
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement = epoch_number - int(best_epoch)
+
+        if epoch_number % log_every == 0 or epoch == 0 or validation_interval > 1:
             print(
-                f"        epoch {epoch+1}/{epochs}  "
-                f"val_loss={val_loss:.4f}  best={best_val_loss:.4f}  "
+                f"        epoch {epoch_number}/{epochs}  "
+                f"val_{metric_name}={val_score:.4f}  "
+                f"best={best_val_score:.4f}  "
                 f"no_improve={epochs_without_improvement}  ({epoch_time:.1f}s/epoch)",
                 flush=True,
             )
 
-        if val_loss < (best_val_loss - min_delta):
-            best_val_loss = val_loss
-            best_epoch = epoch + 1
-            best_state = copy.deepcopy(model.state_dict())
-            epochs_without_improvement = 0
-            if epoch_callback is not None:
-                epoch_callback(epoch + 1, best_epoch, best_val_loss, best_state)
-            continue
-
-        epochs_without_improvement += 1
         if epoch_callback is not None:
-            epoch_callback(epoch + 1, best_epoch, best_val_loss, best_state)
+            epoch_callback(
+                epoch_number,
+                val_score,
+                best_epoch,
+                best_val_score,
+                best_state,
+            )
         if epochs_without_improvement >= patience:
             print(
-                f"        early stopping at epoch {epoch+1}, "
-                f"best_epoch={best_epoch}, best_val_loss={best_val_loss:.4f}",
+                f"        early stopping at epoch {epoch_number}, "
+                f"best_epoch={best_epoch}, "
+                f"best_val_{metric_name}={best_val_score:.4f}",
                 flush=True,
             )
             break
 
     model.load_state_dict(best_state)
-    return best_epoch, best_val_loss
+    return best_epoch, best_val_score
 
 
-def run_wrapper_training(wrapper, train_epoch_fn, val_loss_fn, start_epoch, checkpoint_path):
-    """Run the standard early-stopping training loop against any wrapper exposing
-    .model/.epochs/.early_stopping_patience/.early_stopping_min_delta/.best_model_state_/
-    .best_epoch_/.best_val_loss_, mutating .best_epoch_/.best_val_loss_ in place."""
-    wrapper.best_epoch_, wrapper.best_val_loss_ = run_training_with_early_stopping(
+def run_wrapper_training(
+    wrapper,
+    train_epoch_fn,
+    val_score_fn,
+    start_epoch,
+    checkpoint_path,
+) -> None:
+    """Run metric-based early stopping for a Torch wrapper."""
+    wrapper.best_epoch_, wrapper.best_val_score_ = run_training_with_early_stopping(
         wrapper.model,
         wrapper.epochs,
         train_epoch_fn,
-        val_loss_fn=val_loss_fn,
+        val_score_fn=val_score_fn,
+        metric_name=wrapper.validation_metric_,
         patience=wrapper.early_stopping_patience,
         min_delta=wrapper.early_stopping_min_delta,
+        validation_interval=getattr(wrapper, "validation_interval", 1),
         start_epoch=start_epoch,
         initial_best_state=wrapper.best_model_state_,
         initial_best_epoch=wrapper.best_epoch_,
-        initial_best_val_loss=wrapper.best_val_loss_,
+        initial_best_val_score=wrapper.best_val_score_,
         epoch_callback=make_torch_checkpoint_callback(wrapper, checkpoint_path),
     )
 
@@ -322,4 +444,3 @@ def compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
     if not loss_terms:
         return None
     return torch.stack(loss_terms).mean()
-

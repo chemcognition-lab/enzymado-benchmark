@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from src import data_loading
+
 from .loaders import derive_task_type, read_hparams, read_metrics
 
 TASK_SCOPES = {"properties", "real_case"}
@@ -144,11 +146,14 @@ def group_into_tracks(
     return groups
 
 
-def task_signature(exp: Experiment) -> tuple[str, str, str, str]:
-    """Identifier shared by experiments that should share bootstrap resample indices."""
-    return (exp.pool_type, exp.split, exp.model_family, exp.task)
+def task_signature(exp: Experiment) -> tuple[str, str, str]:
+    """Identify experiments evaluated on the same ordered test samples."""
+    return (exp.task_scope, exp.split, exp.task)
 
 
 def load_real_case_tasks() -> set[str]:
-    from data_loading import TASK_REGISTRY
-    return {name for name, cfg in TASK_REGISTRY.items() if cfg.task_scope == "real_case"}
+    return {
+        name
+        for name, cfg in data_loading.TASK_REGISTRY.items()
+        if cfg.task_scope == "real_case"
+    }

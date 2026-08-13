@@ -17,6 +17,7 @@ except ModuleNotFoundError:
     XGBClassifier = None
     XGBRegressor = None
     XGBoostError = None
+from evaluation.metrics_registry import regression_kendall_tau
 
 import numpy as np
 import torch
@@ -44,6 +45,16 @@ def _should_log_progress(step_index: int, total_steps: int | None) -> bool:
 
 def _estimate_gib(num_bytes: int) -> float:
     return float(num_bytes) / float(1024**3)
+def negative_kendall_tau(y_true, pred) -> float:
+    """Return a minimizable cost equivalent to maximizing Kendall tau."""
+    score = regression_kendall_tau(y_true, pred)
+    if not np.isfinite(score):
+        # A constant ranking has no ordering signal. Treat it as tau=0 so the
+        # first non-constant useful tree can improve on the baseline.
+        return 0.0
+    return -float(score)
+
+
 
 
 def _as_xgb_residue_features(value) -> np.ndarray:
@@ -231,7 +242,7 @@ class XGBMultiOutputFlatECExperimental:
             )
         return y_np
 
-    def fit(self, X, y, target_mask=None, X_val=None, y_val=None, target_mask_val=None):
+    def fit(self, X, y, target_mask=None, x_val=None, y_val=None, target_mask_val=None):
         X_np = np.asarray(X, dtype=np.float32)
         if X_np.ndim != 2:
             raise ValueError(
@@ -264,18 +275,18 @@ class XGBMultiOutputFlatECExperimental:
         }
 
         evals = []
-        if X_val is not None and y_val is not None:
-            X_val_np = np.asarray(X_val, dtype=np.float32)
+        if x_val is not None and y_val is not None:
+            x_val_np = np.asarray(x_val, dtype=np.float32)
             y_val_np = self._prepare_dense_targets(y_val, target_mask_val)
-            if X_val_np.ndim != 2:
-                raise ValueError(f"X_val must be 2D, got shape {X_val_np.shape}")
-            if X_val_np.shape[0] != y_val_np.shape[0]:
+            if x_val_np.ndim != 2:
+                raise ValueError(f"x_val must be 2D, got shape {x_val_np.shape}")
+            if x_val_np.shape[0] != y_val_np.shape[0]:
                 raise ValueError(
-                    "X_val and y_val must contain the same number of rows for "
+                    "x_val and y_val must contain the same number of rows for "
                     "XGBMultiOutputFlatECExperimental. "
-                    f"Received X_val={X_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
+                    f"Received x_val={x_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
                 )
-            dval = xgb.QuantileDMatrix(X_val_np, label=y_val_np, ref=dtrain)
+            dval = xgb.QuantileDMatrix(x_val_np, label=y_val_np, ref=dtrain)
             evals.append((dval, "validation"))
 
         self.booster = xgb.train(
@@ -288,7 +299,7 @@ class XGBMultiOutputFlatECExperimental:
         self.n_outputs_ = y_np.shape[1]
         return self
 
-    def predict(self, X) -> np.ndarray:
+    def predict_scores(self, X) -> np.ndarray:
         if self.booster is None or self.n_outputs_ is None:
             raise ValueError("XGBMultiOutputFlatECExperimental must be fit before calling predict().")
 
@@ -300,7 +311,12 @@ class XGBMultiOutputFlatECExperimental:
         pred = np.asarray(pred, dtype=np.float32)
         if pred.ndim == 1:
             pred = pred.reshape(X_np.shape[0], self.n_outputs_)
-        return (pred >= 0.5).astype(np.float32, copy=False)
+        return pred
+
+    def predict(self, X) -> np.ndarray:
+        """Return thresholded labels while preserving the estimator API."""
+        scores = self.predict_scores(X)
+        return (scores >= 0.5).astype(np.float32, copy=False)
 
 
 class XGBFlatECBlockClassifier:
@@ -393,7 +409,7 @@ class XGBFlatECBlockClassifier:
         X,
         y,
         target_mask=None,
-        X_val=None,
+        x_val=None,
         y_val=None,
         target_mask_val=None,
         progress_label: str | None = None,
@@ -411,17 +427,17 @@ class XGBFlatECBlockClassifier:
             )
 
         val_payload = None
-        if X_val is not None and y_val is not None:
-            X_val_np = np.asarray(X_val, dtype=np.float32)
+        if x_val is not None and y_val is not None:
+            x_val_np = np.asarray(x_val, dtype=np.float32)
             y_val_np, target_mask_val_np = self._normalize_targets(y_val, target_mask_val)
-            if X_val_np.ndim != 2:
-                raise ValueError(f"X_val must be 2D, got shape {X_val_np.shape}")
-            if X_val_np.shape[0] != y_val_np.shape[0]:
+            if x_val_np.ndim != 2:
+                raise ValueError(f"x_val must be 2D, got shape {x_val_np.shape}")
+            if x_val_np.shape[0] != y_val_np.shape[0]:
                 raise ValueError(
-                    "X_val and y_val must contain the same number of rows for XGBFlatECBlockClassifier. "
-                    f"Received X_val={X_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
+                    "x_val and y_val must contain the same number of rows for XGBFlatECBlockClassifier. "
+                    f"Received x_val={x_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
                 )
-            val_payload = (X_val_np, y_val_np, target_mask_val_np)
+            val_payload = (x_val_np, y_val_np, target_mask_val_np)
 
         resumed = _maybe_resume_xgb_wrapper(self, checkpoint_path)
         checkpoint_outputs = self.n_outputs_
@@ -515,11 +531,11 @@ class XGBFlatECBlockClassifier:
                 }
 
                 if val_payload is not None:
-                    X_val_np, y_val_np, target_mask_val_np = val_payload
+                    x_val_np, y_val_np, target_mask_val_np = val_payload
                     val_known_mask = np.all(target_mask_val_np[:, block_slice][:, trainable_local_np], axis=1)
                     if np.any(val_known_mask):
                         dval = xgb.QuantileDMatrix(
-                            X_val_np[val_known_mask],
+                            x_val_np[val_known_mask],
                             label=y_val_np[val_known_mask][:, block_slice][:, trainable_local_np].astype(
                                 np.float32,
                                 copy=False,
@@ -575,7 +591,7 @@ class XGBFlatECBlockClassifier:
 
         return self
 
-    def predict(self, X) -> np.ndarray:
+    def predict_scores(self, X) -> np.ndarray:
         if self.n_outputs_ is None:
             raise ValueError("XGBFlatECBlockClassifier must be fit before calling predict().")
 
@@ -611,9 +627,16 @@ class XGBFlatECBlockClassifier:
             raw_pred = np.asarray(raw_pred, dtype=np.float32)
             if raw_pred.ndim == 1:
                 raw_pred = raw_pred.reshape(X_np.shape[0], trainable_local.size)
-            block_pred[:, trainable_local] = (raw_pred >= 0.5).astype(np.float32, copy=False)
+            block_pred[:, trainable_local] = raw_pred
 
         return pred
+
+    def predict(self, X) -> np.ndarray:
+        """Return thresholded labels while preserving the estimator API."""
+        scores = self.predict_scores(X)
+        predictions = (scores >= 0.5).astype(np.float32, copy=False)
+        predictions[~np.isfinite(scores)] = np.nan
+        return predictions
 
 
 class XGBFlatECClassifier:
@@ -698,7 +721,7 @@ class XGBFlatECClassifier:
         X,
         y,
         target_mask=None,
-        X_val=None,
+        x_val=None,
         y_val=None,
         target_mask_val=None,
         progress_label: str | None = None,
@@ -716,17 +739,17 @@ class XGBFlatECClassifier:
             )
 
         val_payload = None
-        if X_val is not None and y_val is not None:
-            X_val_np = np.asarray(X_val, dtype=np.float32)
-            if X_val_np.ndim != 2:
-                raise ValueError(f"X_val must be 2D, got shape {X_val_np.shape}")
+        if x_val is not None and y_val is not None:
+            x_val_np = np.asarray(x_val, dtype=np.float32)
+            if x_val_np.ndim != 2:
+                raise ValueError(f"x_val must be 2D, got shape {x_val_np.shape}")
             y_val_np, target_mask_val_np = self._normalize_targets(y_val, target_mask_val)
-            if X_val_np.shape[0] != y_val_np.shape[0]:
+            if x_val_np.shape[0] != y_val_np.shape[0]:
                 raise ValueError(
-                    "X_val and y_val must contain the same number of rows for XGBFlatECClassifier. "
-                    f"Received X_val={X_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
+                    "x_val and y_val must contain the same number of rows for XGBFlatECClassifier. "
+                    f"Received x_val={x_val_np.shape[0]}, y_val={y_val_np.shape[0]}."
                 )
-            val_payload = (X_val_np, y_val_np, target_mask_val_np)
+            val_payload = (x_val_np, y_val_np, target_mask_val_np)
 
         resumed = _maybe_resume_xgb_wrapper(self, checkpoint_path)
         checkpoint_outputs = self.n_outputs_
@@ -792,13 +815,13 @@ class XGBFlatECClassifier:
             fit_kwargs = {"verbose": False}
             val_rows = 0
             if val_payload is not None:
-                X_val_np, y_val_np, target_mask_val_np = val_payload
+                x_val_np, y_val_np, target_mask_val_np = val_payload
                 val_known_mask = target_mask_val_np[:, column_index]
                 if np.any(val_known_mask):
                     val_rows = int(val_known_mask.sum())
                     fit_kwargs["eval_set"] = [
                         (
-                            X_val_np[val_known_mask],
+                            x_val_np[val_known_mask],
                             y_val_np[val_known_mask, column_index].astype(np.int32, copy=False),
                         )
                     ]
@@ -867,7 +890,7 @@ class XGBFlatECClassifier:
 
         return self
 
-    def predict(self, X) -> np.ndarray:
+    def predict_scores(self, X) -> np.ndarray:
         if self.n_outputs_ is None:
             raise ValueError("XGBFlatECClassifier must be fit before calling predict().")
 
@@ -891,12 +914,22 @@ class XGBFlatECClassifier:
                 try:
                     raw_pred = booster.inplace_predict(X_np, validate_features=False)
                     raw_pred = np.asarray(raw_pred, dtype=np.float32).reshape(-1)
-                    pred[:, column_index] = (raw_pred >= 0.5).astype(np.float32, copy=False)
+                    pred[:, column_index] = raw_pred
                     continue
                 except Exception:
                     pass
-            pred[:, column_index] = model.predict(X_np).astype(np.float32, copy=False)
+            pred[:, column_index] = model.predict_proba(X_np)[:, 1].astype(
+                np.float32,
+                copy=False,
+            )
         return pred
+
+    def predict(self, X) -> np.ndarray:
+        """Return thresholded labels while preserving the estimator API."""
+        scores = self.predict_scores(X)
+        predictions = (scores >= 0.5).astype(np.float32, copy=False)
+        predictions[~np.isfinite(scores)] = np.nan
+        return predictions
 
 
 class _ResidueDataIter:
@@ -1448,7 +1481,7 @@ class XGBResidueBinaryClassifier:
         self._release_cache()
         return self
 
-    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+    def predict_scores_loader(self, dataloader, batch_kind: str) -> np.ndarray:
         if batch_kind != "protein_residue":
             raise ValueError(f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'")
 
@@ -1462,10 +1495,12 @@ class XGBResidueBinaryClassifier:
                 flat_pred = np.full((X_flat.shape[0],), self.constant_prediction_, dtype=np.float32)
             else:
                 raw_pred = self.booster.inplace_predict(X_flat, validate_features=False)
-                flat_pred = (np.asarray(raw_pred, dtype=np.float32).reshape(-1) >= 0.5).astype(
-                    np.float32,
-                    copy=False,
-                )
+                flat_pred = np.asarray(raw_pred, dtype=np.float32).reshape(-1)
             pred_rows.extend(self._split_flat_predictions(flat_pred, lengths))
 
         return pad_1d_array_list(pred_rows, dtype=np.float32)
+
+    def predict_loader(self, dataloader, batch_kind: str) -> np.ndarray:
+        """Return thresholded labels while preserving the estimator API."""
+        scores = self.predict_scores_loader(dataloader, batch_kind)
+        return (scores >= 0.5).astype(np.float32)

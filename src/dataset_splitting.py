@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
+import ast
 import csv
+import dataclasses
+import heapq
 import json
 import math
-from pathlib import Path
 import random
 import shutil
 import subprocess
 import tempfile
+import time
+from collections import defaultdict
+from pathlib import Path
+
+import sklearn.model_selection
 
 SPLIT_NAMES = ("train", "val", "test")
 SEQUENCE_COLUMN_ALIASES = (
@@ -527,6 +533,333 @@ def generate_random_split_rows(
     return output_fieldnames, split_rows, summarize_split_rows(split_rows, sequence_col)
 
 
+def build_rank_strata(
+    values: list[float],
+    n_bins: int,
+) -> list[int]:
+    """Assign equal-frequency target-rank strata for regression splitting."""
+    if n_bins < 2:
+        raise ValueError("Stratification requires at least two bins.")
+
+    ranked_values = sorted((value, index) for index, value in enumerate(values))
+    strata = [0] * len(values)
+    for rank, (_, index) in enumerate(ranked_values):
+        strata[index] = min(rank * n_bins // len(values), n_bins - 1)
+    return strata
+
+
+def build_numeric_strata(
+    rows: list[dict[str, str]],
+    stratify_col: str,
+    n_bins: int,
+) -> list[int]:
+    """Build equal-frequency strata from a finite numeric column."""
+    values: list[float] = []
+    for index, row in enumerate(rows):
+        value = parse_finite_float(row.get(stratify_col))
+        if value is None:
+            raise ValueError(
+                f"Column '{stratify_col}' is not finite at row {index}."
+            )
+        values.append(value)
+    return build_rank_strata(values, n_bins)
+
+
+def build_binary_strata(
+    rows: list[dict[str, str]],
+    stratify_col: str,
+) -> list[int]:
+    """Build exact 0/1 class strata."""
+    strata: list[int] = []
+    for index, row in enumerate(rows):
+        value = parse_finite_float(row.get(stratify_col))
+        if value not in {0.0, 1.0}:
+            raise ValueError(
+                f"Column '{stratify_col}' is not binary at row {index}."
+            )
+        strata.append(int(value))
+    return strata
+
+
+def build_residue_strata(
+    rows: list[dict[str, str]],
+    *,
+    sequence_col: str,
+    stratify_col: str,
+    n_bins: int,
+) -> list[int]:
+    """Build target-rank strata from residue-positive density per protein."""
+    densities: list[float] = []
+    for row in rows:
+        sequence = clean_sequence(row.get(sequence_col))
+        parsed = ast.literal_eval(str(row.get(stratify_col, "")).strip())
+        positions = [parsed] if isinstance(parsed, int) else list(parsed)
+        densities.append(len({int(position) for position in positions}) / len(sequence))
+    return build_rank_strata(densities, n_bins)
+
+
+def build_ec_label_sets(
+    rows: list[dict[str, str]],
+    stratify_col: str,
+    separator: str,
+) -> list[set[str]]:
+    """Expand EC annotations into cumulative hierarchical label sets."""
+    label_sets: list[set[str]] = []
+    for row in rows:
+        labels: set[str] = set()
+        raw_value = str(row.get(stratify_col, "")).strip()
+        for ec_label in raw_value.split(separator):
+            ec_label = ec_label.strip()
+            if not ec_label:
+                continue
+            parts = tuple(part.strip() for part in ec_label.split("."))
+            if len(parts) != 4:
+                raise ValueError(f"Invalid EC label '{ec_label}'. Expected 4 levels.")
+
+            known_parts: list[str] = []
+            seen_missing = False
+            for depth, part in enumerate(parts, start=1):
+                if part == "-":
+                    seen_missing = True
+                    continue
+                if seen_missing:
+                    raise ValueError(
+                        f"Invalid EC label '{ec_label}'. "
+                        "Missing levels must be trailing."
+                    )
+                known_parts.append(part)
+                labels.add(f"level_{depth}:{'.'.join(known_parts)}")
+        label_sets.append(labels)
+    return label_sets
+
+
+def assign_stratified_points(
+    strata: list[int],
+    fractions: dict[str, float],
+    seed: int,
+) -> dict[int, str]:
+    """Assign point indices with a two-stage stratified shuffle split."""
+    indices = list(range(len(strata)))
+    holdout_fraction = fractions["val"] + fractions["test"]
+    if holdout_fraction == 0:
+        return {index: "train" for index in indices}
+
+    outer = sklearn.model_selection.StratifiedShuffleSplit(
+        n_splits=1,
+        test_size=holdout_fraction,
+        random_state=seed,
+    )
+    train_indices, holdout_indices = next(outer.split(indices, strata))
+
+    if fractions["val"] == 0:
+        val_indices: list[int] = []
+        test_indices = holdout_indices
+    elif fractions["test"] == 0:
+        val_indices = holdout_indices
+        test_indices: list[int] = []
+    else:
+        holdout_strata = [strata[index] for index in holdout_indices]
+        inner = sklearn.model_selection.StratifiedShuffleSplit(
+            n_splits=1,
+            test_size=fractions["test"] / holdout_fraction,
+            random_state=seed + 1,
+        )
+        val_local, test_local = next(inner.split(holdout_indices, holdout_strata))
+        val_indices = holdout_indices[val_local]
+        test_indices = holdout_indices[test_local]
+
+    return {
+        **{int(index): "train" for index in train_indices},
+        **{int(index): "val" for index in val_indices},
+        **{int(index): "test" for index in test_indices},
+    }
+
+
+def build_split_capacities(
+    n_samples: int,
+    fractions: dict[str, float],
+) -> dict[str, int]:
+    """Return exact split sizes matching two-stage shuffle rounding."""
+    n_holdout = math.ceil(n_samples * (fractions["val"] + fractions["test"]))
+    if n_holdout == 0:
+        return {"train": n_samples, "val": 0, "test": 0}
+    if fractions["val"] == 0:
+        return {"train": n_samples - n_holdout, "val": 0, "test": n_holdout}
+    if fractions["test"] == 0:
+        return {"train": n_samples - n_holdout, "val": n_holdout, "test": 0}
+
+    test_ratio = fractions["test"] / (fractions["val"] + fractions["test"])
+    n_test = math.ceil(n_holdout * test_ratio)
+    return {
+        "train": n_samples - n_holdout,
+        "val": n_holdout - n_test,
+        "test": n_test,
+    }
+
+
+def choose_multilabel_split(
+    label: str,
+    capacities: dict[str, int],
+    split_counts: dict[str, int],
+    targets: dict[str, dict[str, float]],
+    label_counts: dict[str, dict[str, int]],
+    rng: random.Random,
+) -> str:
+    """Choose the split with the greatest unmet label and sample capacity."""
+    candidates = [
+        split
+        for split in SPLIT_NAMES
+        if split_counts[split] < capacities[split]
+    ]
+    rng.shuffle(candidates)
+    return max(
+        candidates,
+        key=lambda split: (
+            targets[label][split] - label_counts[label][split],
+            capacities[split] - split_counts[split],
+        ),
+    )
+
+
+def assign_multilabel_points(
+    label_sets: list[set[str]],
+    fractions: dict[str, float],
+    seed: int,
+) -> dict[int, str]:
+    """Iteratively assign rare multilabel samples while preserving marginals."""
+    rng = random.Random(seed)
+    capacities = build_split_capacities(len(label_sets), fractions)
+    split_counts = {split: 0 for split in SPLIT_NAMES}
+    remaining_by_label: dict[str, set[int]] = defaultdict(set)
+    for index, labels in enumerate(label_sets):
+        for label in labels:
+            remaining_by_label[label].add(index)
+
+    targets = {
+        label: {
+            split: len(indices) * fractions[split]
+            for split in SPLIT_NAMES
+        }
+        for label, indices in remaining_by_label.items()
+    }
+    label_counts = {
+        label: {split: 0 for split in SPLIT_NAMES}
+        for label in remaining_by_label
+    }
+    heap = [(len(indices), label) for label, indices in remaining_by_label.items()]
+    heapq.heapify(heap)
+    unassigned = set(range(len(label_sets)))
+    assignments: dict[int, str] = {}
+
+    while heap:
+        count, label = heapq.heappop(heap)
+        remaining = remaining_by_label[label]
+        if not remaining or count != len(remaining):
+            continue
+
+        candidates = sorted(remaining)
+        rng.shuffle(candidates)
+        affected_labels: set[str] = set()
+        for index in candidates:
+            split = choose_multilabel_split(
+                label,
+                capacities,
+                split_counts,
+                targets,
+                label_counts,
+                rng,
+            )
+            assignments[index] = split
+            unassigned.remove(index)
+            split_counts[split] += 1
+            for sample_label in label_sets[index]:
+                sample_remaining = remaining_by_label[sample_label]
+                sample_remaining.discard(index)
+                label_counts[sample_label][split] += 1
+                affected_labels.add(sample_label)
+
+        for sample_label in sorted(affected_labels - {label}):
+            sample_remaining = remaining_by_label[sample_label]
+            if sample_remaining:
+                heapq.heappush(
+                    heap,
+                    (len(sample_remaining), sample_label),
+                )
+
+    remaining_indices = sorted(unassigned)
+    rng.shuffle(remaining_indices)
+    for index in remaining_indices:
+        split = max(
+            SPLIT_NAMES,
+            key=lambda name: capacities[name] - split_counts[name],
+        )
+        assignments[index] = split
+        split_counts[split] += 1
+    return assignments
+
+
+def stratification_method(stratify_kind: str) -> str:
+    """Return the metadata method name for one stratification kind."""
+    match stratify_kind:
+        case "regression":
+            return "equal_frequency_target_rank"
+        case "binary":
+            return "exact_binary_class"
+        case "multilabel_ec":
+            return "iterative_hierarchical_label_marginals"
+        case "residue_density":
+            return "equal_frequency_positive_residue_density"
+        case _:
+            raise ValueError(f"Unsupported stratification kind: {stratify_kind}.")
+
+
+def generate_point_stratified_split_rows(
+    rows: list[dict[str, str]],
+    fieldnames: list[str],
+    train_fraction: float,
+    val_fraction: float,
+    test_fraction: float,
+    *,
+    sequence_col: str,
+    stratify_col: str,
+    stratify_kind: str,
+    n_bins: int = 10,
+    separator: str = ";",
+    seed: int = 42,
+) -> tuple[list[str], list[dict[str, str]], dict[str, dict[str, int]]]:
+    """Generate point-level splits with task-aware label stratification."""
+    fractions = validate_split_fractions(train_fraction, val_fraction, test_fraction)
+    match stratify_kind:
+        case "regression":
+            strata = build_numeric_strata(rows, stratify_col, n_bins)
+            split_by_index = assign_stratified_points(strata, fractions, seed)
+        case "binary":
+            strata = build_binary_strata(rows, stratify_col)
+            split_by_index = assign_stratified_points(strata, fractions, seed)
+        case "residue_density":
+            strata = build_residue_strata(
+                rows,
+                sequence_col=sequence_col,
+                stratify_col=stratify_col,
+                n_bins=n_bins,
+            )
+            split_by_index = assign_stratified_points(strata, fractions, seed)
+        case "multilabel_ec":
+            label_sets = build_ec_label_sets(rows, stratify_col, separator)
+            split_by_index = assign_multilabel_points(label_sets, fractions, seed)
+        case _:
+            raise ValueError(f"Unsupported stratification kind: {stratify_kind}.")
+
+    output_fieldnames = list(fieldnames)
+    if "split" not in output_fieldnames:
+        output_fieldnames.append("split")
+    split_rows = [
+        dict(row) | {"split": split_by_index[index]}
+        for index, row in enumerate(rows)
+    ]
+    return output_fieldnames, split_rows, summarize_split_rows(split_rows, sequence_col)
+
+
 def build_sequence_dedup_index(
     group_to_sequence: dict[str, str],
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -979,6 +1312,11 @@ def split_dataset_csv(
     test_fraction: float,
     sequence_col: str | None = None,
     group_col: str | None = None,
+    random_split_unit: str = "group",
+    stratify_col: str | None = None,
+    stratify_kind: str | None = None,
+    stratify_bins: int = 10,
+    stratify_separator: str = ";",
     identity_threshold: float = 0.3,
     coverage_threshold: float | None = None,
     coverage_mode: int | None = None,
@@ -1006,16 +1344,41 @@ def split_dataset_csv(
     resolved_id_col = detect_id_column(fieldnames)
 
     if mode == "random":
-        output_fieldnames, split_rows, summary = generate_random_split_rows(
-            rows,
-            fieldnames,
-            train_fraction,
-            val_fraction,
-            test_fraction,
-            sequence_col=resolved_sequence_col,
-            group_col=resolved_group_col,
-            seed=seed,
-        )
+        match random_split_unit:
+            case "group":
+                output_fieldnames, split_rows, summary = generate_random_split_rows(
+                    rows,
+                    fieldnames,
+                    train_fraction,
+                    val_fraction,
+                    test_fraction,
+                    sequence_col=resolved_sequence_col,
+                    group_col=resolved_group_col,
+                    seed=seed,
+                )
+            case "point":
+                if stratify_col is None or stratify_kind is None:
+                    raise ValueError(
+                        "Point-level random splits require a stratification "
+                        "kind and column."
+                    )
+                output_fieldnames, split_rows, summary = (
+                    generate_point_stratified_split_rows(
+                        rows,
+                        fieldnames,
+                        train_fraction,
+                        val_fraction,
+                        test_fraction,
+                        sequence_col=resolved_sequence_col,
+                        stratify_col=stratify_col,
+                        stratify_kind=stratify_kind,
+                        n_bins=stratify_bins,
+                        separator=stratify_separator,
+                        seed=seed,
+                    )
+                )
+            case _:
+                raise ValueError(f"Unsupported random split unit: {random_split_unit}.")
     elif mode == "similarity":
         output_fieldnames, split_rows, summary = generate_similarity_split_rows(
             rows,
@@ -1102,6 +1465,27 @@ def split_dataset_csv(
         "summary": summary,
         "standardization": standardization_metadata,
     }
+    if mode == "random":
+        mode_payload["split_unit"] = random_split_unit
+        mode_payload["stratification"] = (
+            {
+                "kind": stratify_kind,
+                "column": stratify_col,
+                "bins": (
+                    stratify_bins
+                    if stratify_kind in {"regression", "residue_density"}
+                    else None
+                ),
+                "separator": (
+                    stratify_separator
+                    if stratify_kind == "multilabel_ec"
+                    else None
+                ),
+                "method": stratification_method(str(stratify_kind)),
+            }
+            if random_split_unit == "point"
+            else None
+        )
     if mode == "similarity":
         mode_payload["mmseqs"] = {
             "min_seq_id": identity_threshold,
@@ -1127,6 +1511,241 @@ def split_dataset_csv(
     return summary
 
 
+@dataclasses.dataclass(frozen=True)
+class RandomSplitSpec:
+    """Point-stratification recipe for one random benchmark task."""
+
+    task: str
+    source: str
+    stratify_kind: str
+    stratify_col: str
+
+
+def build_property_random_specs() -> tuple[RandomSplitSpec, ...]:
+    """Return point-stratification recipes for property tasks."""
+    return (
+        RandomSplitSpec(
+            "solubility",
+            "properties/solubility/proteinea_solubility.csv",
+            "binary",
+            "solubility",
+        ),
+        RandomSplitSpec(
+            "ph_opt",
+            "properties/ph_opt/brenda_phopt.csv",
+            "regression",
+            "phopt_median",
+        ),
+        RandomSplitSpec(
+            "ec_number",
+            "properties/ec_number/swissprot_ec.csv",
+            "multilabel_ec",
+            "ec_number",
+        ),
+        RandomSplitSpec(
+            "kcat",
+            "properties/kcat/catpred_kcat.csv",
+            "regression",
+            "kcat",
+        ),
+        RandomSplitSpec(
+            "km",
+            "properties/km/catpred_km.csv",
+            "regression",
+            "km",
+        ),
+        RandomSplitSpec(
+            "binding",
+            "properties/binding/biolip_binding.csv",
+            "binary",
+            "binding",
+        ),
+        RandomSplitSpec(
+            "dtm",
+            "properties/dtm/fireprotdb_dtm.csv",
+            "regression",
+            "dtm",
+        ),
+        RandomSplitSpec(
+            "ddg",
+            "properties/ddg_mut/fireprotdb_ddg.csv",
+            "regression",
+            "ddg",
+        ),
+        RandomSplitSpec(
+            "active_sites",
+            "properties/active_sites/swissprot_active_site.csv",
+            "residue_density",
+            "active_site",
+        ),
+        RandomSplitSpec(
+            "binding_site",
+            "properties/binding_site/swissprot_binding_site.csv",
+            "residue_density",
+            "binding_positions",
+        ),
+    )
+
+
+def build_real_case_random_specs() -> tuple[RandomSplitSpec, ...]:
+    """Return point-stratification recipes for real-case tasks."""
+    return (
+        RandomSplitSpec(
+            "align_amylase_activity",
+            (
+                "real_case/align_amylase_activity/"
+                "alpha_amylase__specific_activity.csv"
+            ),
+            "regression",
+            "specific_activity",
+        ),
+        RandomSplitSpec(
+            "align_amylase_expression",
+            (
+                "real_case/align_amylase_expression/"
+                "alpha_amylase__expression.csv"
+            ),
+            "regression",
+            "expression",
+        ),
+        RandomSplitSpec(
+            "align_amylase_stability",
+            (
+                "real_case/align_amylase_stability/"
+                "alpha_amylase__thermostability.csv"
+            ),
+            "regression",
+            "thermostability",
+        ),
+        RandomSplitSpec(
+            "align_glucosidase_activity",
+            (
+                "real_case/align_glucosidase_activity/"
+                "b_glucosidase__activity.csv"
+            ),
+            "regression",
+            "activity",
+        ),
+        RandomSplitSpec(
+            "align_glucosidase_expression",
+            (
+                "real_case/align_glucosidase_expression/"
+                "b_glucosidase__expression.csv"
+            ),
+            "regression",
+            "expression",
+        ),
+        RandomSplitSpec(
+            "align_glucosidase_melting",
+            (
+                "real_case/align_glucosidase_melting/"
+                "b_glucosidase__melting_point.csv"
+            ),
+            "regression",
+            "melting_point",
+        ),
+        RandomSplitSpec(
+            "cleeveland_galox",
+            "real_case/cleeveland_galox/cleeveland.csv",
+            "regression",
+            "specific_activity",
+        ),
+        RandomSplitSpec(
+            "erickson_petase",
+            "real_case/erickson_petase/erickson.csv",
+            "regression",
+            "sum_aromatic_products",
+        ),
+    )
+
+
+def build_random_split_specs() -> tuple[RandomSplitSpec, ...]:
+    """Return recipes for all 18 random benchmark datasets."""
+    return build_property_random_specs() + build_real_case_random_specs()
+
+
+def select_random_split_specs(
+    specs: tuple[RandomSplitSpec, ...],
+    selected_tasks: list[str] | None,
+) -> tuple[RandomSplitSpec, ...]:
+    """Filter random split recipes while preserving benchmark order."""
+    if selected_tasks is None:
+        return specs
+    selected = set(selected_tasks)
+    return tuple(spec for spec in specs if spec.task in selected)
+
+
+def generate_random_benchmark_split(
+    spec: RandomSplitSpec,
+    project_root: Path,
+    seed: int,
+    stratify_bins: int,
+) -> None:
+    """Generate one benchmark point-stratified random split."""
+    source_path = project_root / "data" / "processed" / spec.source
+    output_path = build_output_csv_path(
+        source_path,
+        mode="random",
+        train_fraction=0.8,
+        val_fraction=0.1,
+        test_fraction=0.1,
+    )
+    metadata_path = build_metadata_path(
+        source_path,
+        train_fraction=0.8,
+        val_fraction=0.1,
+        test_fraction=0.1,
+    )
+    start = time.time()
+    summary = split_dataset_csv(
+        source_path,
+        output_path,
+        mode="random",
+        train_fraction=0.8,
+        val_fraction=0.1,
+        test_fraction=0.1,
+        random_split_unit="point",
+        stratify_col=spec.stratify_col,
+        stratify_kind=spec.stratify_kind,
+        stratify_bins=stratify_bins,
+        seed=seed,
+        standardization_cols=(
+            (spec.stratify_col,)
+            if spec.stratify_kind == "regression"
+            else None
+        ),
+        metadata_path=metadata_path,
+    )
+    print(f"{spec.task}: {output_path} ({time.time() - start:.1f}s)")
+    print(json.dumps(summary, indent=2))
+
+
+def generate_all_random_splits(
+    project_root: Path,
+    selected_tasks: list[str] | None,
+    seed: int,
+    stratify_bins: int,
+    dry_run: bool,
+) -> None:
+    """Generate all selected point-stratified random benchmark splits."""
+    specs = select_random_split_specs(build_random_split_specs(), selected_tasks)
+    if dry_run:
+        for spec in specs:
+            print(
+                f"{spec.task}: {spec.stratify_kind} "
+                f"column={spec.stratify_col} source={spec.source}"
+            )
+        return
+
+    for spec in specs:
+        generate_random_benchmark_split(
+            spec,
+            project_root,
+            seed,
+            stratify_bins,
+        )
+
+
 def build_argument_parser() -> argparse.ArgumentParser:
     """Construct the CLI parser for split generation."""
     parser = argparse.ArgumentParser(
@@ -1136,10 +1755,27 @@ def build_argument_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument(
+        "--all-random",
+        action="store_true",
+        help="Generate point-stratified random splits for all benchmark tasks.",
+    )
+    parser.add_argument(
+        "--task",
+        action="append",
+        choices=[spec.task for spec in build_random_split_specs()],
+        default=None,
+        help="With --all-random, limit generation to selected benchmark tasks.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --all-random, print recipes without writing files.",
+    )
+    parser.add_argument(
         "--input",
         type=Path,
-        required=True,
-        help="Input CSV file or a directory containing CSV datasets.",
+        default=None,
+        help="Input CSV or directory; required unless --all-random is used.",
     )
     parser.add_argument(
         "--output-root",
@@ -1153,25 +1789,25 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         choices=["random", "similarity"],
-        required=True,
-        help="Split strategy to use.",
+        default=None,
+        help="Split strategy; required unless --all-random is used.",
     )
     parser.add_argument(
         "--train-fraction",
         type=float,
-        required=True,
+        default=0.8,
         help="Fraction for the train split.",
     )
     parser.add_argument(
         "--val-fraction",
         type=float,
-        required=True,
+        default=0.1,
         help="Fraction for the validation split.",
     )
     parser.add_argument(
         "--test-fraction",
         type=float,
-        required=True,
+        default=0.1,
         help="Fraction for the test split.",
     )
     parser.add_argument(
@@ -1188,6 +1824,39 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "Optional grouping column so all rows for the same protein stay together. "
             "If omitted, grouping is done by the protein sequence."
         ),
+    )
+    parser.add_argument(
+        "--random-split-unit",
+        choices=["group", "point"],
+        default="group",
+        help=(
+            "Unit assigned by random mode: whole sequence/group or individual "
+            "data point."
+        ),
+    )
+    parser.add_argument(
+        "--stratify-col",
+        type=str,
+        default=None,
+        help="Target or residue-position column used for point stratification.",
+    )
+    parser.add_argument(
+        "--stratify-kind",
+        choices=["regression", "binary", "multilabel_ec", "residue_density"],
+        default=None,
+        help="Task-aware strategy used to stratify point-level random splits.",
+    )
+    parser.add_argument(
+        "--stratify-bins",
+        type=int,
+        default=10,
+        help="Number of rank bins for regression and residue-density targets.",
+    )
+    parser.add_argument(
+        "--stratify-separator",
+        type=str,
+        default=";",
+        help="Delimiter for multilabel values such as EC annotations.",
     )
     parser.add_argument(
         "--identity-threshold",
@@ -1293,6 +1962,19 @@ def main() -> None:
     """Parse CLI arguments and generate split files for one or more datasets."""
     args = build_argument_parser().parse_args()
 
+    if args.all_random:
+        generate_all_random_splits(
+            project_root=Path(__file__).resolve().parents[1],
+            selected_tasks=args.task,
+            seed=args.seed,
+            stratify_bins=args.stratify_bins,
+            dry_run=args.dry_run,
+        )
+        return
+
+    if args.input is None or args.mode is None:
+        raise SystemExit("--input and --mode are required unless --all-random is used.")
+
     if args.mode == "similarity" and shutil.which("mmseqs") is None:
         raise SystemExit(
             "mmseqs is not available in PATH. Activate the conda environment where "
@@ -1333,6 +2015,11 @@ def main() -> None:
                 test_fraction=args.test_fraction,
                 sequence_col=args.sequence_col,
                 group_col=args.group_col,
+                random_split_unit=args.random_split_unit,
+                stratify_col=args.stratify_col,
+                stratify_kind=args.stratify_kind,
+                stratify_bins=args.stratify_bins,
+                stratify_separator=args.stratify_separator,
                 identity_threshold=args.identity_threshold,
                 coverage_threshold=args.mmseqs_coverage_threshold,
                 coverage_mode=args.mmseqs_coverage_mode,

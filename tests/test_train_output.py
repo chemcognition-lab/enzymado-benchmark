@@ -90,7 +90,33 @@ class TrainOutputTests(unittest.TestCase):
             )
             self.assertEqual(hparams["sample_identity"]["test"]["count"], 2)
             self.assertEqual(hparams["random_seed"], 42)
+            self.assertEqual(hparams["prediction_kind"], "value")
             self.assertFalse((run_dir / "target_audit_invalid.json").exists())
+
+    def test_hparams_records_probability_classification_predictions(self) -> None:
+        class FakeWrapper:
+            pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            hparams_file = write_hparams_file(
+                run_dir,
+                task_name="solubility",
+                emb_name="ankh_base",
+                model_name="linear_classifier",
+                split_variant="random",
+                model_info={"wrap": FakeWrapper, "params": {}},
+                task_config=types.SimpleNamespace(
+                    name="solubility",
+                    batch_kind="protein_global",
+                    label_kind="binary",
+                    target_column="solubility",
+                    dataset_paths={},
+                ),
+            )
+
+            hparams = json.loads(hparams_file.read_text())
+            self.assertEqual(hparams["prediction_kind"], "probability")
 
     def test_safetensors_prediction_file_is_compressed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

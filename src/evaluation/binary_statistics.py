@@ -50,36 +50,66 @@ def _sum_rows(values: npt.NDArray[np.bool_]) -> CountArray:
     return values.sum(axis=axes, dtype=np.int64)
 
 
-def count_payload(payload: loaders.PredictionPayload) -> CountArray:
-    """Return per-row TP, FP, FN, and TN sufficient statistics."""
-    with np.errstate(invalid="ignore"):
-        y_label = np.rint(payload.y_true).astype(np.int8, copy=False)
-        prediction_label = np.rint(payload.predictions).astype(
-            np.int8,
-            copy=False,
-        )
-    valid = _valid_mask(payload)
+def count_payload(
+    payload: loaders.PredictionPayload,
+    *,
+    threshold: float = 0.5,
+    row_chunk_size: int = 1024,
+) -> CountArray:
+    """Return per-row TP, FP, FN, and TN sufficient statistics.
 
-    true_positive = _sum_rows((y_label == 1) & (prediction_label == 1) & valid)
-    false_positive = _sum_rows((y_label == 0) & (prediction_label == 1) & valid)
-    false_negative = _sum_rows((y_label == 1) & (prediction_label == 0) & valid)
-    true_negative = _sum_rows((y_label == 0) & (prediction_label == 0) & valid)
-    return np.stack(
-        [true_positive, false_positive, false_negative, true_negative],
-        axis=1,
-    )
+    Rows are processed in bounded chunks so large residue and EC matrices do
+    not materialize several full-size temporary boolean arrays at once.
+    """
+    if not np.isfinite(threshold):
+        raise ValueError(f"threshold must be finite, got {threshold}.")
+    if row_chunk_size <= 0:
+        raise ValueError(
+            f"row_chunk_size must be positive, got {row_chunk_size}."
+        )
+
+    y_true = np.asarray(payload.y_true)
+    predictions = np.asarray(payload.predictions)
+    valid = _valid_mask(payload)
+    counts = np.zeros((y_true.shape[0], 4), dtype=np.int64)
+
+    for start in range(0, y_true.shape[0], row_chunk_size):
+        stop = min(start + row_chunk_size, y_true.shape[0])
+        with np.errstate(invalid="ignore"):
+            y_label = np.rint(y_true[start:stop]).astype(
+                np.int8,
+                copy=False,
+            )
+            prediction_label = predictions[start:stop] >= threshold
+        chunk_valid = valid[start:stop]
+        positive = y_label == 1
+        counts[start:stop, 0] = _sum_rows(
+            positive & prediction_label & chunk_valid
+        )
+        counts[start:stop, 1] = _sum_rows(
+            ~positive & prediction_label & chunk_valid
+        )
+        counts[start:stop, 2] = _sum_rows(
+            positive & ~prediction_label & chunk_valid
+        )
+        counts[start:stop, 3] = _sum_rows(
+            ~positive & ~prediction_label & chunk_valid
+        )
+    return counts
 
 
 def count_blocks(
     blocks: tuple[loaders.PredictionPayload, ...],
+    *,
+    threshold: float = 0.5,
 ) -> CountArray:
     """Aggregate multiple EC heads without concatenating their dense tensors."""
     if not blocks:
         raise ValueError("At least one prediction block is required.")
 
-    counts = count_payload(blocks[0])
+    counts = count_payload(blocks[0], threshold=threshold)
     for block in blocks[1:]:
-        block_counts = count_payload(block)
+        block_counts = count_payload(block, threshold=threshold)
         if block_counts.shape != counts.shape:
             raise ValueError(
                 "Prediction blocks must have the same number of rows; "
@@ -101,7 +131,6 @@ def _metrics(totals: CountArray) -> MetricArrays:
 
     predicted_positive = true_positive + false_positive
     actual_positive = true_positive + false_negative
-    actual_negative = false_positive + true_negative
     total = true_positive + false_positive + false_negative + true_negative
 
     precision = np.divide(
@@ -129,33 +158,11 @@ def _metrics(totals: CountArray) -> MetricArrays:
         out=np.zeros_like(true_positive),
         where=total > 0,
     )
-    true_negative_rate = np.divide(
-        true_negative,
-        actual_negative,
-        out=np.full_like(true_negative, np.nan),
-        where=actual_negative > 0,
-    )
-    true_positive_rate = np.divide(
-        true_positive,
-        actual_positive,
-        out=np.full_like(true_positive, np.nan),
-        where=actual_positive > 0,
-    )
-    auroc = 0.5 * (true_positive_rate + true_negative_rate)
-    prevalence = np.divide(
-        actual_positive,
-        total,
-        out=np.zeros_like(actual_positive),
-        where=total > 0,
-    )
-    auprc = precision * recall + prevalence * (1.0 - recall)
     return {
         "accuracy": accuracy,
         "precision": precision,
         "recall": recall,
         "f1": f1,
-        "auroc": auroc,
-        "auprc": auprc,
     }
 
 

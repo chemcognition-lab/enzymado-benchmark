@@ -1,9 +1,10 @@
 #!/usr/bin/env python
+# ruff: noqa: E402
 """Bootstrap test metrics directly from prediction artifacts.
 
-Classification reuses cached per-row TP/FP/FN/TN statistics. Regression uses
-the raw payload. Existing metrics are never required: the test point estimate
-is recomputed before bootstrap metadata is written.
+General tasks recompute every registered metric from raw predictions. EC-number
+and residue-level tasks bootstrap only threshold metrics by protein and retain
+the exact point AUROC/AUPRC already stored in metrics.json.
 
 Example:
     python scripts/results/compute_bootstrap_metrics.py --filter-task ec_number
@@ -32,12 +33,14 @@ sys.path.insert(0, str(_repo_root()))
 from src.evaluation import (
     binary_statistics,
     discover,
+    ec_evaluation,
     loaders,
     metrics_registry,
-    statistics_cache,
     task_types,
 )
-from src.evaluation import bootstrap as bootstrap_lib
+from src.evaluation import (
+    bootstrap as bootstrap_lib,
+)
 
 
 def _task_seed(seed_root: int, signature: tuple[str, ...]) -> int:
@@ -49,67 +52,93 @@ def _task_seed(seed_root: int, signature: tuple[str, ...]) -> int:
     return int(generator.integers(0, 2**31 - 1)) ^ salt
 
 
-def _classification_evaluation(
-    experiment: discover.Experiment,
-    indices: binary_statistics.CountArray,
-    predictions_root: pathlib.Path,
-    statistics_root: pathlib.Path,
-) -> tuple[dict[str, object], binary_statistics.MetricArrays, int] | None:
-    """Calculate point and bootstrap classification metrics from counts."""
-    counts = statistics_cache.load_or_create_counts(
-        statistics_root,
-        predictions_root,
-        experiment.run_dir,
-        "test",
-    )
-    if counts is None:
+def _label_kind(experiment: discover.Experiment) -> str | None:
+    """Read the structured label kind recorded during training."""
+    task_config = loaders.read_hparams(experiment.run_dir).get("task_config")
+    if not isinstance(task_config, dict):
         return None
-    point_metrics = binary_statistics.evaluate(counts, split="test")
-    replicates = binary_statistics.bootstrap(counts, indices)
-    return point_metrics, replicates, counts.shape[0]
+    label_kind = task_config.get("label_kind")
+    return label_kind if isinstance(label_kind, str) else None
 
 
-def _regression_evaluation(
+def _evaluation(
     experiment: discover.Experiment,
-    indices: binary_statistics.CountArray,
+    indices: np.ndarray,
+    task_type: str,
 ) -> tuple[dict[str, object], dict[str, np.ndarray], int] | None:
-    """Calculate point and bootstrap regression metrics from raw arrays."""
+    """Calculate point and bootstrap metrics from raw prediction scores."""
+    if experiment.task == "ec_number":
+        metrics = loaders.read_metrics(experiment.run_dir)
+        point_metrics = metrics.get("test")
+        if not isinstance(point_metrics, dict):
+            raise ValueError(
+                f"Level-aware EC metrics must be computed before bootstrap: "
+                f"{experiment.run_dir}."
+            )
+        raw_thresholds = point_metrics.get("thresholds")
+        if not isinstance(raw_thresholds, dict):
+            raise ValueError(
+                f"Missing validation EC thresholds in {experiment.run_dir}."
+            )
+        thresholds: dict[str, float] = {}
+        for level_name in ec_evaluation.LEVEL_NAMES:
+            value = raw_thresholds.get(level_name)
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"Missing threshold for {level_name} in {experiment.run_dir}."
+                )
+            thresholds[level_name] = float(value)
+        replicates = ec_evaluation.bootstrap_split(
+            experiment.run_dir,
+            indices,
+            thresholds,
+        )
+        return point_metrics, replicates, int(indices.shape[1])
+
+    if _label_kind(experiment) == "residue_binary_vector":
+        metrics = loaders.read_metrics(experiment.run_dir)
+        point_metrics = metrics.get("test")
+        if not isinstance(point_metrics, dict):
+            raise ValueError(
+                f"Point metrics must be computed before residue bootstrap: "
+                f"{experiment.run_dir}."
+            )
+        blocks = loaders.load_split_blocks(experiment.run_dir, "test")
+        if blocks is None:
+            return None
+        counts = binary_statistics.count_blocks(blocks, threshold=0.5)
+        replicates = binary_statistics.bootstrap(counts, indices)
+        return point_metrics, replicates, int(counts.shape[0])
+
     payload = loaders.load_test_predictions(experiment.run_dir)
     if payload is None:
         return None
     point_metrics = metrics_registry.evaluate_predictions(
         payload.y_true,
         payload.predictions,
-        "regression",
+        task_type,
         payload.target_mask,
         split="test",
     )
-    metric_set = metrics_registry.metric_set_for("regression")
+    metric_set = metrics_registry.metric_set_for(task_type)
     replicates = bootstrap_lib.bootstrap_replicates(
         payload,
         indices,
         metric_set,
-        "regression",
+        task_type,
     )
     return point_metrics, replicates, bootstrap_lib.n_resample_units(payload)
 
 
 def _n_units(
     experiment: discover.Experiment,
-    task_type: str,
-    predictions_root: pathlib.Path,
-    statistics_root: pathlib.Path,
 ) -> int | None:
     """Load only enough evaluation data to determine the resampling size."""
-    if task_type == "classification":
-        counts = statistics_cache.load_or_create_counts(
-            statistics_root,
-            predictions_root,
-            experiment.run_dir,
-            "test",
-        )
-        return None if counts is None else counts.shape[0]
-
+    identity = loaders.read_sample_identity(experiment.run_dir, "test")
+    if identity is not None:
+        return identity[0]
+    if experiment.task == "ec_number":
+        return ec_evaluation.n_resample_units(experiment.run_dir)
     payload = loaders.load_test_predictions(experiment.run_dir)
     return None if payload is None else bootstrap_lib.n_resample_units(payload)
 
@@ -145,11 +174,6 @@ def _parse_args() -> argparse.Namespace:
         default=repo / "results" / "bootstrap",
     )
     parser.add_argument(
-        "--statistics-root",
-        type=pathlib.Path,
-        default=repo / "results" / "evaluation_statistics",
-    )
-    parser.add_argument(
         "--benchmark-card",
         type=pathlib.Path,
         default=repo / "benchmark_card.json",
@@ -157,6 +181,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--n-replicates", type=int, default=200)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--confidence-level", type=float, default=0.95)
+    parser.add_argument(
+        "--task-scope",
+        choices=sorted(discover.TASK_SCOPES),
+        default=None,
+        help="Only bootstrap experiments from this task scope.",
+    )
     parser.add_argument(
         "--filter-task",
         action="append",
@@ -168,28 +198,71 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not recompute an existing bootstrap test.npz.",
     )
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     return parser.parse_args()
 
 
 def _select_experiments(
     experiments: list[discover.Experiment],
     selected_tasks: list[str] | None,
+    task_scope: str | None = None,
 ) -> list[discover.Experiment]:
     """Apply an optional task filter and report its effect."""
-    if not selected_tasks:
-        return experiments
-    selected = set(selected_tasks)
-    filtered = [item for item in experiments if item.task in selected]
-    names = ", ".join(sorted(selected))
-    print(f"Filtering to task(s): {names} ({len(filtered)}/{len(experiments)})")
+    filtered = experiments
+    if task_scope is not None:
+        filtered = [item for item in filtered if item.task_scope == task_scope]
+        print(
+            f"Filtering to task scope: {task_scope} "
+            f"({len(filtered)}/{len(experiments)})"
+        )
+    if selected_tasks:
+        selected = set(selected_tasks)
+        before = len(filtered)
+        filtered = [item for item in filtered if item.task in selected]
+        names = ", ".join(sorted(selected))
+        print(f"Filtering to task(s): {names} ({len(filtered)}/{before})")
     return filtered
+
+
+def _select_shard(
+    experiments: list[discover.Experiment],
+    shard_index: int,
+    shard_count: int,
+) -> list[discover.Experiment]:
+    """Select a deterministic experiment shard for Slurm arrays."""
+    if shard_count <= 0:
+        raise ValueError(f"shard-count must be positive, got {shard_count}.")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError(
+            f"shard-index must be in [0, {shard_count}), got {shard_index}."
+        )
+    return [
+        experiment
+        for index, experiment in enumerate(experiments)
+        if index % shard_count == shard_index
+    ]
 
 
 def main() -> None:
     """Compute bootstrap distributions and confidence intervals."""
     args = _parse_args()
     experiments = discover.discover_experiments(args.predictions_root)
-    experiments = _select_experiments(experiments, args.filter_task)
+    experiments = _select_experiments(
+        experiments,
+        args.filter_task,
+        args.task_scope,
+    )
+    unsharded_count = len(experiments)
+    experiments = _select_shard(
+        experiments,
+        args.shard_index,
+        args.shard_count,
+    )
+    print(
+        f"Shard {args.shard_index + 1}/{args.shard_count}: "
+        f"{len(experiments)}/{unsharded_count} experiments"
+    )
     print(f"Discovered {len(experiments)} experiments under {args.predictions_root}")
     if not experiments:
         return
@@ -207,7 +280,7 @@ def main() -> None:
     ):
         seed = _task_seed(args.seed, signature)
         reference_identity: tuple[int, str] | None = None
-        shared_indices: binary_statistics.CountArray | None = None
+        shared_indices: np.ndarray | None = None
         print(
             f"[{task_index}/{len(grouped)}] task={signature} "
             f"n_exps={len(task_experiments)} seed={seed}"
@@ -230,12 +303,7 @@ def main() -> None:
                 print(f"    {experiment.embedding_model}: unknown task type; skipping")
                 continue
 
-            n_units = _n_units(
-                experiment,
-                task_type,
-                args.predictions_root,
-                args.statistics_root,
-            )
+            n_units = _n_units(experiment)
             if n_units is None or not n_units:
                 print(
                     f"    {experiment.embedding_model}: no test predictions; skipping"
@@ -286,15 +354,7 @@ def main() -> None:
                 )
 
             started = time.perf_counter()
-            if task_type == "classification":
-                evaluation = _classification_evaluation(
-                    experiment,
-                    indices,
-                    args.predictions_root,
-                    args.statistics_root,
-                )
-            else:
-                evaluation = _regression_evaluation(experiment, indices)
+            evaluation = _evaluation(experiment, indices, task_type)
             if evaluation is None:
                 print(f"    {experiment.embedding_model}: evaluation failed; skipping")
                 continue
@@ -335,6 +395,10 @@ def main() -> None:
                 "sample_identity_sha256": identity[1] if identity else None,
                 "paired_by_sample_id": paired_by_sample_id,
                 "paired_by_position": paired_by_sample_id,
+                "ranking_metrics_bootstrapped": (
+                    experiment.task != "ec_number"
+                    and _label_kind(experiment) != "residue_binary_vector"
+                ),
                 "metrics": summary,
             }
             loaders.write_metrics(experiment.run_dir, metrics)

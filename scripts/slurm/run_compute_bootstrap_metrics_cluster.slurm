@@ -32,8 +32,15 @@ source "${REPO}/.venv/bin/activate"
 : "${SKIP_EXISTING:=1}"
 : "${N_REPLICATES:=200}"
 : "${SEED:=0}"
+: "${SHARD_COUNT:=1}"
+: "${SHARD_INDEX:=${SLURM_ARRAY_TASK_ID:-0}}"
 
-ARGS=(--n-replicates "${N_REPLICATES}" --seed "${SEED}")
+ARGS=(
+    --n-replicates "${N_REPLICATES}"
+    --seed "${SEED}"
+    --shard-count "${SHARD_COUNT}"
+    --shard-index "${SHARD_INDEX}"
+)
 if [[ "${SKIP_EXISTING}" == "1" || "${SKIP_EXISTING}" == "true" || "${SKIP_EXISTING}" == "TRUE" ]]; then
     ARGS+=(--skip-existing)
 fi
@@ -49,4 +56,5 @@ fi
 echo "Filter tasks: ${FILTER_TASKS:-<none>}"
 echo "Skip existing: ${SKIP_EXISTING}"
 echo "N replicates: ${N_REPLICATES}"
+echo "Shard: ${SHARD_INDEX}/${SHARD_COUNT}"
 python -u "${REPO}/scripts/results/compute_bootstrap_metrics.py" "${ARGS[@]}"

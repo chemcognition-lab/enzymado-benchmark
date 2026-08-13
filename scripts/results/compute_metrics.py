@@ -1,9 +1,13 @@
 #!/usr/bin/env python
-"""Compute primary metrics directly from saved prediction artifacts.
+# ruff: noqa: E402
+"""Compute metrics directly from saved prediction artifacts.
 
 The benchmark card determines each task type when training metadata is absent.
-Classification is reduced to compact per-row confusion counts that are cached
-for the bootstrap pass, avoiding dense EC concatenation.
+Classification ranking metrics are calculated from the saved continuous
+positive-class scores.
+
+EC-number is evaluated separately at each hierarchy level. Threshold metrics
+use validation-calibrated operating points; AUROC/AUPRC remain threshold-free.
 
 Example:
     python scripts/results/compute_metrics.py --filter-task ec_number
@@ -24,11 +28,10 @@ def _repo_root() -> pathlib.Path:
 sys.path.insert(0, str(_repo_root()))
 
 from src.evaluation import (
-    binary_statistics,
     discover,
+    ec_evaluation,
     loaders,
     metrics_registry,
-    statistics_cache,
     task_types,
 )
 
@@ -36,26 +39,26 @@ from src.evaluation import (
 def _compute_metrics(
     experiment: discover.Experiment,
     task_type: str,
-    predictions_root: pathlib.Path,
-    statistics_root: pathlib.Path,
+    *,
+    ec_threshold_grid_size: int,
 ) -> dict[str, dict[str, object]]:
     """Compute every available split for one experiment."""
-    metrics_by_split: dict[str, dict[str, object]] = {}
-    for split_name in ("train", "val", "test"):
-        if task_type == "classification":
-            counts = statistics_cache.load_or_create_counts(
-                statistics_root,
-                predictions_root,
+    if experiment.task == "ec_number":
+        calibrations = ec_evaluation.calibrate_thresholds(
+            experiment.run_dir,
+            grid_size=ec_threshold_grid_size,
+        )
+        return {
+            split_name: ec_evaluation.evaluate_split(
                 experiment.run_dir,
                 split_name,
+                calibrations,
             )
-            if counts is not None:
-                metrics_by_split[split_name] = binary_statistics.evaluate(
-                    counts,
-                    split=split_name,
-                )
-            continue
+            for split_name in ("val", "test")
+        }
 
+    metrics_by_split: dict[str, dict[str, object]] = {}
+    for split_name in ("train", "val", "test"):
         payload = loaders.load_split_predictions(experiment.run_dir, split_name)
         if payload is None:
             continue
@@ -79,11 +82,6 @@ def _parse_args() -> argparse.Namespace:
         default=repo / "results" / "predictions",
     )
     parser.add_argument(
-        "--statistics-root",
-        type=pathlib.Path,
-        default=repo / "results" / "evaluation_statistics",
-    )
-    parser.add_argument(
         "--benchmark-card",
         type=pathlib.Path,
         default=repo / "benchmark_card.json",
@@ -99,7 +97,34 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not recompute runs that already contain metrics.json.",
     )
+    parser.add_argument(
+        "--ec-threshold-grid-size",
+        type=int,
+        default=ec_evaluation.DEFAULT_THRESHOLD_GRID_SIZE,
+        help="Number of validation thresholds considered for each EC level.",
+    )
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     return parser.parse_args()
+
+
+def _select_shard(
+    experiments: list[discover.Experiment],
+    shard_index: int,
+    shard_count: int,
+) -> list[discover.Experiment]:
+    """Select a deterministic experiment shard for Slurm arrays."""
+    if shard_count <= 0:
+        raise ValueError(f"shard-count must be positive, got {shard_count}.")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError(
+            f"shard-index must be in [0, {shard_count}), got {shard_index}."
+        )
+    return [
+        experiment
+        for index, experiment in enumerate(experiments)
+        if index % shard_count == shard_index
+    ]
 
 
 def main() -> None:
@@ -116,6 +141,16 @@ def main() -> None:
         ]
         selected = ", ".join(sorted(selected_tasks))
         print(f"Filtering to task(s): {selected} ({len(experiments)}/{before})")
+    unsharded_count = len(experiments)
+    experiments = _select_shard(
+        experiments,
+        args.shard_index,
+        args.shard_count,
+    )
+    print(
+        f"Shard {args.shard_index + 1}/{args.shard_count}: "
+        f"{len(experiments)}/{unsharded_count} experiments"
+    )
     print(f"Discovered {len(experiments)} experiments under {args.predictions_root}")
 
     written = 0
@@ -142,8 +177,7 @@ def main() -> None:
         metrics = _compute_metrics(
             experiment,
             task_type,
-            args.predictions_root,
-            args.statistics_root,
+            ec_threshold_grid_size=args.ec_threshold_grid_size,
         )
         if not metrics:
             print(f"{label}: no raw predictions found; skipping")

@@ -1,11 +1,14 @@
 """Populate dataset card JSON files with statistics computed from processed CSVs."""
 
-import pandas as pd
-import numpy as np
+import argparse
+from datetime import datetime
 import json
 from pathlib import Path
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+import numpy as np
+import pandas as pd
+
 
 class DatasetCardPopulator:
     """Compute dataset statistics and write them back into dataset card files."""
@@ -252,11 +255,11 @@ class DatasetCardPopulator:
         Returns a dict with paths to saved figures, or None on failure.
         """
         try:
-            import umap as umap_lib
             import matplotlib
+            import umap as umap_lib
             matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
             import matplotlib.colors as mcolors
+            import matplotlib.pyplot as plt
         except ImportError as e:
             print(f"  [UMAP] Missing dependency ({e}) — skipping UMAP generation.")
             return None
@@ -583,10 +586,10 @@ class DatasetCardPopulator:
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
+            from scipy.cluster.hierarchy import dendrogram, linkage
+            from scipy.spatial.distance import squareform
             from sklearn.feature_extraction.text import CountVectorizer
             from sklearn.metrics.pairwise import cosine_distances
-            from scipy.cluster.hierarchy import linkage, dendrogram
-            from scipy.spatial.distance import squareform
         except ImportError as e:
             print(f"  [Dendrogram] Missing dependency: {e} — skipping.")
             return None
@@ -731,9 +734,8 @@ class DatasetCardPopulator:
 
         print("Pipeline Complete! All dataset_card.json files have been populated.")
 
-if __name__ == "__main__":
-<<<<<<< HEAD
-    import argparse
+def main() -> None:
+    """Populate dataset cards using command-line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_dir", default="data/processed/properties")
     parser.add_argument("--emb_model", default=None,
@@ -748,7 +750,7 @@ if __name__ == "__main__":
         embeddings_json=args.embeddings_json,
         seq_identity=args.seq_identity,
     ).run()
-=======
-    BASE_DIR = "data/processed/properties"
-    DatasetCardPopulator(BASE_DIR).run()
->>>>>>> b6794baf7142e64fd0a3864acd461b297200046d
+
+
+if __name__ == "__main__":
+    main()

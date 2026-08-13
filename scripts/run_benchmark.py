@@ -17,6 +17,11 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "predictions"
+
+# Tasks whose training raised. Collected so the process can exit non-zero: a
+# caught exception must not let SLURM report COMPLETED for a job that produced
+# no artifacts.
+FAILED_TASKS: list[str] = []
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from data_loading import (
@@ -57,6 +62,7 @@ from training.predict import (
     SavedModelRun,
     predict_from_arrays,
     predict_from_loaders,
+    predict_split_from_loader,
 )
 from training.train import (
     ATTENTION_ROUTE,
@@ -167,6 +173,7 @@ def save_residue_predictions(
     *,
     prepared,
     use_validation: bool,
+    task_type: str,
     config,
     run_dir: Path,
     task_name: str,
@@ -189,9 +196,11 @@ def save_residue_predictions(
     for split_name, bundle, loader in split_jobs:
         log(f"      Predicting/saving split='{split_name}'...")
         y_true, target_mask = get_target_payload(bundle)
-        pred = trained_payload.trained.predict_loader(
+        pred = predict_split_from_loader(
+            trained_payload.trained,
             loader,
-            batch_kind=config.batch_kind,
+            config.batch_kind,
+            task_type,
         )
         saved_paths[split_name] = save_raw_predictions(
             y_true,
@@ -218,6 +227,7 @@ def run_model(
     model_info: dict,
     prepared: PooledTaskData | LoaderTaskData,
     config,
+    task_type: str,
     use_validation: bool,
     run_dir: Path,
     task_name: str,
@@ -248,6 +258,7 @@ def run_model(
         prediction_paths = save_residue_predictions(
             trained_payload,
             prepared=prepared,
+            task_type=task_type,
             config=config,
             **save_kwargs,
         )
@@ -273,8 +284,9 @@ def run_model(
             val_loader,
             test_loader,
             prepared,
-            use_validation,
-            config.batch_kind,
+            use_validation=use_validation,
+            batch_kind=config.batch_kind,
+            task_type=task_type,
         )
         prediction_paths = save_split_predictions(
             outputs,
@@ -293,8 +305,11 @@ def run_model(
             x_tr, y_tr,
             x_va, y_va,
             x_te, y_te,
-            use_validation,
-            m_tr, m_va, m_te,
+            use_validation=use_validation,
+            task_type=task_type,
+            target_mask_train=m_tr,
+            target_mask_val=m_va,
+            target_mask_test=m_te,
         )
         prediction_paths = save_split_predictions(
             outputs,
@@ -527,6 +542,7 @@ def _run_task(
                 model_info=seeded_model_info,
                 prepared=prepared,
                 config=config,
+                task_type=task_type,
                 use_validation=use_validation,
                 run_dir=run_dir,
                 task_name=task_name,
@@ -561,15 +577,21 @@ def _run_task(
                 )
 
             if getattr(trained, "best_epoch_", None) is not None:
+                validation_metric = trained.validation_metric_
                 log(
                     f"      Early stopping: best_epoch={trained.best_epoch_},"
-                    f" best_val_loss={trained.best_val_loss_:.6f}"
+                    f" best_val_{validation_metric}="
+                    f"{trained.best_val_score_:.6f}"
                 )
             log(f"      Saved → {run_dir.relative_to(output_dir)} [{artifact_stem}]")
 
     except Exception as task_exc:
         log(f"  [ERROR] Task '{task_name}' failed: {task_exc}")
         log(traceback.format_exc())
+        # Keep going so one bad task does not cost the whole array element, but
+        # record it: without this the process still exits 0 and SLURM reports
+        # COMPLETED for a job that trained nothing.
+        FAILED_TASKS.append(task_name)
     finally:
         if prepared is not None:
             prepared.cleanup()
@@ -736,6 +758,10 @@ def main(
                     training_route_override=ATTENTION_ROUTE,
                     model_map_fn=_select_attention_model_map,
                 )
+
+    if FAILED_TASKS:
+        log(f"Done, but {len(FAILED_TASKS)} task(s) failed: {sorted(set(FAILED_TASKS))}")
+        sys.exit(1)
 
     log("Done.")
 

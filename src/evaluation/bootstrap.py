@@ -4,18 +4,15 @@ The same `(n_replicates, n_units)` index matrix is reused across every experimen
 the same task so embedding models are scored on identical resamples; the caller is
 responsible for generating and supplying that matrix.
 
-Metrics that reduce to precomputed per-row values (classification metrics via
-TP/FP/FN/TN counts; regression MAE/RMSE via per-row error sums) are evaluated
-for all replicates in one vectorized NumPy call
-instead of a Python loop calling the metric function once per replicate — the
-per-row values are summed once per replicate via `stats[indices].sum(axis=1)`,
-then combined into the final metric. r2 and kendall_tau cannot be reduced this
-way: r2's sum-of-squares-total depends on the resample's own mean (not a fixed
-global value), and kendall_tau depends on the pairwise rank order of whichever
-rows end up in a given resample — neither is a sum of independent per-row
-contributions, so both are recomputed directly on each replicate's resampled
-values. The caller passes `task_type` explicitly; it is never inferred from the
-numeric range of the data (a normalized regression target living in [0, 1] would
+Threshold classification metrics reduce to per-row TP/FP/FN/TN counts, while
+regression MAE/RMSE reduce to per-row error sums. Ranking metrics AUROC/AUPRC
+retain continuous scores and are recomputed per replicate. Additive values are
+evaluated for all replicates in one vectorized NumPy call via
+`stats[indices].sum(axis=1)`. r2 and kendall_tau cannot be reduced this way:
+r2's sum-of-squares-total depends on the resample's own mean (not a fixed
+global value), and kendall_tau depends on the rank order of resampled rows.
+The caller passes `task_type` explicitly; it is never inferred from the numeric
+range of the data (a normalized regression target living in [0, 1] would
 be indistinguishable from binary labels by value alone).
 
 Example:
@@ -94,6 +91,7 @@ def _bootstrap_classification_counts(
     return binary_statistics.bootstrap(counts, indices)
 
 
+_COUNT_CLASSIFICATION_METRICS = {"accuracy", "precision", "recall", "f1"}
 _ADDITIVE_REGRESSION_METRICS = {"mae", "rmse"}
 
 
@@ -183,11 +181,28 @@ def bootstrap_replicates(
     task_type selects the path — it is the caller's already-known task type
     (e.g. from hparams.json), never guessed from the data itself.
     """
-    if task_type == "classification":
-        counts = _precompute_binary_counts(payload)
-        return _bootstrap_classification_counts(counts, indices)
-
     out: dict[str, np.ndarray] = {}
+    if task_type == "classification":
+        additive_names = _COUNT_CLASSIFICATION_METRICS & metric_set.keys()
+        if additive_names:
+            counts = _precompute_binary_counts(payload)
+            additive = _bootstrap_classification_counts(counts, indices)
+            out.update(
+                {
+                    name: values
+                    for name, values in additive.items()
+                    if name in additive_names
+                }
+            )
+        remaining = {
+            name: function
+            for name, function in metric_set.items()
+            if name not in additive_names
+        }
+        if remaining:
+            out.update(_bootstrap_per_replicate(payload, indices, remaining))
+        return out
+
     additive_names = _ADDITIVE_REGRESSION_METRICS & metric_set.keys()
     if additive_names:
         stats = _precompute_regression_errors(payload)
