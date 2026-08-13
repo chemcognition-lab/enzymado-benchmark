@@ -64,6 +64,10 @@ profluent = [
     "flash-attn",
     "torch==2.7.0",
 ]
+viz = [
+    "streamlit",
+    "plotly",
+]
 
 [tool.uv.sources]
 torch = [

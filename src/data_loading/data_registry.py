@@ -263,6 +263,18 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         target_column="sum_aromatic_products_standardized",
         index_columns=("dataset_id",),
     ),
+    "skid_adh_km_demo": TaskConfig(
+        name="skid_adh_km_demo",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA / "real_case/skid_adh_km_demo/skid_adh_km_demo_random_80_10_10_standardized.csv",
+        },
+        target_column="km_value_mM_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
 }
 
 
