@@ -97,6 +97,9 @@ class Batch:
     #Ligand related
     ligand_feat: np.ndarray | None = None
 
+    #Numeric experimental context
+    context_feat: np.ndarray | None = None
+
     #target related
     target: Any | None = None
     target_per_residue: np.ndarray | None = None
@@ -124,12 +127,31 @@ class _GlobalCollatorBase(Collator):
             target_mask=self._optional_target_mask(samples),
         )
 
+    def _optional_context_features(
+        self,
+        samples: list[dict[str, Any]],
+    ) -> np.ndarray | None:
+        present = ["context_feat" in sample for sample in samples]
+        if not any(present):
+            return None
+        if not all(present):
+            raise ValueError("context_feat must be present for every sample in a batch.")
+        return np.stack(self._extract(samples, "context_feat")).astype(
+            np.float32,
+            copy=False,
+        )
+
 
 class ProteinGlobalCollator(_GlobalCollatorBase):
     """Collate global protein samples into a padded batch."""
     def __call__(self, samples: list[dict[str, Any]]) -> Batch:
         protein_emb, protein_mask = _pad_residue_embeddings(self._extract(samples, "protein_emb"))
-        return Batch(protein_emb=protein_emb, protein_mask=protein_mask, **self._global_batch_kwargs(samples))
+        return Batch(
+            protein_emb=protein_emb,
+            protein_mask=protein_mask,
+            context_feat=self._optional_context_features(samples),
+            **self._global_batch_kwargs(samples),
+        )
 
 
 class ProteinLigandGlobalCollator(_GlobalCollatorBase):
@@ -141,6 +163,7 @@ class ProteinLigandGlobalCollator(_GlobalCollatorBase):
             protein_emb=protein_emb,
             protein_mask=protein_mask,
             ligand_feat=ligand_feat,
+            context_feat=self._optional_context_features(samples),
             **self._global_batch_kwargs(samples),
         )
 

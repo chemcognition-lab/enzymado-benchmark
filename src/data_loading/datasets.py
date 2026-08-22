@@ -20,6 +20,7 @@ from .collators import (
 )
 from .features import (
     MutationDeltaEmbeddingBuilder,
+    NumericFeatureBuilder,
     PooledEmbeddingStore,
     ProteinResidueEmbeddingBuilder,
     RDKitLigandFeatureBuilder,
@@ -114,13 +115,19 @@ class ProteinGlobalDataset(BaseComposableDataset):
         rows: list[dict[str, str]],
         protein_builder: ProteinResidueEmbeddingBuilder,
         label_builder: Any,
+        numeric_builder: NumericFeatureBuilder | None = None,
         missing_policy: str = "raise",
     ) -> None:
         self.protein_builder = protein_builder
+        self.numeric_builder = numeric_builder
         super().__init__(rows, label_builder=label_builder, missing_policy=missing_policy)
 
     def _feature_builders(self) -> tuple[Any, ...]:
-        return (self.protein_builder,)
+        return tuple(
+            builder
+            for builder in (self.protein_builder, self.numeric_builder)
+            if builder is not None
+        )
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
         """Attach the protein embedding and scalar or multilabel target."""
@@ -128,6 +135,8 @@ class ProteinGlobalDataset(BaseComposableDataset):
             "sample_id": row["sample_id"],
             "protein_emb": self.protein_builder.build(row),
         }
+        if self.numeric_builder is not None:
+            sample["context_feat"] = self.numeric_builder.build(row)
         sample.update(self._merge_label_payload(self.label_builder.build(row)))
         return sample
 
@@ -140,14 +149,20 @@ class ProteinLigandGlobalDataset(BaseComposableDataset):
         protein_builder: ProteinResidueEmbeddingBuilder,
         ligand_builder: RDKitLigandFeatureBuilder,
         label_builder: Any,
+        numeric_builder: NumericFeatureBuilder | None = None,
         missing_policy: str = "raise",
     ) -> None:
         self.protein_builder = protein_builder
         self.ligand_builder = ligand_builder
+        self.numeric_builder = numeric_builder
         super().__init__(rows, label_builder=label_builder, missing_policy=missing_policy)
 
     def _feature_builders(self) -> tuple[Any, ...]:
-        return (self.protein_builder, self.ligand_builder)
+        return tuple(
+            builder
+            for builder in (self.protein_builder, self.ligand_builder, self.numeric_builder)
+            if builder is not None
+        )
 
     def _build_sample(self, row: dict[str, str]) -> dict[str, Any]:
         """Attach protein, ligand, and target payloads for one sample."""
@@ -156,6 +171,8 @@ class ProteinLigandGlobalDataset(BaseComposableDataset):
             "protein_emb": self.protein_builder.build(row),
             "ligand_feat": self.ligand_builder.build(row),
         }
+        if self.numeric_builder is not None:
+            sample["context_feat"] = self.numeric_builder.build(row)
         sample.update(self._merge_label_payload(self.label_builder.build(row)))
         return sample
 
@@ -342,12 +359,18 @@ def build_dataset_from_config(
         sequence_column=config.sequence_column,
         index_columns=config.index_columns,
     )
+    numeric_builder = (
+        NumericFeatureBuilder(config.numeric_feature_columns)
+        if config.numeric_feature_columns
+        else None
+    )
 
     if config.batch_kind == "protein_global":
         dataset = ProteinGlobalDataset(
             rows=dataset_rows,
             protein_builder=protein_builder,
             label_builder=label_builder,
+            numeric_builder=numeric_builder,
             missing_policy=missing_policy,
         )
         collator = ProteinGlobalCollator()
@@ -361,6 +384,7 @@ def build_dataset_from_config(
             protein_builder=protein_builder,
             ligand_builder=ligand_builder,
             label_builder=label_builder,
+            numeric_builder=numeric_builder,
             missing_policy=missing_policy,
         )
         collator = ProteinLigandGlobalCollator()

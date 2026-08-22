@@ -47,6 +47,7 @@ class TaskConfig:
     sequence_column: str = "protein_sequence"
     split_column: str = "split"
     ligand_column: str | None = None
+    numeric_feature_columns: tuple[str, ...] = ()
     index_columns: tuple[str, ...] = ("dataset_id", "uniprot_id")
     wildtype_sequence_column: str | None = None
     residue_positions_column: str | None = None
@@ -250,6 +251,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         },
         target_column="specific_activity_standardized",
         ligand_column="smiles",
+        numeric_feature_columns=("substrate_concentration",),
         index_columns=("dataset_id",),
     ),
     "erickson_petase": TaskConfig(
@@ -261,6 +263,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.RANDOM: _DATA / "real_case/erickson_petase/erickson_random_80_10_10_standardized.csv",
         },
         target_column="sum_aromatic_products_standardized",
+        numeric_feature_columns=("temperature",),
         index_columns=("dataset_id",),
     ),
 }

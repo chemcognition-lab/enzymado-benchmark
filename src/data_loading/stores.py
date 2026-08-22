@@ -556,6 +556,9 @@ def build_xy_pooled(bundle, batch_kind: str) -> tuple[torch.Tensor, torch.Tensor
             x = sample["protein_emb"].float()
             if x.ndim == 2:
                 x = x.mean(dim=0)
+            context = sample.get("context_feat")
+            if context is not None:
+                x = torch.cat([x, context.float()])
         elif batch_kind == "mutation_delta_global":
             x = sample["protein_delta_emb"].float()
             if x.ndim == 2:
@@ -566,6 +569,11 @@ def build_xy_pooled(bundle, batch_kind: str) -> tuple[torch.Tensor, torch.Tensor
                 protein = protein.mean(dim=0)
             ligand = sample["ligand_feat"].float()
             x = torch.cat([protein, ligand])
+            context = sample.get("context_feat")
+            if context is not None:
+                x = torch.cat([x, context.float()])
+        else:
+            raise ValueError(f"Unsupported batch_kind '{batch_kind}'.")
         x_list.append(x)
         y_list.append(sample["target"])
     return torch.stack(x_list), torch.tensor(y_list, dtype=torch.float32)

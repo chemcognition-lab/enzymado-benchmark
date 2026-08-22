@@ -527,6 +527,193 @@ def generate_random_split_rows(
     return output_fieldnames, split_rows, summarize_split_rows(split_rows, sequence_col)
 
 
+def build_point_index(
+    rows: list[dict[str, str]],
+    *,
+    sequence_col: str,
+    point_id_col: str,
+    stratify_col: str,
+) -> tuple[dict[str, list[int]], dict[str, str], dict[str, float]]:
+    """Index measurement points and validate their sequence and target values."""
+    point_to_indices: dict[str, list[int]] = defaultdict(list)
+    point_to_sequence: dict[str, str] = {}
+    target_values: dict[str, list[float]] = defaultdict(list)
+
+    for row_index, row in enumerate(rows):
+        point_id = str(row.get(point_id_col, "")).strip()
+        if not point_id:
+            raise ValueError(
+                f"Row {row_index} is missing a point identifier in column "
+                f"'{point_id_col}'."
+            )
+
+        sequence = clean_sequence(row.get(sequence_col))
+        if not sequence:
+            raise ValueError(
+                f"Row {row_index} is missing a valid sequence in column "
+                f"'{sequence_col}'."
+            )
+
+        target = parse_finite_float(row.get(stratify_col))
+        if target is None:
+            raise ValueError(
+                f"Row {row_index} has a missing or non-finite stratification target "
+                f"in column '{stratify_col}'."
+            )
+
+        existing_sequence = point_to_sequence.get(point_id)
+        if existing_sequence is not None and existing_sequence != sequence:
+            raise ValueError(
+                f"Point '{point_id}' maps to multiple protein sequences. "
+                "Each point identifier must describe one protein."
+            )
+
+        point_to_indices[point_id].append(row_index)
+        point_to_sequence[point_id] = sequence
+        target_values[point_id].append(target)
+
+    point_to_target = {
+        point_id: sum(values) / len(values)
+        for point_id, values in target_values.items()
+    }
+    return dict(point_to_indices), point_to_sequence, point_to_target
+
+
+def assign_continuous_stratified_points(
+    point_ids: list[str],
+    *,
+    point_weights: dict[str, int],
+    point_targets: dict[str, float],
+    fractions: dict[str, float],
+    seed: int,
+    stratify_bins: int,
+) -> dict[str, str]:
+    """Assign continuous-target points through deterministic rank-quantile bins."""
+    positive_splits = [name for name in SPLIT_NAMES if fractions[name] > 0]
+    if len(point_ids) < len(positive_splits):
+        raise ValueError(
+            "Not enough distinct points to populate every requested split. "
+            f"Points={len(point_ids)}, positive splits={len(positive_splits)}."
+        )
+    if stratify_bins < 1:
+        raise ValueError("stratify_bins must be at least 1.")
+
+    smallest_fraction = min(fractions[name] for name in positive_splits)
+    minimum_bin_size = max(
+        len(positive_splits),
+        math.ceil(1.0 / smallest_fraction),
+    )
+    bin_count = max(1, min(stratify_bins, len(point_ids) // minimum_bin_size))
+    ordered_points = sorted(point_ids, key=lambda item: (point_targets[item], item))
+    bins: list[list[str]] = [[] for _ in range(bin_count)]
+    for rank, point_id in enumerate(ordered_points):
+        bin_index = min(bin_count - 1, rank * bin_count // len(ordered_points))
+        bins[bin_index].append(point_id)
+
+    assignments: dict[str, str] = {}
+    for bin_index, bin_points in enumerate(bins):
+        assignments.update(
+            assign_items_to_splits(
+                {point_id: point_weights[point_id] for point_id in bin_points},
+                fractions,
+                seed=seed + bin_index,
+            )
+        )
+    return assignments
+
+
+def generate_point_stratified_split_rows(
+    rows: list[dict[str, str]],
+    fieldnames: list[str],
+    train_fraction: float,
+    val_fraction: float,
+    test_fraction: float,
+    *,
+    sequence_col: str,
+    point_id_col: str,
+    stratify_col: str,
+    seed: int = 42,
+    stratify_bins: int = 10,
+) -> tuple[list[str], list[dict[str, str]], dict[str, dict[str, int]]]:
+    """Split points by target, within protein whenever enough points exist."""
+    fractions = validate_split_fractions(train_fraction, val_fraction, test_fraction)
+    point_to_indices, point_to_sequence, point_targets = build_point_index(
+        rows,
+        sequence_col=sequence_col,
+        point_id_col=point_id_col,
+        stratify_col=stratify_col,
+    )
+    point_weights = {
+        point_id: len(indices)
+        for point_id, indices in point_to_indices.items()
+    }
+    sequence_to_points: dict[str, list[str]] = defaultdict(list)
+    for point_id, sequence in point_to_sequence.items():
+        sequence_to_points[sequence].append(point_id)
+
+    positive_split_count = sum(fractions[name] > 0 for name in SPLIT_NAMES)
+    assignments: dict[str, str] = {}
+    pooled_points: list[str] = []
+    for sequence_index, sequence in enumerate(sorted(sequence_to_points)):
+        sequence_points = sequence_to_points[sequence]
+        if len(sequence_points) < positive_split_count:
+            pooled_points.extend(sequence_points)
+            continue
+        assignments.update(
+            assign_continuous_stratified_points(
+                sequence_points,
+                point_weights=point_weights,
+                point_targets=point_targets,
+                fractions=fractions,
+                seed=seed + (sequence_index + 1) * 10_000,
+                stratify_bins=stratify_bins,
+            )
+        )
+
+    if pooled_points:
+        if len(pooled_points) < positive_split_count:
+            current_weights = {name: 0 for name in SPLIT_NAMES}
+            for point_id, split_name in assignments.items():
+                current_weights[split_name] += point_weights[point_id]
+            target_weights = {
+                name: len(rows) * fractions[name]
+                for name in SPLIT_NAMES
+            }
+            for point_id in sorted(pooled_points):
+                split_name = min(
+                    (name for name in SPLIT_NAMES if fractions[name] > 0),
+                    key=lambda name: (
+                        abs(
+                            current_weights[name]
+                            + point_weights[point_id]
+                            - target_weights[name]
+                        ),
+                        name,
+                    ),
+                )
+                assignments[point_id] = split_name
+                current_weights[split_name] += point_weights[point_id]
+        else:
+            assignments.update(
+                assign_continuous_stratified_points(
+                    pooled_points,
+                    point_weights=point_weights,
+                    point_targets=point_targets,
+                    fractions=fractions,
+                    seed=seed,
+                    stratify_bins=stratify_bins,
+                )
+            )
+
+    output_fieldnames, split_rows = apply_group_assignments(
+        rows,
+        fieldnames,
+        point_to_indices,
+        assignments,
+    )
+    return output_fieldnames, split_rows, summarize_split_rows(split_rows, sequence_col)
+
+
 def build_sequence_dedup_index(
     group_to_sequence: dict[str, str],
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -870,6 +1057,10 @@ def write_split_metadata(
     if metadata_path.exists():
         with metadata_path.open("r", encoding="utf-8") as handle:
             existing = json.load(handle)
+        # Older files stored one mode at the top level. Replace that obsolete
+        # shape instead of preserving contradictory provenance beside "modes".
+        if isinstance(existing, dict) and "mode" in existing and "modes" not in existing:
+            existing = {}
         if not isinstance(existing, dict):
             existing = {}
     else:
@@ -979,6 +1170,10 @@ def split_dataset_csv(
     test_fraction: float,
     sequence_col: str | None = None,
     group_col: str | None = None,
+    random_split_unit: str = "protein",
+    point_id_col: str | None = None,
+    stratify_col: str | None = None,
+    stratify_bins: int = 10,
     identity_threshold: float = 0.3,
     coverage_threshold: float | None = None,
     coverage_mode: int | None = None,
@@ -1004,18 +1199,47 @@ def split_dataset_csv(
     resolved_sequence_col = detect_sequence_column(fieldnames, sequence_col=sequence_col)
     resolved_group_col = group_col
     resolved_id_col = detect_id_column(fieldnames)
+    resolved_point_id_col = point_id_col or resolved_id_col
 
     if mode == "random":
-        output_fieldnames, split_rows, summary = generate_random_split_rows(
-            rows,
-            fieldnames,
-            train_fraction,
-            val_fraction,
-            test_fraction,
-            sequence_col=resolved_sequence_col,
-            group_col=resolved_group_col,
-            seed=seed,
-        )
+        if random_split_unit == "protein":
+            output_fieldnames, split_rows, summary = generate_random_split_rows(
+                rows,
+                fieldnames,
+                train_fraction,
+                val_fraction,
+                test_fraction,
+                sequence_col=resolved_sequence_col,
+                group_col=resolved_group_col,
+                seed=seed,
+            )
+        elif random_split_unit == "point":
+            if group_col is not None:
+                raise ValueError(
+                    "group_col cannot be combined with random_split_unit='point'."
+                )
+            if resolved_point_id_col is None:
+                raise ValueError(
+                    "Point-level splitting requires --point-id-col or a detectable ID column."
+                )
+            if stratify_col is None:
+                raise ValueError(
+                    "Point-level splitting requires a continuous --stratify-col."
+                )
+            output_fieldnames, split_rows, summary = generate_point_stratified_split_rows(
+                rows,
+                fieldnames,
+                train_fraction,
+                val_fraction,
+                test_fraction,
+                sequence_col=resolved_sequence_col,
+                point_id_col=resolved_point_id_col,
+                stratify_col=stratify_col,
+                seed=seed,
+                stratify_bins=stratify_bins,
+            )
+        else:
+            raise ValueError(f"Unsupported random split unit: {random_split_unit}.")
     elif mode == "similarity":
         output_fieldnames, split_rows, summary = generate_similarity_split_rows(
             rows,
@@ -1091,7 +1315,7 @@ def split_dataset_csv(
         "input_csv_path": str(input_csv_path),
         "sequence_col": resolved_sequence_col,
         "group_col": resolved_group_col,
-        "id_col": resolved_id_col,
+        "id_col": resolved_point_id_col,
         "train_fraction": train_fraction,
         "val_fraction": val_fraction,
         "test_fraction": test_fraction,
@@ -1102,6 +1326,14 @@ def split_dataset_csv(
         "summary": summary,
         "standardization": standardization_metadata,
     }
+    if mode == "random":
+        mode_payload["split_strategy"] = {
+            "unit": random_split_unit,
+            "point_id_col": resolved_point_id_col if random_split_unit == "point" else None,
+            "stratify_col": stratify_col if random_split_unit == "point" else None,
+            "stratify_bins": stratify_bins if random_split_unit == "point" else None,
+            "within_sequence": random_split_unit == "point",
+        }
     if mode == "similarity":
         mode_payload["mmseqs"] = {
             "min_seq_id": identity_threshold,
@@ -1188,6 +1420,33 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "Optional grouping column so all rows for the same protein stay together. "
             "If omitted, grouping is done by the protein sequence."
         ),
+    )
+    parser.add_argument(
+        "--random-split-unit",
+        choices=["protein", "point"],
+        default="protein",
+        help=(
+            "Unit used by random splits. 'protein' keeps all rows for a protein "
+            "together; 'point' stratifies measurement points by a continuous target."
+        ),
+    )
+    parser.add_argument(
+        "--point-id-col",
+        type=str,
+        default=None,
+        help="Point identifier column used by point-level random splits.",
+    )
+    parser.add_argument(
+        "--stratify-col",
+        type=str,
+        default=None,
+        help="Continuous target column used for point-level stratification.",
+    )
+    parser.add_argument(
+        "--stratify-bins",
+        type=int,
+        default=10,
+        help="Maximum number of rank-quantile bins for point-level stratification.",
     )
     parser.add_argument(
         "--identity-threshold",
@@ -1333,6 +1592,10 @@ def main() -> None:
                 test_fraction=args.test_fraction,
                 sequence_col=args.sequence_col,
                 group_col=args.group_col,
+                random_split_unit=args.random_split_unit,
+                point_id_col=args.point_id_col,
+                stratify_col=args.stratify_col,
+                stratify_bins=args.stratify_bins,
                 identity_threshold=args.identity_threshold,
                 coverage_threshold=args.mmseqs_coverage_threshold,
                 coverage_mode=args.mmseqs_coverage_mode,

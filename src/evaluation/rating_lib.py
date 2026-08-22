@@ -7,22 +7,29 @@ the negative log-likelihood with L-BFGS-B, fixing one anchor model.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
-
 import numpy as np
 import scipy.optimize as optimize
+import scipy.special
 import scipy.stats as stats
 
 ModelName = str
-MetricStats = Tuple[float, float, float]
-MatchOutcome = Tuple[ModelName, ModelName, float]
+MetricStats = tuple[float, float, float]
+MatchOutcome = tuple[ModelName, ModelName, float]
 
 
-def compute_bootstrap_ci(data: np.ndarray, confidence_level: float = 0.95) -> MetricStats:
+def compute_bootstrap_ci(
+    data: np.ndarray, confidence_level: float = 0.95
+) -> MetricStats:
     """Mean and BCa CI of the sample mean via scipy.stats.bootstrap."""
     mean_val = float(np.mean(data))
-    res = stats.bootstrap((data,), np.mean, confidence_level=confidence_level, method="BCa")
-    return mean_val, float(res.confidence_interval.low), float(res.confidence_interval.high)
+    res = stats.bootstrap(
+        (data,), np.mean, confidence_level=confidence_level, method="BCa"
+    )
+    return (
+        mean_val,
+        float(res.confidence_interval.low),
+        float(res.confidence_interval.high),
+    )
 
 
 def determine_outcome_raw(
@@ -77,11 +84,11 @@ def determine_outcome_aggregate(
 
 
 def fit_batch_mle(
-    match_outcomes: List[MatchOutcome],
-    model_names: List[ModelName],
+    match_outcomes: list[MatchOutcome],
+    model_names: list[ModelName],
     anchor_model: str,
     anchor_rating: float = 1500.0,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Fit Bradley-Terry ratings by minimising the negative log-likelihood.
 
     The anchor model's rating is fixed (gauge-fixing); only the rest are optimised.
@@ -105,8 +112,52 @@ def fit_batch_mle(
         return nll
 
     initial_guess = np.full(len(opt_models), anchor_rating)
-    result = optimize.minimize(negative_log_likelihood, initial_guess, method="L-BFGS-B")
+    result = optimize.minimize(
+        negative_log_likelihood, initial_guess, method="L-BFGS-B"
+    )
 
     final = {m: float(r) for m, r in zip(opt_models, result.x)}
     final[anchor_model] = anchor_rating
     return final
+
+
+def fit_weighted_mle(
+    pair_a: np.ndarray,
+    pair_b: np.ndarray,
+    outcomes_a: np.ndarray,
+    weights: np.ndarray,
+    model_names: list[ModelName],
+    center_rating: float = 1500.0,
+    l2_penalty: float = 1e-6,
+) -> dict[str, float]:
+    """Fit centered Bradley-Terry ratings from weighted fractional outcomes."""
+    n_models = len(model_names)
+    n_free = n_models - 1
+
+    def objective(free_abilities: np.ndarray) -> tuple[float, np.ndarray]:
+        abilities = np.append(free_abilities, 0.0)
+        logits = abilities[pair_a] - abilities[pair_b]
+        losses = np.logaddexp(0.0, logits) - outcomes_a * logits
+        value = float(np.sum(weights * losses))
+        value += 0.5 * l2_penalty * float(free_abilities @ free_abilities)
+
+        residuals = weights * (scipy.special.expit(logits) - outcomes_a)
+        gradient = np.zeros(n_models, dtype=np.float64)
+        np.add.at(gradient, pair_a, residuals)
+        np.add.at(gradient, pair_b, -residuals)
+        gradient[:n_free] += l2_penalty * free_abilities
+        return value, gradient[:n_free]
+
+    result = optimize.minimize(
+        objective,
+        np.zeros(n_free, dtype=np.float64),
+        method="L-BFGS-B",
+        jac=True,
+    )
+    if not result.success:
+        raise RuntimeError(result.message)
+
+    abilities = np.append(result.x, 0.0)
+    ratings = abilities * (400.0 / np.log(10.0))
+    ratings += center_rating - float(ratings.mean())
+    return dict(zip(model_names, ratings, strict=True))

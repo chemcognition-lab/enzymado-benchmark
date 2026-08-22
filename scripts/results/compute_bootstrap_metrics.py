@@ -29,7 +29,7 @@ def _repo_root() -> pathlib.Path:
 
 sys.path.insert(0, str(_repo_root()))
 
-from src.evaluation import (
+from src.evaluation import (  # noqa: E402
     binary_statistics,
     discover,
     loaders,
@@ -37,7 +37,7 @@ from src.evaluation import (
     statistics_cache,
     task_types,
 )
-from src.evaluation import bootstrap as bootstrap_lib
+from src.evaluation import bootstrap as bootstrap_lib  # noqa: E402
 
 
 def _task_seed(seed_root: int, signature: tuple[str, ...]) -> int:
@@ -164,6 +164,13 @@ def _parse_args() -> argparse.Namespace:
         help="Only bootstrap this task. May be repeated.",
     )
     parser.add_argument(
+        "--filter-pool-type",
+        action="append",
+        choices=("attention", "no_attention"),
+        default=None,
+        help="Only bootstrap this pooling type. May be repeated.",
+    )
+    parser.add_argument(
         "--skip-existing",
         action="store_true",
         help="Do not recompute an existing bootstrap test.npz.",
@@ -189,6 +196,13 @@ def main() -> None:
     """Compute bootstrap distributions and confidence intervals."""
     args = _parse_args()
     experiments = discover.discover_experiments(args.predictions_root)
+    if args.filter_pool_type:
+        selected_pools = set(args.filter_pool_type)
+        experiments = [
+            experiment
+            for experiment in experiments
+            if experiment.pool_type in selected_pools
+        ]
     experiments = _select_experiments(experiments, args.filter_task)
     print(f"Discovered {len(experiments)} experiments under {args.predictions_root}")
     if not experiments:
@@ -260,9 +274,7 @@ def main() -> None:
             )
             if paired_by_sample_id:
                 if shared_indices is None:
-                    raise RuntimeError(
-                        "Paired bootstrap indices were not initialized."
-                    )
+                    raise RuntimeError("Paired bootstrap indices were not initialized.")
                 indices = shared_indices
                 identity_status = "verified"
                 resample_seed = seed

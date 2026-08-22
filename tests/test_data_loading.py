@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import csv
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
+import torch
 
-from src.data_loading.collators import ProteinResidueCollator, ProteinResidueConcatCollator
+from src.data_loading.collators import (
+    ProteinResidueCollator,
+    ProteinResidueConcatCollator,
+)
 from src.data_loading.data_registry import TaskConfig
 from src.data_loading.datasets import build_dataset_from_config
 from src.data_loading.features import ResidueEmbeddingStore
 from src.data_loading.labels import FlatECLabelBuilder
+from src.data_loading.stores import build_xy_pooled
 from src.data_loading.task_csv import TaskCSVLoader
+from src.models.attention_blocks import batch_to_attention_tensors
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -249,6 +255,127 @@ class DataLoadingTests(unittest.TestCase):
         np.testing.assert_array_equal(
             batch.protein_mask,
             np.array([[True, True, True, True], [True, True, False, False]]),
+        )
+
+    def test_numeric_context_reaches_pooled_and_attention_protein_models(self) -> None:
+        dataset_path = self.root / "erickson.csv"
+        write_csv(
+            dataset_path,
+            ["dataset_id", "protein_sequence", "temperature", "target", "split"],
+            [
+                {
+                    "dataset_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "temperature": "30",
+                    "target": "1.5",
+                    "split": "train",
+                },
+                {
+                    "dataset_id": "P2",
+                    "protein_sequence": "AA",
+                    "temperature": "50",
+                    "target": "2.5",
+                    "split": "train",
+                },
+            ],
+        )
+        config = TaskConfig(
+            name="erickson_test",
+            batch_kind="protein_global",
+            label_kind="scalar_regression",
+            dataset_paths={"random": dataset_path},
+            target_column="target",
+            numeric_feature_columns=("temperature",),
+            index_columns=("dataset_id",),
+        )
+        store = ResidueEmbeddingStore(
+            by_id={
+                "P1": np.ones((4, 2), dtype=np.float32),
+                "P2": np.full((2, 2), 2.0, dtype=np.float32),
+            }
+        )
+
+        bundle = build_dataset_from_config(config, store, split_name="train")
+        batch = bundle.collator([bundle.dataset[0], bundle.dataset[1]])
+        np.testing.assert_array_equal(
+            batch.context_feat,
+            np.array([[30.0], [50.0]], dtype=np.float32),
+        )
+        pooled_x, _ = build_xy_pooled(bundle, config.batch_kind)
+        torch.testing.assert_close(
+            pooled_x,
+            torch.tensor([[1.0, 1.0, 30.0], [2.0, 2.0, 50.0]]),
+        )
+        _, _, attention_extra = batch_to_attention_tensors(
+            batch,
+            config.batch_kind,
+            torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            attention_extra,
+            torch.tensor([[30.0], [50.0]]),
+        )
+
+    def test_numeric_context_is_appended_after_ligand_features(self) -> None:
+        dataset_path = self.root / "cleeveland.csv"
+        write_csv(
+            dataset_path,
+            [
+                "dataset_id",
+                "protein_sequence",
+                "smiles",
+                "substrate_concentration",
+                "target",
+                "split",
+            ],
+            [
+                {
+                    "dataset_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCO",
+                    "substrate_concentration": "300",
+                    "target": "1.5",
+                    "split": "train",
+                }
+            ],
+        )
+        config = TaskConfig(
+            name="cleeveland_test",
+            batch_kind="protein_ligand_global",
+            label_kind="scalar_regression",
+            dataset_paths={"random": dataset_path},
+            target_column="target",
+            ligand_column="smiles",
+            numeric_feature_columns=("substrate_concentration",),
+            index_columns=("dataset_id",),
+        )
+        store = ResidueEmbeddingStore(
+            by_id={"P1": np.ones((4, 2), dtype=np.float32)}
+        )
+        bundle = build_dataset_from_config(
+            config,
+            store,
+            split_name="train",
+            ligand_featurizer=lambda smiles: np.array(
+                [len(smiles), smiles.count("C")],
+                dtype=np.float32,
+            ),
+        )
+        batch = bundle.collator([bundle.dataset[0]])
+
+        pooled_x, _ = build_xy_pooled(bundle, config.batch_kind)
+        torch.testing.assert_close(
+            pooled_x,
+            torch.tensor([[1.0, 1.0, 3.0, 2.0, 300.0]]),
+        )
+        _, _, attention_extra = batch_to_attention_tensors(
+            batch,
+            config.batch_kind,
+            torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            attention_extra,
+            torch.tensor([[3.0, 2.0, 300.0]]),
         )
 
     def test_flat_ec_label_builder_masks_unknown_descendants(self) -> None:

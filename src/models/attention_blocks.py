@@ -99,11 +99,26 @@ def batch_to_attention_tensors(batch, batch_kind: str, device: torch.device):
     if batch_kind == "protein_global":
         seq = _seq_emb_to_tensor(batch.protein_emb, device)
         mask = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
-        extra = None
+        context_feat = getattr(batch, "context_feat", None)
+        extra = (
+            torch.from_numpy(np.asarray(context_feat, dtype=np.float32)).to(device)
+            if context_feat is not None
+            else None
+        )
     elif batch_kind == "protein_ligand_global":
         seq = _seq_emb_to_tensor(batch.protein_emb, device)
         mask = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)
-        extra = torch.from_numpy(np.asarray(batch.ligand_feat, dtype=np.float32)).to(device)
+        extra_parts = [
+            torch.from_numpy(np.asarray(batch.ligand_feat, dtype=np.float32)).to(device)
+        ]
+        context_feat = getattr(batch, "context_feat", None)
+        if context_feat is not None:
+            extra_parts.append(
+                torch.from_numpy(
+                    np.asarray(context_feat, dtype=np.float32)
+                ).to(device)
+            )
+        extra = torch.cat(extra_parts, dim=1)
     elif batch_kind == "mutation_delta_global":
         seq = _seq_emb_to_tensor(batch.protein_delta_emb, device)
         mask = torch.from_numpy(np.asarray(batch.protein_mask, dtype=bool)).to(device)

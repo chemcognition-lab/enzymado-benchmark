@@ -23,7 +23,7 @@ def _repo_root() -> pathlib.Path:
 
 sys.path.insert(0, str(_repo_root()))
 
-from src.evaluation import (
+from src.evaluation import (  # noqa: E402
     binary_statistics,
     discover,
     loaders,
@@ -95,6 +95,13 @@ def _parse_args() -> argparse.Namespace:
         help="Only compute metrics for this task. May be repeated.",
     )
     parser.add_argument(
+        "--filter-pool-type",
+        action="append",
+        choices=("attention", "no_attention"),
+        default=None,
+        help="Only compute metrics for this pooling type. May be repeated.",
+    )
+    parser.add_argument(
         "--skip-existing",
         action="store_true",
         help="Do not recompute runs that already contain metrics.json.",
@@ -106,6 +113,13 @@ def main() -> None:
     """Compute and persist metrics for discovered experiments."""
     args = _parse_args()
     experiments = discover.discover_experiments(args.predictions_root)
+    if args.filter_pool_type:
+        selected_pools = set(args.filter_pool_type)
+        experiments = [
+            experiment
+            for experiment in experiments
+            if experiment.pool_type in selected_pools
+        ]
     if args.filter_task:
         selected_tasks = set(args.filter_task)
         before = len(experiments)

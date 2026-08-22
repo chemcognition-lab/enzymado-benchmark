@@ -8,12 +8,10 @@ import tempfile
 from unittest import TestCase
 
 import numpy as np
+from scripts.results import compute_ratings as ratings_script
 
-from src.evaluation import binary_statistics
+from src.evaluation import binary_statistics, statistics_cache, task_types
 from src.evaluation import metrics_registry as metrics_module
-from src.evaluation import statistics_cache
-from src.evaluation import task_types
-
 from src.evaluation.bootstrap import (
     _bootstrap_additive_regression,
     _bootstrap_classification_counts,
@@ -44,6 +42,7 @@ from src.evaluation.rating_lib import (
     determine_outcome_aggregate,
     determine_outcome_raw,
     fit_batch_mle,
+    fit_weighted_mle,
 )
 
 
@@ -57,7 +56,9 @@ class TestMetrics(TestCase):
     def test_classification_f1_binary(self) -> None:
         y = np.array([1, 0, 1, 0, 1, 1, 0, 0], dtype=np.float32)
         p = np.array([1, 0, 1, 1, 0, 1, 0, 0], dtype=np.float32)
-        self.assertAlmostEqual(classification_f1(y, p, None), 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4))
+        self.assertAlmostEqual(
+            classification_f1(y, p, None), 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4)
+        )
 
     def test_metric_set_dispatch(self) -> None:
         self.assertIn("mae", metric_set_for("regression"))
@@ -103,20 +104,26 @@ class TestBootstrap(TestCase):
         p = y + 0.5
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
         idx = make_resample_indices(20, 8, seed=0)
-        out = bootstrap_replicates(payload, idx, metric_set_for("regression"), "regression")
+        out = bootstrap_replicates(
+            payload, idx, metric_set_for("regression"), "regression"
+        )
         self.assertEqual(set(out.keys()), {"mae", "rmse", "r2", "kendall_tau"})
         self.assertEqual(out["mae"].shape, (8,))
         # Predictions are y + 0.5 → mae across any resample = 0.5
         np.testing.assert_allclose(out["mae"], 0.5, rtol=1e-6)
 
-    def test_bootstrap_regression_task_type_not_misdetected_from_value_range(self) -> None:
+    def test_bootstrap_regression_task_type_not_misdetected_from_value_range(
+        self,
+    ) -> None:
         """A [0, 1]-scaled regression target must not be routed to classification metrics."""
         rng = np.random.default_rng(3)
         y = rng.random(30).astype(np.float32)
         p = y + rng.normal(0, 0.05, 30).astype(np.float32)
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
         idx = make_resample_indices(30, 10, seed=0)
-        out = bootstrap_replicates(payload, idx, metric_set_for("regression"), "regression")
+        out = bootstrap_replicates(
+            payload, idx, metric_set_for("regression"), "regression"
+        )
         self.assertEqual(set(out.keys()), {"mae", "rmse", "r2", "kendall_tau"})
 
     def test_bootstrap_per_residue_uses_protein_unit(self) -> None:
@@ -131,7 +138,9 @@ class TestBootstrap(TestCase):
         self.assertEqual(n_resample_units(payload), n_proteins)
 
         idx = make_resample_indices(n_proteins, 50, seed=1)
-        out = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
+        out = bootstrap_replicates(
+            payload, idx, metric_set_for("classification"), "classification"
+        )
         # Across replicates the F1 should vary (some samples include only good proteins).
         self.assertGreater(out["f1"].std(), 0.0)
 
@@ -152,7 +161,9 @@ class TestLoaders(TestCase):
             "target_mask_level_1": np.array([True, True], dtype=bool),
             "y_true_level_2": np.array([[0, 1], [1, 1]], dtype=np.float32),
             "predictions_level_2": np.array([[0, 1], [1, 0]], dtype=np.float32),
-            "target_mask_level_2": np.array([True, False], dtype=bool),  # row 1 unknown @ level 2
+            "target_mask_level_2": np.array(
+                [True, False], dtype=bool
+            ),  # row 1 unknown @ level 2
         }
         payload = _unify_multi_head_levels(out)
         assert payload is not None
@@ -212,19 +223,19 @@ class TestLoaders(TestCase):
 
     def test_derive_task_type_from_hparams(self) -> None:
         self.assertEqual(
-            derive_task_type({"task_config": {"label_kind": "binary"}}), "classification"
+            derive_task_type({"task_config": {"label_kind": "binary"}}),
+            "classification",
         )
         self.assertEqual(
-            derive_task_type({"task_config": {"label_kind": "scalar_regression"}}), "regression"
+            derive_task_type({"task_config": {"label_kind": "scalar_regression"}}),
+            "regression",
         )
         self.assertEqual(
             derive_task_type({"task_config": {"label_kind": "multilabel_ec"}}),
             "classification",
         )
         self.assertEqual(
-            derive_task_type(
-                {"task_config": {"label_kind": "residue_binary_vector"}}
-            ),
+            derive_task_type({"task_config": {"label_kind": "residue_binary_vector"}}),
             "classification",
         )
         self.assertIsNone(derive_task_type({}))
@@ -248,7 +259,9 @@ class TestBootstrapClassificationCounts(TestCase):
     """The additive classification path (TP/FP/FN/TN counts) must match a direct,
     per-replicate call to the metric functions themselves."""
 
-    def _assert_metrics_match(self, direct: dict, additive: dict, atol: float = 1e-12) -> None:
+    def _assert_metrics_match(
+        self, direct: dict, additive: dict, atol: float = 1e-12
+    ) -> None:
         for name in (
             "accuracy",
             "precision",
@@ -266,11 +279,15 @@ class TestBootstrapClassificationCounts(TestCase):
         n = 80
         y = (rng.random(n) > 0.5).astype(np.float32)
         p = y.copy()
-        p[rng.choice(n, size=15, replace=False)] = 1 - p[rng.choice(n, size=15, replace=False)]
+        p[rng.choice(n, size=15, replace=False)] = (
+            1 - p[rng.choice(n, size=15, replace=False)]
+        )
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
 
         idx = make_resample_indices(n, 30, seed=42)
-        direct = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
+        direct = bootstrap_replicates(
+            payload, idx, metric_set_for("classification"), "classification"
+        )
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
         self._assert_metrics_match(direct, additive)
@@ -288,7 +305,9 @@ class TestBootstrapClassificationCounts(TestCase):
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
 
         idx = make_resample_indices(n_proteins, 50, seed=7)
-        direct = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
+        direct = bootstrap_replicates(
+            payload, idx, metric_set_for("classification"), "classification"
+        )
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
         self._assert_metrics_match(direct, additive)
@@ -302,7 +321,9 @@ class TestBootstrapClassificationCounts(TestCase):
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=mask)
 
         idx = make_resample_indices(n_rows, 40, seed=3)
-        direct = bootstrap_replicates(payload, idx, metric_set_for("classification"), "classification")
+        direct = bootstrap_replicates(
+            payload, idx, metric_set_for("classification"), "classification"
+        )
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
         self._assert_metrics_match(direct, additive)
@@ -338,16 +359,16 @@ class TestBootstrapClassificationCounts(TestCase):
             np.testing.assert_array_equal(loaded, counts)
 
             prediction_path.write_bytes(b"second")
-            self.assertIsNone(
-                statistics_cache.load_counts(cache_path, prediction_path)
-            )
+            self.assertIsNone(statistics_cache.load_counts(cache_path, prediction_path))
 
 
 class TestBootstrapAdditiveRegression(TestCase):
     """The additive regression path (mae/rmse from per-row error sums) must match a
     direct, per-replicate call to regression_mae/regression_rmse themselves."""
 
-    def _direct_mae_rmse(self, payload: PredictionPayload, idx: np.ndarray) -> dict[str, np.ndarray]:
+    def _direct_mae_rmse(
+        self, payload: PredictionPayload, idx: np.ndarray
+    ) -> dict[str, np.ndarray]:
         out = {"mae": np.empty(idx.shape[0]), "rmse": np.empty(idx.shape[0])}
         for r, row in enumerate(idx):
             y = payload.y_true[row]
@@ -394,36 +415,105 @@ class TestDiscover(TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "properties/no_attention/random/linear/binding/ankh_base").mkdir(parents=True)
+            (root / "properties/no_attention/random/linear/binding/ankh_base").mkdir(
+                parents=True
+            )
             (root / "properties/attention/loco/mlp/kcat/esm2_650M").mkdir(parents=True)
-            (root / "properties/no_attention/random/xgboost/active_sites/ankh_large").mkdir(parents=True)
-            (root / "real_case/no_attention/random/mlp/erickson_petase/ankh_base").mkdir(parents=True)
+            (
+                root / "properties/no_attention/random/xgboost/active_sites/ankh_large"
+            ).mkdir(parents=True)
+            (
+                root / "real_case/no_attention/random/mlp/erickson_petase/ankh_base"
+            ).mkdir(parents=True)
             exps = discover_experiments(root)
             sigs = {
-                (e.task_scope, e.pool_type, e.split, e.model_family, e.task, e.embedding_model)
+                (
+                    e.task_scope,
+                    e.pool_type,
+                    e.split,
+                    e.model_family,
+                    e.task,
+                    e.embedding_model,
+                )
                 for e in exps
             }
             self.assertEqual(len(exps), 4)
-            self.assertIn(("properties", "no_attention", "random", "linear", "binding", "ankh_base"), sigs)
-            self.assertIn(("properties", "attention", "loco", "mlp", "kcat", "esm2_650M"), sigs)
             self.assertIn(
-                ("properties", "no_attention", "random", "xgboost", "active_sites", "ankh_large"), sigs
+                (
+                    "properties",
+                    "no_attention",
+                    "random",
+                    "linear",
+                    "binding",
+                    "ankh_base",
+                ),
+                sigs,
             )
             self.assertIn(
-                ("real_case", "no_attention", "random", "mlp", "erickson_petase", "ankh_base"), sigs
+                ("properties", "attention", "loco", "mlp", "kcat", "esm2_650M"), sigs
+            )
+            self.assertIn(
+                (
+                    "properties",
+                    "no_attention",
+                    "random",
+                    "xgboost",
+                    "active_sites",
+                    "ankh_large",
+                ),
+                sigs,
+            )
+            self.assertIn(
+                (
+                    "real_case",
+                    "no_attention",
+                    "random",
+                    "mlp",
+                    "erickson_petase",
+                    "ankh_base",
+                ),
+                sigs,
             )
 
     def test_assign_track_routes_into_no_attention(self) -> None:
-        e_mean = Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp"))
-        e_residue = Experiment(
-            "properties", "no_attention", "random", "xgboost", "active_sites", "ankh_large", Path("/tmp")
+        e_mean = Experiment(
+            "properties",
+            "no_attention",
+            "random",
+            "linear",
+            "binding",
+            "ankh_base",
+            Path("/tmp"),
         )
-        e_attn = Experiment("properties", "attention", "loco", "mlp", "kcat", "esm2_650M", Path("/tmp"))
+        e_residue = Experiment(
+            "properties",
+            "no_attention",
+            "random",
+            "xgboost",
+            "active_sites",
+            "ankh_large",
+            Path("/tmp"),
+        )
+        e_attn = Experiment(
+            "properties", "attention", "loco", "mlp", "kcat", "esm2_650M", Path("/tmp")
+        )
         e_real = Experiment(
-            "real_case", "no_attention", "random", "linear", "align_amylase_activity", "ankh_base", Path("/tmp")
+            "real_case",
+            "no_attention",
+            "random",
+            "linear",
+            "align_amylase_activity",
+            "ankh_base",
+            Path("/tmp"),
         )
         e_real_attn = Experiment(
-            "real_case", "attention", "random", "mlp", "align_amylase_activity", "ankh_base", Path("/tmp")
+            "real_case",
+            "attention",
+            "random",
+            "mlp",
+            "align_amylase_activity",
+            "ankh_base",
+            Path("/tmp"),
         )
         rc = {"align_amylase_activity"}
         self.assertEqual(assign_track(e_mean, rc), "no_attention")
@@ -444,7 +534,15 @@ class TestDiscover(TestCase):
             (run_dir / "metrics.json").write_text(
                 json.dumps({"test": {"task_type": "regression"}})
             )
-            exp = Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", run_dir)
+            exp = Experiment(
+                "properties",
+                "no_attention",
+                "random",
+                "linear",
+                "binding",
+                "ankh_base",
+                run_dir,
+            )
             self.assertEqual(exp.task_type(), "classification")
 
     def test_experiment_task_type_falls_back_to_metrics_json(self) -> None:
@@ -456,14 +554,46 @@ class TestDiscover(TestCase):
             (run_dir / "metrics.json").write_text(
                 json.dumps({"test": {"task_type": "regression"}})
             )
-            exp = Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", run_dir)
+            exp = Experiment(
+                "properties",
+                "no_attention",
+                "random",
+                "linear",
+                "binding",
+                "ankh_base",
+                run_dir,
+            )
             self.assertEqual(exp.task_type(), "regression")
 
     def test_group_into_tracks_buckets_by_split_and_family(self) -> None:
         exps = [
-            Experiment("properties", "no_attention", "random", "linear", "binding", "ankh_base", Path("/tmp/a")),
-            Experiment("properties", "no_attention", "random", "linear", "active_sites", "ankh_base", Path("/tmp/b")),
-            Experiment("properties", "attention", "random", "mlp", "kcat", "esm2_650M", Path("/tmp/c")),
+            Experiment(
+                "properties",
+                "no_attention",
+                "random",
+                "linear",
+                "binding",
+                "ankh_base",
+                Path("/tmp/a"),
+            ),
+            Experiment(
+                "properties",
+                "no_attention",
+                "random",
+                "linear",
+                "active_sites",
+                "ankh_base",
+                Path("/tmp/b"),
+            ),
+            Experiment(
+                "properties",
+                "attention",
+                "random",
+                "mlp",
+                "kcat",
+                "esm2_650M",
+                Path("/tmp/c"),
+            ),
         ]
         groups = group_into_tracks(exps, real_case_tasks=set())
         keys = sorted(groups.keys(), key=lambda k: (k.track, k.split, k.model_family))
@@ -505,7 +635,38 @@ class TestRatingLib(TestCase):
             ("A", "C", 1.0),
             ("A", "C", 1.0),
         ]
-        ratings = fit_batch_mle(matches, ["A", "B", "C"], anchor_model="C", anchor_rating=1500.0)
+        ratings = fit_batch_mle(
+            matches, ["A", "B", "C"], anchor_model="C", anchor_rating=1500.0
+        )
         self.assertGreater(ratings["A"], ratings["B"])
         self.assertGreater(ratings["B"], ratings["C"])
         self.assertEqual(ratings["C"], 1500.0)
+
+
+class TestGlobalRatings(TestCase):
+    def test_expected_competitors_include_all_five_configurations(self) -> None:
+        competitors = ratings_script._expected_competitors()
+        self.assertEqual(len(competitors), 70)
+        self.assertEqual(len(set(competitors)), 70)
+
+    def test_kendall_weight_is_normalized_within_regression(self) -> None:
+        weights = ratings_script._metric_weights("regression", 2.0)
+        self.assertAlmostEqual(sum(weights.values()), 1.0)
+        self.assertAlmostEqual(weights["kendall_tau"], 0.4)
+        self.assertTrue(all(weights[name] == 0.2 for name in ("mae", "rmse", "r2")))
+
+    def test_weighted_mle_ranks_fractional_pairwise_wins(self) -> None:
+        pair_a = np.array([0, 0, 1], dtype=np.int64)
+        pair_b = np.array([1, 2, 2], dtype=np.int64)
+        outcomes = np.array([0.8, 0.9, 0.7], dtype=np.float64)
+        weights = np.full(3, 5.0)
+        ratings = fit_weighted_mle(
+            pair_a,
+            pair_b,
+            outcomes,
+            weights,
+            ["A", "B", "C"],
+        )
+        self.assertGreater(ratings["A"], ratings["B"])
+        self.assertGreater(ratings["B"], ratings["C"])
+        self.assertAlmostEqual(sum(ratings.values()) / 3, 1500.0)

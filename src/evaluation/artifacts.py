@@ -191,6 +191,11 @@ def write_hparams_file(
             "batch_kind": getattr(task_config, "batch_kind", None),
             "label_kind": getattr(task_config, "label_kind", None),
             "target_column": getattr(task_config, "target_column", None),
+            "numeric_feature_columns": getattr(
+                task_config,
+                "numeric_feature_columns",
+                (),
+            ),
             "dataset_paths": getattr(task_config, "dataset_paths", {}),
         }
     if sample_identity_manifest is not None:

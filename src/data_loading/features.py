@@ -264,6 +264,44 @@ class RDKitLigandFeatureBuilder:
         return None
 
 
+@dataclass(frozen=True)
+class NumericFeatureBuilder:
+    """Build a finite float vector from explicitly configured CSV columns."""
+    columns: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.columns:
+            raise ValueError("NumericFeatureBuilder requires at least one column.")
+        if len(set(self.columns)) != len(self.columns):
+            raise ValueError("NumericFeatureBuilder columns must be unique.")
+
+    def build(self, row: dict[str, str]) -> torch.Tensor:
+        values: list[float] = []
+        for column in self.columns:
+            raw_value = clean_text(row.get(column))
+            try:
+                value = float(raw_value)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Missing or invalid numeric feature in column '{column}' for "
+                    f"sample '{row.get('sample_id', '')}'."
+                ) from exc
+            if not np.isfinite(value):
+                raise ValueError(
+                    f"Non-finite numeric feature in column '{column}' for sample "
+                    f"'{row.get('sample_id', '')}'."
+                )
+            values.append(value)
+        return torch.tensor(values, dtype=torch.float32)
+
+    def validate_row(self, row: dict[str, str]) -> str | None:
+        try:
+            self.build(row)
+        except ValueError as exc:
+            return str(exc)
+        return None
+
+
 @dataclass
 class MutationDeltaEmbeddingBuilder:
     """Build mutant-minus-wildtype embedding deltas for mutation-effect tasks."""
