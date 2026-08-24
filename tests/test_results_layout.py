@@ -25,6 +25,11 @@ def write_file(path: Path, content: str = "x") -> None:
 
 
 class ResultsLayoutTests(unittest.TestCase):
+    def test_unknown_split_family_is_rejected(self) -> None:
+        module = load_results_layout_module()
+        with self.assertRaisesRegex(ValueError, "Unknown split variant"):
+            module.canonical_split_family("unsupported")
+
     def test_build_result_run_dir_uses_canonical_layout(self) -> None:
         module = load_results_layout_module()
         build_result_run_dir = module.build_results_run_dir
@@ -89,7 +94,13 @@ class ResultsLayoutTests(unittest.TestCase):
                 "attention_mlp_regressor",
                 task_scope="properties",
             ),
-            root / "properties" / "attention" / "loco" / "mlp" / "kcat" / "esm2_650M",
+            root
+            / "properties"
+            / "attention"
+            / "similarity"
+            / "mlp"
+            / "kcat"
+            / "esm2_650M",
         )
         self.assertEqual(
             build_result_run_dir(

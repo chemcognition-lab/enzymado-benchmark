@@ -48,7 +48,7 @@ python scripts/run_benchmark.py embeddings_models_output.json \
 - `--emb_name` selects one foundation model / embedding entry.
 - `--model_prefix` selects a model family: `mlp_`, `linear_`, or `xgb_`.
 - `--task_name` selects a property. Repeat it to train multiple properties.
-- `--split_variant` selects `random`, `similarity`, or `loco`. If omitted,
+- `--split_variant` selects `random` or `similarity`. If omitted,
   each task uses the card's `default_split`.
 - `--allowed_ids` optionally restricts rows to embeddings present in an ID allowlist.
 

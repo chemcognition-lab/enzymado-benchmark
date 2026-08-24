@@ -27,7 +27,6 @@ from evaluation.results_layout import (  # noqa: E402
 
 SPLIT_TO_DATASET_VARIANT = {
     "random": "random",
-    "loco": "similarity",
     "similarity": "similarity",
 }
 

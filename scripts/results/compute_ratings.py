@@ -380,8 +380,8 @@ def _compute_leaderboard(
 def _parse_args() -> argparse.Namespace:
     """Parse the two-leaderboard configuration."""
     repo = _REPO
-    experiments = repo / "results" / "predictions" / "experiments"
-    bootstrap_experiments = repo / "results" / "bootstrap" / "experiments"
+    predictions = repo / "results" / "predictions"
+    bootstrap = repo / "results" / "bootstrap"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--benchmark-card", type=Path, default=repo / "benchmark_card.json"
@@ -389,38 +389,30 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--properties-predictions-root",
         type=Path,
-        default=repo / "results" / "predictions",
+        default=predictions,
     )
     parser.add_argument(
-        "--properties-bootstrap-root", type=Path, default=repo / "results" / "bootstrap"
+        "--properties-bootstrap-root", type=Path, default=bootstrap
     )
     parser.add_argument(
         "--real-case-no-attention-predictions-root",
         type=Path,
-        default=experiments
-        / "real_case_point_stratified_context_layernorm"
-        / "seed_42",
+        default=predictions,
     )
     parser.add_argument(
         "--real-case-no-attention-bootstrap-root",
         type=Path,
-        default=bootstrap_experiments
-        / "real_case_point_stratified_context_layernorm"
-        / "seed_42",
+        default=bootstrap,
     )
     parser.add_argument(
         "--real-case-attention-predictions-root",
         type=Path,
-        default=experiments
-        / "real_case_point_stratified_context_no_layernorm"
-        / "seed_42",
+        default=predictions,
     )
     parser.add_argument(
         "--real-case-attention-bootstrap-root",
         type=Path,
-        default=bootstrap_experiments
-        / "real_case_point_stratified_context_no_layernorm"
-        / "seed_42",
+        default=bootstrap,
     )
     parser.add_argument(
         "--ratings-root",
@@ -466,7 +458,7 @@ def main() -> None:
         "properties",
         properties_sources,
         properties_types,
-        {"random": args.random_weight, "loco": args.similarity_weight},
+        {"random": args.random_weight, "similarity": args.similarity_weight},
         args,
     )
     _compute_leaderboard(

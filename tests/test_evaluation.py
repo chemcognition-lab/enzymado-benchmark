@@ -418,7 +418,9 @@ class TestDiscover(TestCase):
             (root / "properties/no_attention/random/linear/binding/ankh_base").mkdir(
                 parents=True
             )
-            (root / "properties/attention/loco/mlp/kcat/esm2_650M").mkdir(parents=True)
+            (root / "properties/attention/similarity/mlp/kcat/esm2_650M").mkdir(
+                parents=True
+            )
             (
                 root / "properties/no_attention/random/xgboost/active_sites/ankh_large"
             ).mkdir(parents=True)
@@ -450,7 +452,15 @@ class TestDiscover(TestCase):
                 sigs,
             )
             self.assertIn(
-                ("properties", "attention", "loco", "mlp", "kcat", "esm2_650M"), sigs
+                (
+                    "properties",
+                    "attention",
+                    "similarity",
+                    "mlp",
+                    "kcat",
+                    "esm2_650M",
+                ),
+                sigs,
             )
             self.assertIn(
                 (
@@ -495,7 +505,13 @@ class TestDiscover(TestCase):
             Path("/tmp"),
         )
         e_attn = Experiment(
-            "properties", "attention", "loco", "mlp", "kcat", "esm2_650M", Path("/tmp")
+            "properties",
+            "attention",
+            "similarity",
+            "mlp",
+            "kcat",
+            "esm2_650M",
+            Path("/tmp"),
         )
         e_real = Experiment(
             "real_case",

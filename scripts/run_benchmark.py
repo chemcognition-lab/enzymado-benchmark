@@ -789,7 +789,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--split_variant",
-        choices=("random", "similarity", "loco"),
+        choices=("random", "similarity"),
         default=None,
         help="Train only this split variant. Defaults to each task's card default_split.",
     )

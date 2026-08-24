@@ -6,11 +6,7 @@ from pathlib import Path
 
 INVALIDATION_MARKER = "target_audit_invalid.json"
 PER_RESIDUE_TASKS = {"active_sites", "binding_site"}
-SPLIT_FAMILY_ALIASES = {
-    "random": "random",
-    "similarity": "loco",
-    "loco": "loco",
-}
+SPLIT_FAMILIES = ("random", "similarity")
 MODEL_FAMILY_ALIASES = {
     "attention_linear_classification": "linear",
     "attention_linear_regressor": "linear",
@@ -35,10 +31,10 @@ def canonical_split_family(split_variant: str | None) -> str:
     if split_variant is None:
         return "random"
     value = split_variant.strip().lower()
-    for needle, canonical in SPLIT_FAMILY_ALIASES.items():
-        if needle in value:
-            return canonical
-    return _path_token(value)
+    for family in SPLIT_FAMILIES:
+        if family in value:
+            return family
+    raise ValueError(f"Unknown split variant '{split_variant}'.")
 
 
 def canonical_model_family(model_name: str) -> str:
