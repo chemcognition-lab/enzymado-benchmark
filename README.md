@@ -8,7 +8,7 @@ engineering tasks?* It answers it the same way for every model, on every dataset
 every split, so the numbers are comparable.
 
 <p align="center">
-  <img src="docs/enzymado_evaluation_diagram.png"
+  <img src="assets/enzymado_evaluation_diagram.png"
        alt="Enzymado evaluation design: 10 property datasets and 8 real-case datasets, crossed with 14 protein language models, 2 split types, and 5 baselines, for 1,960 model-dataset evaluations."
        width="820">
 </p>
