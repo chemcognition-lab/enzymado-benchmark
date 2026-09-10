@@ -27,7 +27,9 @@ DEFAULT_URLS = [
 
 
 def download_to_temp(url, timeout):
-    req = urllib.request.Request(url, headers={"User-Agent": "codex-fireprotdb-downloader/1.0"})
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "codex-fireprotdb-downloader/1.0"}
+    )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         if getattr(resp, "status", 200) != 200:
             raise RuntimeError(f"HTTP {resp.status} for {url}")
@@ -42,7 +44,7 @@ def try_download(urls, timeout):
         try:
             path = download_to_temp(url, timeout)
             return url, path
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - try the next configured mirror.
             last_err = exc
     raise RuntimeError(f"Failed to download from any URL: {last_err}")
 
@@ -124,7 +126,10 @@ def main():
     parser.add_argument(
         "--ec",
         default=None,
-        help="EC number filter (exact match or prefix with *). If omitted, keeps rows with any EC.",
+        help=(
+            "EC number filter (exact match or prefix with *). If omitted, keeps rows "
+            "with any EC."
+        ),
     )
     parser.add_argument(
         "--timeout",

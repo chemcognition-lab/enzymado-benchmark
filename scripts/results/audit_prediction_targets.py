@@ -15,15 +15,14 @@ import numpy as np
 from safetensors.torch import load as load_tensors
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from data_loading import TASK_REGISTRY  # noqa: E402
-from evaluation.discover import discover_experiments  # noqa: E402
-from evaluation.results_layout import (  # noqa: E402
+from enzymado.artifacts.results_layout import (  # noqa: E402
     INVALIDATION_MARKER,
     find_prediction_artifact,
 )
+from enzymado.data_loading import TASK_REGISTRY  # noqa: E402
+from enzymado.evaluation.discover import discover_experiments  # noqa: E402
 
 SPLIT_TO_DATASET_VARIANT = {
     "random": "random",

@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Normalize the repository's real-case datasets into benchmark-ready CSV files."""
+
+from __future__ import annotations
 
 import argparse
 import csv
 import json
+from pathlib import Path
 import re
 import sys
-from pathlib import Path
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from src.paths_and_constants import Constants, Paths
-
+from enzymado.paths_and_constants import Constants, Paths  # noqa: E402
 
 ERICKSON_VALUE_COLUMN = "sum_aromatic_products"
 ERICKSON_INTERIM_COLUMNS = [
@@ -135,7 +134,9 @@ def parse_measurement_label(raw_label: str) -> tuple[str, str]:
     return name, unit
 
 
-def build_erickson_dataset_id(enzyme_id: str, temperature_raw: str, condition: str) -> str:
+def build_erickson_dataset_id(
+    enzyme_id: str, temperature_raw: str, condition: str
+) -> str:
     return f"{slugify(enzyme_id)}_{slugify(temperature_raw)}_{slugify(condition)}"
 
 
@@ -153,7 +154,8 @@ def load_sequences(sequences_path: Path) -> dict[str, str]:
         records = {
             clean_text(row["Enzyme ID"]): normalize_sequence(row["Protein Sequence"])
             for row in reader
-            if clean_text(row.get("Enzyme ID")) and normalize_sequence(row.get("Protein Sequence"))
+            if clean_text(row.get("Enzyme ID"))
+            and normalize_sequence(row.get("Protein Sequence"))
         }
 
     if not records:
@@ -171,7 +173,9 @@ def build_erickson_rows(
         rows = list(csv.reader(handle))
 
     if len(rows) < 3:
-        raise ValueError(f"{values_path} must contain at least two header rows and one data row.")
+        raise ValueError(
+            f"{values_path} must contain at least two header rows and one data row."
+        )
 
     enzyme_ids = [clean_text(cell) for cell in rows[0][2:]]
     measurement_labels = [clean_text(cell) for cell in rows[1][2:]]
@@ -203,10 +207,16 @@ def build_erickson_rows(
 
             protein_sequence = sequences_by_id.get(enzyme_id)
             if not protein_sequence:
-                raise ValueError(f"Missing protein sequence for enzyme id '{enzyme_id}'.")
+                raise ValueError(
+                    f"Missing protein sequence for enzyme id '{enzyme_id}'."
+                )
 
-            measurement_name, measurement_unit = parse_measurement_label(measurement_label)
-            dataset_id = build_erickson_dataset_id(enzyme_id, temperature_raw, condition)
+            measurement_name, measurement_unit = parse_measurement_label(
+                measurement_label
+            )
+            dataset_id = build_erickson_dataset_id(
+                enzyme_id, temperature_raw, condition
+            )
             value = str(float(clean_text(raw_value)))
 
             interim_rows.append(
@@ -240,7 +250,8 @@ def load_cleveland_sequences(proteins_path: Path) -> dict[str, str]:
         records = {
             clean_text(row["protein_name"]): normalize_sequence(row["sequence"])
             for row in reader
-            if clean_text(row.get("protein_name")) and normalize_sequence(row.get("sequence"))
+            if clean_text(row.get("protein_name"))
+            and normalize_sequence(row.get("sequence"))
         }
 
     if not records:
@@ -254,7 +265,8 @@ def load_cleveland_substrates(substrates_path: Path) -> dict[str, str]:
         records = {
             clean_text(row["substrate_name"]): clean_text(row["isosmiles"])
             for row in reader
-            if clean_text(row.get("substrate_name")) and clean_text(row.get("isosmiles"))
+            if clean_text(row.get("substrate_name"))
+            and clean_text(row.get("isosmiles"))
         }
 
     if not records:
@@ -283,7 +295,9 @@ def build_cleeveland_rows(
 
             protein_sequence = sequences_by_protein.get(protein_name)
             if not protein_sequence:
-                raise ValueError(f"Missing protein sequence for protein '{protein_name}'.")
+                raise ValueError(
+                    f"Missing protein sequence for protein '{protein_name}'."
+                )
 
             smiles = smiles_by_substrate.get(substrate_name)
             if not smiles:
@@ -384,7 +398,9 @@ def build_align_rows(
     list[dict[str, str]],
     list[tuple[str, str, list[str], list[dict[str, str]]]],
 ]:
-    all_fieldnames, deduped_rows, measurement_columns = load_align_rows(family, align_root)
+    all_fieldnames, deduped_rows, measurement_columns = load_align_rows(
+        family, align_root
+    )
 
     interim_fieldnames = [
         Constants.dataset_id,
@@ -394,12 +410,13 @@ def build_align_rows(
     ]
     if "dataset" in all_fieldnames:
         interim_fieldnames.append("source_dataset")
-    interim_fieldnames.extend(normalize_align_column_name(column) for column in measurement_columns)
+    interim_fieldnames.extend(
+        normalize_align_column_name(column) for column in measurement_columns
+    )
 
     interim_rows: list[dict[str, str]] = []
     processed_rows_by_task: dict[str, list[dict[str, str]]] = {
-        measurement_column: []
-        for measurement_column in measurement_columns
+        measurement_column: [] for measurement_column in measurement_columns
     }
 
     for row_index, row in enumerate(deduped_rows, start=1):
@@ -478,7 +495,8 @@ def resolve_align_processed_dir(
         return paths.data_processed_real_case
     if out_processed_arg.suffix.lower() == ".csv":
         raise ValueError(
-            "--out-processed must point to a directory for ALIGN because one CSV is written per task."
+            "--out-processed must point to a directory for ALIGN because one CSV is "
+            "written per task."
         )
     return out_processed_arg
 
@@ -491,7 +509,8 @@ def resolve_align_task_processed_dir(
     task_config = ALIGN_TASK_OUTPUTS.get((family, task_name))
     if task_config is None:
         raise ValueError(
-            f"No output-directory mapping is configured for ALIGN family '{family}' and task '{task_name}'."
+            f"No output-directory mapping is configured for ALIGN family '{family}' "
+            f"and task '{task_name}'."
         )
     return processed_dir / str(task_config["directory"])
 
@@ -569,7 +588,11 @@ def collect_align_section_records(
     section_records: list[tuple[str, dict[str, object]]] = []
     for (family, task_name), task_config in ALIGN_TASK_OUTPUTS.items():
         family_slug = slugify(family)
-        csv_path = processed_dir / str(task_config["directory"]) / f"{family_slug}__{task_name}.csv"
+        csv_path = (
+            processed_dir
+            / str(task_config["directory"])
+            / f"{family_slug}__{task_name}.csv"
+        )
         if not csv_path.exists():
             continue
         section_records.append(
@@ -624,7 +647,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     paths = Paths()
     parser = argparse.ArgumentParser(
         description=(
-            "Clean the Erickson, Cleeveland, or ALIGN datasets into interim and processed outputs."
+            "Clean the Erickson, Cleeveland, or ALIGN datasets into interim and "
+            "processed outputs."
         )
     )
     parser.add_argument(
@@ -685,7 +709,10 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--out-processed",
         type=Path,
         default=paths.data_processed_properties / "aromatic_products" / "erickson.csv",
-        help="Output path for the processed dataset, or a directory root for ALIGN outputs.",
+        help=(
+            "Output path for the processed dataset, or a directory root for ALIGN "
+            "outputs."
+        ),
     )
     parser.add_argument(
         "--benchmark-card",
@@ -712,11 +739,15 @@ def main() -> None:
         write_csv(out_interim, ERICKSON_INTERIM_COLUMNS, interim_rows)
         write_csv(out_processed, ERICKSON_PROCESSED_COLUMNS, processed_rows)
     elif args.dataset == "cleeveland":
-        default_erickson_interim = paths.data_interim_dir / "erickson" / "erickson_long.csv"
+        default_erickson_interim = (
+            paths.data_interim_dir / "erickson" / "erickson_long.csv"
+        )
         default_erickson_processed = (
             paths.data_processed_properties / "aromatic_products" / "erickson.csv"
         )
-        default_cleveland_interim = paths.data_interim_dir / "cleeveland" / "cleeveland_long.csv"
+        default_cleveland_interim = (
+            paths.data_interim_dir / "cleeveland" / "cleeveland_long.csv"
+        )
         default_cleveland_processed = (
             paths.data_processed_properties / "specific_activity" / "cleeveland.csv"
         )
@@ -739,11 +770,15 @@ def main() -> None:
         write_csv(out_interim, CLEVELAND_INTERIM_COLUMNS, interim_rows)
         write_csv(out_processed, CLEVELAND_PROCESSED_COLUMNS, processed_rows)
     else:
-        default_erickson_interim = paths.data_interim_dir / "erickson" / "erickson_long.csv"
+        default_erickson_interim = (
+            paths.data_interim_dir / "erickson" / "erickson_long.csv"
+        )
         default_erickson_processed = (
             paths.data_processed_properties / "aromatic_products" / "erickson.csv"
         )
-        align_families = ALIGN_FAMILIES if args.align_family == "all" else (args.align_family,)
+        align_families = (
+            ALIGN_FAMILIES if args.align_family == "all" else (args.align_family,)
+        )
         align_out_interim_root = (
             paths.data_interim_dir / "align"
             if args.out_interim == default_erickson_interim
@@ -795,7 +830,8 @@ def main() -> None:
                 paths.project_root,
             )
             print(
-                f"Updated {args.benchmark_card} with {len(updated_sections)} ALIGN real-case section(s)"
+                f"Updated {args.benchmark_card} with {len(updated_sections)} ALIGN "
+                f"real-case section(s)"
             )
 
     print(f"Saved {len(interim_rows)} interim rows to {out_interim}")

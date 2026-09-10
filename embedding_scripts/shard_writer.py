@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
+import torch
 
 
 class SafetensorsShardWriter:
@@ -29,7 +29,11 @@ class SafetensorsShardWriter:
         for shard_path in existing_shards:
             with safe_open(str(shard_path), framework="pt", device="cpu") as handle:
                 self._existing_keys.update(handle.keys())
-        self._next_index = int(existing_shards[-1].stem.rsplit("_", 1)[-1]) + 1 if existing_shards else 0
+        self._next_index = (
+            int(existing_shards[-1].stem.rsplit("_", 1)[-1]) + 1
+            if existing_shards
+            else 0
+        )
         self._buffer: dict[str, torch.Tensor] = {}
 
     def __contains__(self, key: str) -> bool:

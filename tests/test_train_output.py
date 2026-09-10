@@ -9,14 +9,15 @@ import unittest
 
 import numpy as np
 
-from evaluation.artifacts import (
-    evaluate_predictions,
+from enzymado.artifacts.serialization import (
     make_safetensors_predictions_file,
     save_raw_predictions,
     write_hparams_file,
-    write_metrics_file,
     write_training_log_file,
 )
+from enzymado.evaluation import binary_statistics, metrics_registry
+from enzymado.evaluation.loaders import PredictionPayload
+from enzymado.evaluation.metrics_registry import evaluate_predictions
 
 
 class TrainOutputTests(unittest.TestCase):
@@ -35,16 +36,33 @@ class TrainOutputTests(unittest.TestCase):
         self.assertIn("kendall_tau", metrics)
 
     def test_evaluate_predictions_classification_with_mask(self) -> None:
+        """Masking drops the unknown entry; accuracy comes from the count path.
+
+        ``evaluate_predictions`` still reports ``n`` for classification because
+        the flattening is shared, but it no longer computes the metrics: those
+        are derived from confusion counts in production, so the value is
+        asserted there.
+        """
+        y_true = np.asarray([[1, 0], [0, 1]], dtype=np.float32)
+        predictions = np.asarray([[1, 1], [0, 0]], dtype=np.float32)
+        mask = np.asarray([[True, False], [True, True]], dtype=bool)
+
         metrics = evaluate_predictions(
-            np.asarray([[1, 0], [0, 1]], dtype=np.float32),
-            np.asarray([[1, 1], [0, 0]], dtype=np.float32),
+            y_true,
+            predictions,
             "classification",
-            np.asarray([[True, False], [True, True]], dtype=bool),
+            mask,
             split="test",
         )
-
         self.assertEqual(metrics["n"], 3)
-        self.assertAlmostEqual(metrics["accuracy"], 2.0 / 3.0)
+        self.assertNotIn("accuracy", metrics)
+
+        counts = binary_statistics.count_payload(
+            PredictionPayload(y_true, predictions, mask)
+        )
+        self.assertAlmostEqual(
+            metrics_registry.evaluate(counts, split="test")["accuracy"], 2.0 / 3.0
+        )
 
     def test_experiment_artifact_helpers_write_self_contained_metadata(self) -> None:
         class FakeWrapper:
@@ -76,12 +94,9 @@ class TrainOutputTests(unittest.TestCase):
                 },
                 random_seed=42,
             )
-            metrics_file = write_metrics_file(run_dir, {"val": {"mae": 0.1}})
             training_log_file = write_training_log_file(FakeTrained(), run_dir)
 
-            self.assertEqual(metrics_file, run_dir / "metrics.json")
             self.assertEqual(training_log_file, run_dir / "training_log.csv")
-            self.assertEqual(json.loads(metrics_file.read_text())["val"]["mae"], 0.1)
             self.assertIn("epoch", training_log_file.read_text())
             hparams = json.loads(hparams_file.read_text())
             self.assertEqual(hparams["params"]["epochs"], 3)
@@ -127,7 +142,8 @@ class TrainOutputTests(unittest.TestCase):
             self.assertTrue(pred_file.exists())
 
     def test_sample_ids_round_trip_inside_prediction_artifact(self) -> None:
-        from evaluation import loaders, sample_identity
+        from enzymado.artifacts import sample_identity
+        from enzymado.evaluation import loaders
 
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
@@ -165,7 +181,7 @@ class TrainOutputTests(unittest.TestCase):
                 )
 
     def test_save_raw_predictions_carries_no_metrics(self) -> None:
-        """save_raw_predictions is I/O only; evaluate_predictions computes metrics separately."""
+        """save_raw_predictions is I/O only; metrics are computed separately."""
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
             pred_file = save_raw_predictions(

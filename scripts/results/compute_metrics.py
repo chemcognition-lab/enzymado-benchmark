@@ -21,9 +21,9 @@ def _repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[2]
 
 
-sys.path.insert(0, str(_repo_root()))
+sys.path.insert(0, str(_repo_root() / "src"))
 
-from src.evaluation import (  # noqa: E402
+from enzymado.evaluation import (  # noqa: E402, metrics_registry
     binary_statistics,
     discover,
     loaders,
@@ -50,10 +50,25 @@ def _compute_metrics(
                 split_name,
             )
             if counts is not None:
-                metrics_by_split[split_name] = binary_statistics.evaluate(
-                    counts,
-                    split=split_name,
+                block = metrics_registry.evaluate(counts, split=split_name)
+                # Counts cannot express a ranking metric. When the artifact
+                # stores probabilities, auroc/auprc come from score histograms
+                # instead; the remaining metrics keep their count fast path.
+                prediction_blocks = loaders.load_split_blocks(
+                    experiment.run_dir,
+                    split_name,
                 )
+                histograms = (
+                    binary_statistics.ranking_histogram_blocks(prediction_blocks)
+                    if prediction_blocks
+                    else None
+                )
+                if histograms is not None:
+                    block |= metrics_registry.evaluate_ranking(histograms)
+                    block["ranking_source"] = "proba"
+                else:
+                    block["ranking_source"] = "hard_labels"
+                metrics_by_split[split_name] = block
             continue
 
         payload = loaders.load_split_predictions(experiment.run_dir, split_name)

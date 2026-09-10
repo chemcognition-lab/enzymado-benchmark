@@ -22,9 +22,9 @@ import time
 import numpy as np
 
 _REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "src"))
 
-from src.evaluation import discover, metrics_registry, rating_lib  # noqa: E402
+from enzymado.evaluation import discover, metrics_registry, rating_lib  # noqa: E402
 
 
 @dataclasses.dataclass(frozen=True)
@@ -46,6 +46,18 @@ class Cell:
     metric: str
     weight: float
     scores: np.ndarray
+
+
+@dataclasses.dataclass(frozen=True)
+class Exclusion:
+    """One metric cell withheld from the leaderboard, with the evidence for it."""
+
+    task: str
+    split: str
+    metric: str
+    rule: str
+    measured: float
+    threshold: float
 
 
 def _foundation_models() -> tuple[str, ...]:
@@ -89,10 +101,18 @@ def _expected_competitors() -> list[str]:
     )
 
 
-def _task_types(card_path: Path, scope: str) -> dict[str, str]:
+def _task_types(card: dict, scope: str) -> dict[str, str]:
     """Read expected tasks and types from the benchmark card."""
-    card = json.loads(card_path.read_text())
     return {task: config["task_type"] for task, config in card[scope].items()}
+
+
+def _class_prevalences(card: dict, scope: str) -> dict[tuple[str, str], float]:
+    """Read the declared positive-class prevalence of every classification split."""
+    return {
+        (task, split): float(prevalence)
+        for task, config in card[scope].items()
+        for split, prevalence in config.get("class_prevalence", {}).items()
+    }
 
 
 def _load_source(
@@ -130,12 +150,123 @@ def _load_source(
                 arrays[key][competitor] = values * direction
 
 
-def _metric_weights(task_type: str, kendall_weight: float) -> dict[str, float]:
-    """Normalize metric weights so every task has equal total influence."""
-    names = metrics_registry.metric_set_for(task_type)
-    raw = {name: kendall_weight if name == "kendall_tau" else 1.0 for name in names}
-    total = sum(raw.values())
-    return {name: weight / total for name, weight in raw.items()}
+def _metric_weights(
+    task_type: str,
+    kendall_weight: float,
+    excluded: frozenset[str] = frozenset(),
+    label: str = "",
+) -> dict[str, float]:
+    """Normalize the surviving metric weights to equal influence per task cell."""
+    raw = metrics_registry.rating_weights_for(task_type)
+    if "kendall_tau" in raw:
+        raw["kendall_tau"] = kendall_weight
+    kept = {
+        name: weight
+        for name, weight in raw.items()
+        if weight > 0.0 and name not in excluded
+    }
+    total = sum(kept.values())
+    if total <= 0.0:
+        raise ValueError(f"Every rated metric of {label or task_type} was excluded.")
+    return {name: weight / total for name, weight in kept.items()}
+
+
+def _prevalence_exclusions(
+    rule: dict,
+    task_types: dict[str, str],
+    split_weights: dict[str, float],
+    prevalences: dict[tuple[str, str], float],
+) -> list[Exclusion]:
+    """Withhold metrics whose scale is dominated by the majority class."""
+    threshold = float(rule["threshold"])
+    found: list[Exclusion] = []
+    for task, task_type in sorted(task_types.items()):
+        if task_type != "classification":
+            continue
+        for split in split_weights:
+            if (task, split) not in prevalences:
+                raise ValueError(
+                    f"The benchmark card declares no class_prevalence for "
+                    f"{task}/{split}, so min_positive_prevalence cannot be applied."
+                )
+            prevalence = prevalences[task, split]
+            if prevalence >= threshold:
+                continue
+            found.extend(
+                Exclusion(
+                    task=task,
+                    split=split,
+                    metric=metric,
+                    rule="min_positive_prevalence",
+                    measured=prevalence,
+                    threshold=threshold,
+                )
+                for metric in rule["metrics"]
+            )
+    return found
+
+
+def _ceiling_exclusions(
+    rule: dict,
+    task_types: dict[str, str],
+    split_weights: dict[str, float],
+    arrays: dict[tuple[str, str, str], dict[str, np.ndarray]],
+) -> list[Exclusion]:
+    """Withhold metrics whose best competitor never clears the no-skill mark."""
+    found: list[Exclusion] = []
+    for task, task_type in sorted(task_types.items()):
+        directions = metrics_registry.higher_is_better_for(task_type)
+        for split in split_weights:
+            for metric, threshold in rule["thresholds"].items():
+                if metric not in directions:
+                    continue
+                if directions[metric] != 1:
+                    raise ValueError(
+                        f"A degenerate_ceiling threshold needs a higher-is-better "
+                        f"metric; '{metric}' is not one."
+                    )
+                loaded = arrays.get((task, split, metric))
+                if not loaded:
+                    continue
+                ceiling = max(float(values.mean()) for values in loaded.values())
+                if ceiling < float(threshold):
+                    found.append(
+                        Exclusion(
+                            task=task,
+                            split=split,
+                            metric=metric,
+                            rule="degenerate_ceiling",
+                            measured=ceiling,
+                            threshold=float(threshold),
+                        )
+                    )
+    return found
+
+
+def _exclusions(
+    rules: dict,
+    task_types: dict[str, str],
+    split_weights: dict[str, float],
+    arrays: dict[tuple[str, str, str], dict[str, np.ndarray]],
+    prevalences: dict[tuple[str, str], float],
+) -> list[Exclusion]:
+    """Apply every rating-eligibility rule declared in the benchmark card."""
+    found: list[Exclusion] = []
+    if "min_positive_prevalence" in rules:
+        found += _prevalence_exclusions(
+            rules["min_positive_prevalence"],
+            task_types,
+            split_weights,
+            prevalences,
+        )
+    if "degenerate_ceiling" in rules:
+        found += _ceiling_exclusions(
+            rules["degenerate_ceiling"],
+            task_types,
+            split_weights,
+            arrays,
+        )
+    return found
 
 
 def _build_cells(
@@ -144,18 +275,30 @@ def _build_cells(
     split_weights: dict[str, float],
     n_battles: int,
     kendall_weight: float,
-) -> tuple[list[str], list[Cell]]:
+    rules: dict,
+    prevalences: dict[tuple[str, str], float],
+) -> tuple[list[str], list[Cell], list[Exclusion]]:
     """Load and validate a complete leaderboard design."""
     arrays: dict[tuple[str, str, str], dict[str, np.ndarray]] = defaultdict(dict)
     for source in sources:
         _load_source(source, task_types, n_battles, arrays)
 
+    exclusions = _exclusions(rules, task_types, split_weights, arrays, prevalences)
+    dropped: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for exclusion in exclusions:
+        dropped[exclusion.task, exclusion.split].add(exclusion.metric)
+
     competitors = _expected_competitors()
     expected = set(competitors)
     cells: list[Cell] = []
     for task, task_type in sorted(task_types.items()):
-        metric_weights = _metric_weights(task_type, kendall_weight)
         for split, split_weight in split_weights.items():
+            metric_weights = _metric_weights(
+                task_type,
+                kendall_weight,
+                frozenset(dropped[task, split]),
+                label=f"{task}/{split}",
+            )
             for metric, metric_weight in metric_weights.items():
                 key = (task, split, metric)
                 present = set(arrays[key])
@@ -176,7 +319,7 @@ def _build_cells(
                         scores=scores,
                     )
                 )
-    return competitors, cells
+    return competitors, cells, exclusions
 
 
 def _pair_indices(n_models: int) -> tuple[np.ndarray, np.ndarray]:
@@ -309,18 +452,28 @@ def _compute_leaderboard(
     sources: tuple[Source, ...],
     task_types: dict[str, str],
     split_weights: dict[str, float],
+    rules: dict,
+    prevalences: dict[tuple[str, str], float],
     args: argparse.Namespace,
 ) -> None:
     """Compute, summarize, and persist one global leaderboard."""
     print(f"Building {name} leaderboard")
     started = time.perf_counter()
-    competitors, cells = _build_cells(
+    competitors, cells, exclusions = _build_cells(
         sources,
         task_types,
         split_weights,
         args.n_battles,
         args.kendall_weight,
+        rules,
+        prevalences,
     )
+    for exclusion in exclusions:
+        print(
+            f"  excluded {exclusion.task}/{exclusion.split}/{exclusion.metric}"
+            f" ({exclusion.rule}: {exclusion.measured:.6g}"
+            f" vs {exclusion.threshold:g})"
+        )
     pair_a, pair_b = _pair_indices(len(competitors))
     outcomes, pair_weight = _battle_outcomes(
         cells,
@@ -353,7 +506,16 @@ def _compute_leaderboard(
         "metric_weights": {
             "kendall_tau": args.kendall_weight,
             "other_metrics": 1.0,
-            "normalization": "within each task and split",
+            "normalization": (
+                "within each task and split, over the metrics that survive "
+                "rating_exclusions"
+            ),
+        },
+        "rating_exclusions": {
+            "rules": rules,
+            "excluded_cells": [
+                dataclasses.asdict(exclusion) for exclusion in exclusions
+            ],
         },
         "rating_center": args.center_rating,
         "bootstrap_se_definition": "SD of ratings across bootstrap battle rounds",
@@ -391,9 +553,7 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=predictions,
     )
-    parser.add_argument(
-        "--properties-bootstrap-root", type=Path, default=bootstrap
-    )
+    parser.add_argument("--properties-bootstrap-root", type=Path, default=bootstrap)
     parser.add_argument(
         "--real-case-no-attention-predictions-root",
         type=Path,
@@ -420,7 +580,11 @@ def _parse_args() -> argparse.Namespace:
         default=repo / "results" / "ratings" / "seed_42_two_leaderboards",
     )
     parser.add_argument("--n-battles", type=int, default=1000)
-    parser.add_argument("--kendall-weight", type=float, default=2.0)
+    parser.add_argument(
+        "--kendall-weight",
+        type=float,
+        default=metrics_registry.rating_weights_for("regression")["kendall_tau"],
+    )
     parser.add_argument("--random-weight", type=float, default=0.45)
     parser.add_argument("--similarity-weight", type=float, default=0.55)
     parser.add_argument("--center-rating", type=float, default=1500.0)
@@ -452,20 +616,24 @@ def main() -> None:
             pool_types=("attention",),
         ),
     )
-    properties_types = _task_types(args.benchmark_card, "properties")
-    real_case_types = _task_types(args.benchmark_card, "real_case")
+    card = json.loads(args.benchmark_card.read_text())
+    rules = card.get("rating_exclusions", {})
     _compute_leaderboard(
         "properties",
         properties_sources,
-        properties_types,
+        _task_types(card, "properties"),
         {"random": args.random_weight, "similarity": args.similarity_weight},
+        rules,
+        _class_prevalences(card, "properties"),
         args,
     )
     _compute_leaderboard(
         "real_case",
         real_case_sources,
-        real_case_types,
+        _task_types(card, "real_case"),
         {"random": 1.0},
+        rules,
+        _class_prevalences(card, "real_case"),
         args,
     )
     print("Two leaderboards complete.")

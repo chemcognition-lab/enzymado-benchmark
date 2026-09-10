@@ -1,8 +1,10 @@
 import csv
+import hashlib
 import json
 from pathlib import Path
 
-from src.dataset_splitting import (
+from enzymado.dataset_splitting import (
+    build_argument_parser,
     build_metadata_path,
     build_mmseqs_cluster_command,
     build_output_csv_path,
@@ -13,7 +15,15 @@ from src.dataset_splitting import (
     resolve_standardization_columns,
     split_dataset_csv,
     validate_split_fractions,
+    write_split_dataset,
+    write_split_metadata,
 )
+
+
+def behavior_digest(value: object) -> str:
+    """Hash a JSON-compatible behavior snapshot deterministically."""
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def build_rows() -> tuple[list[str], list[dict[str, str]]]:
@@ -68,10 +78,31 @@ def test_validate_split_fractions_rejects_invalid_total():
         raise AssertionError("validate_split_fractions should fail for invalid totals.")
 
 
+def test_similarity_cli_matches_recorded_identity_threshold() -> None:
+    """Keep the split default aligned with the existing split metadata."""
+    parser = build_argument_parser()
+    args = parser.parse_args(
+        [
+            "--input",
+            "dataset.csv",
+            "--mode",
+            "similarity",
+            "--train-fraction",
+            "0.8",
+            "--val-fraction",
+            "0.1",
+            "--test-fraction",
+            "0.1",
+        ]
+    )
+
+    assert args.identity_threshold == 0.3
+
+
 def test_random_split_keeps_grouped_rows_together():
     fieldnames, rows = build_rows()
 
-    _, split_rows, summary = generate_random_split_rows(
+    output_fieldnames, split_rows, summary = generate_random_split_rows(
         rows,
         fieldnames,
         0.6,
@@ -82,13 +113,18 @@ def test_random_split_keeps_grouped_rows_together():
         seed=7,
     )
 
-    split_by_protein = {
-        row["uniprot_id"]: row["split"]
-        for row in split_rows
-    }
+    split_by_protein = {row["uniprot_id"]: row["split"] for row in split_rows}
     assert split_by_protein["P1"] == split_rows[1]["split"]
     assert set(summary) == {"train", "val", "test"}
     assert sum(split["rows"] for split in summary.values()) == len(rows)
+    snapshot = {
+        "fieldnames": output_fieldnames,
+        "assignments": [(row["dataset_id"], row["split"]) for row in split_rows],
+        "summary": summary,
+    }
+    assert behavior_digest(snapshot) == (
+        "9bf7ba70acc90f20922925e2874ca78eee2e79632844379e61bda4db448d29dc"
+    )
 
 
 def test_point_stratified_split_stays_within_protein_and_keeps_duplicate_ids_together():
@@ -104,7 +140,7 @@ def test_point_stratified_split_stays_within_protein_and_keeps_duplicate_ids_tog
     ]
     rows.append(dict(rows[0]))
 
-    _, split_rows, summary = generate_point_stratified_split_rows(
+    output_fieldnames, split_rows, summary = generate_point_stratified_split_rows(
         rows,
         fieldnames,
         0.8,
@@ -118,14 +154,10 @@ def test_point_stratified_split_stays_within_protein_and_keeps_duplicate_ids_tog
 
     for sequence in ("AAAA", "CCCC"):
         assert {
-            row["split"]
-            for row in split_rows
-            if row["protein_sequence"] == sequence
+            row["split"] for row in split_rows if row["protein_sequence"] == sequence
         } == {"train", "val", "test"}
     duplicate_splits = {
-        row["split"]
-        for row in split_rows
-        if row["dataset_id"] == "AAAA_0"
+        row["split"] for row in split_rows if row["dataset_id"] == "AAAA_0"
     }
     assert len(duplicate_splits) == 1
     assert summary["train"]["proteins"] == 2
@@ -133,12 +165,18 @@ def test_point_stratified_split_stays_within_protein_and_keeps_duplicate_ids_tog
     assert summary["test"]["proteins"] == 2
     for split_name in ("train", "val", "test"):
         split_targets = [
-            float(row["target"])
-            for row in split_rows
-            if row["split"] == split_name
+            float(row["target"]) for row in split_rows if row["split"] == split_name
         ]
         assert min(split_targets) < 10
         assert max(split_targets) >= 10
+    snapshot = {
+        "fieldnames": output_fieldnames,
+        "assignments": [(row["dataset_id"], row["split"]) for row in split_rows],
+        "summary": summary,
+    }
+    assert behavior_digest(snapshot) == (
+        "e28ef92c832a1fe236182bcc3b8896006e964863a93ee62abef230b965fcd748"
+    )
 
 
 def test_similarity_split_assigns_whole_clusters_to_one_split():
@@ -163,10 +201,7 @@ def test_similarity_split_assigns_whole_clusters_to_one_split():
         seed=3,
     )
 
-    split_by_protein = {
-        row["uniprot_id"]: row["split"]
-        for row in split_rows
-    }
+    split_by_protein = {row["uniprot_id"]: row["split"] for row in split_rows}
     assert split_by_protein["P1"] == split_by_protein["P2"]
 
 
@@ -241,10 +276,30 @@ def test_build_mmseqs_cluster_command_includes_optional_flags():
 def test_standardization_fits_train_only_and_applies_to_all_splits():
     fieldnames = ["dataset_id", "protein_sequence", "target", "split"]
     rows = [
-        {"dataset_id": "train_1", "protein_sequence": "AAAA", "target": "2", "split": "train"},
-        {"dataset_id": "train_2", "protein_sequence": "CCCC", "target": "4", "split": "train"},
-        {"dataset_id": "val_1", "protein_sequence": "DDDD", "target": "6", "split": "val"},
-        {"dataset_id": "test_1", "protein_sequence": "EEEE", "target": "0", "split": "test"},
+        {
+            "dataset_id": "train_1",
+            "protein_sequence": "AAAA",
+            "target": "2",
+            "split": "train",
+        },
+        {
+            "dataset_id": "train_2",
+            "protein_sequence": "CCCC",
+            "target": "4",
+            "split": "train",
+        },
+        {
+            "dataset_id": "val_1",
+            "protein_sequence": "DDDD",
+            "target": "6",
+            "split": "val",
+        },
+        {
+            "dataset_id": "test_1",
+            "protein_sequence": "EEEE",
+            "target": "0",
+            "split": "test",
+        },
     ]
 
     output_fieldnames, standardized_rows, metadata = build_standardized_dataset_rows(
@@ -267,6 +322,14 @@ def test_standardization_fits_train_only_and_applies_to_all_splits():
         "val_1": 3.0,
         "test_1": -3.0,
     }
+    snapshot = {
+        "fieldnames": output_fieldnames,
+        "rows": standardized_rows,
+        "metadata": metadata,
+    }
+    assert behavior_digest(snapshot) == (
+        "8b727ee84eca1263d61add16faefd69d58763f187cffff9ba00b2784a4eb7e02"
+    )
 
 
 def test_standardization_autodetect_skips_binary_targets():
@@ -435,14 +498,7 @@ def test_split_dataset_csv_merges_modes_into_single_metadata(tmp_path):
     )
 
     group_clusters = {f"P{i}": f"cluster_{i}" for i in range(1, 6)}
-    from src.dataset_splitting import (
-        build_standardized_dataset_rows as _build_std_rows,
-        generate_similarity_split_from_clusters as _sim_from_clusters,
-        write_split_dataset,
-        write_split_metadata,
-    )
-
-    _, split_rows, summary = _sim_from_clusters(
+    _, split_rows, summary = generate_similarity_split_from_clusters(
         rows,
         fieldnames,
         0.5,
@@ -453,7 +509,7 @@ def test_split_dataset_csv_merges_modes_into_single_metadata(tmp_path):
         group_col="uniprot_id",
         seed=3,
     )
-    output_fieldnames, std_rows, std_meta = _build_std_rows(
+    output_fieldnames, std_rows, std_meta = build_standardized_dataset_rows(
         split_rows, [*fieldnames, "split"], ["target"]
     )
     write_split_dataset(similarity_path, std_rows, output_fieldnames)

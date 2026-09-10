@@ -27,9 +27,9 @@ def _repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[2]
 
 
-sys.path.insert(0, str(_repo_root()))
+sys.path.insert(0, str(_repo_root() / "src"))
 
-from src.evaluation import (  # noqa: E402
+from enzymado.evaluation import (  # noqa: E402, metrics_registry
     binary_statistics,
     discover,
     loaders,
@@ -37,7 +37,7 @@ from src.evaluation import (  # noqa: E402
     statistics_cache,
     task_types,
 )
-from src.evaluation import bootstrap as bootstrap_lib  # noqa: E402
+from enzymado.evaluation import bootstrap as bootstrap_lib  # noqa: E402
 
 
 def _task_seed(seed_root: int, signature: tuple[str, ...]) -> int:
@@ -64,8 +64,23 @@ def _classification_evaluation(
     )
     if counts is None:
         return None
-    point_metrics = binary_statistics.evaluate(counts, split="test")
-    replicates = binary_statistics.bootstrap(counts, indices)
+    point_metrics = metrics_registry.evaluate(counts, split="test")
+    replicates = metrics_registry.bootstrap(counts, indices)
+    # Confusion counts cannot express a ranking metric. Where the artifact
+    # stores probabilities, auroc/auprc are recomputed from additive score
+    # histograms so replicates stay a weighted sum rather than a per-replicate
+    # sort; the remaining metrics keep their count fast path.
+    blocks = loaders.load_split_blocks(experiment.run_dir, "test")
+    histograms = binary_statistics.ranking_histogram_blocks(blocks) if blocks else None
+    if histograms is not None:
+        point_metrics |= metrics_registry.evaluate_ranking(histograms)
+        point_metrics["ranking_source"] = "proba"
+        replicates = replicates | metrics_registry.bootstrap_ranking(
+            histograms,
+            indices,
+        )
+    else:
+        point_metrics["ranking_source"] = "hard_labels"
     return point_metrics, replicates, counts.shape[0]
 
 
@@ -84,12 +99,11 @@ def _regression_evaluation(
         payload.target_mask,
         split="test",
     )
-    metric_set = metrics_registry.metric_set_for("regression")
+    specs = metrics_registry.metric_specs("regression")
     replicates = bootstrap_lib.bootstrap_replicates(
         payload,
         indices,
-        metric_set,
-        "regression",
+        specs,
     )
     return point_metrics, replicates, bootstrap_lib.n_resample_units(payload)
 
@@ -215,6 +229,7 @@ def main() -> None:
         grouped[discover.task_signature(experiment)].append(experiment)
 
     args.bootstrap_root.mkdir(parents=True, exist_ok=True)
+    skipped: list[str] = []
     for task_index, (signature, task_experiments) in enumerate(
         sorted(grouped.items()),
         start=1,
@@ -242,6 +257,7 @@ def main() -> None:
             )
             if task_type is None:
                 print(f"    {experiment.embedding_model}: unknown task type; skipping")
+                skipped.append(f"{experiment.task}/{experiment.embedding_model}")
                 continue
 
             n_units = _n_units(
@@ -254,6 +270,7 @@ def main() -> None:
                 print(
                     f"    {experiment.embedding_model}: no test predictions; skipping"
                 )
+                skipped.append(f"{experiment.task}/{experiment.embedding_model}")
                 continue
             identity = _test_sample_identity(experiment)
             if identity is not None and identity[0] != n_units:
@@ -360,6 +377,14 @@ def main() -> None:
                 f"{primary_summary['ci_hi']:.4f}) in {elapsed:.1f}s"
             )
 
+    if skipped:
+        # An experiment that produced no bootstrap leaves a hole in the
+        # results tree. Printing it and exiting 0 makes the gap invisible to
+        # the scheduler and to any downstream check.
+        raise SystemExit(
+            f"{len(skipped)} experiment(s) produced no bootstrap: "
+            + ", ".join(skipped)
+        )
     print("\nBootstrap complete.")
 
 

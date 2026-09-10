@@ -1,22 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
-import sys
 import tempfile
 import unittest
 
-
-def load_results_layout_module():
-    module_path = (
-        Path(__file__).resolve().parents[1] / "src" / "evaluation" / "results_layout.py"
-    )
-    spec = importlib.util.spec_from_file_location("results_layout_module", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+import enzymado.artifacts.results_layout
 
 
 def write_file(path: Path, content: str = "x") -> None:
@@ -26,12 +14,12 @@ def write_file(path: Path, content: str = "x") -> None:
 
 class ResultsLayoutTests(unittest.TestCase):
     def test_unknown_split_family_is_rejected(self) -> None:
-        module = load_results_layout_module()
+        module = enzymado.artifacts.results_layout
         with self.assertRaisesRegex(ValueError, "Unknown split variant"):
             module.canonical_split_family("unsupported")
 
     def test_build_result_run_dir_uses_canonical_layout(self) -> None:
-        module = load_results_layout_module()
+        module = enzymado.artifacts.results_layout
         build_result_run_dir = module.build_results_run_dir
         root = Path("/tmp/results")
         self.assertEqual(
@@ -138,7 +126,7 @@ class ResultsLayoutTests(unittest.TestCase):
         )
 
     def test_artifact_paths_use_full_run_context(self) -> None:
-        module = load_results_layout_module()
+        module = enzymado.artifacts.results_layout
         run_dir = Path("/tmp/results/no_attention/random/mlp/binding/ankh_base")
         self.assertEqual(
             module.build_prediction_artifact_path(
@@ -149,8 +137,8 @@ class ResultsLayoutTests(unittest.TestCase):
                 split_variant="random",
                 split_name="test",
             ),
-            run_dir
-            / "mlp_classification_ankh_base_binding_random_no_attention_test_predictions.safetensors.xz",
+            run_dir / "mlp_classification_ankh_base_binding_random_no_attention"
+            "_test_predictions.safetensors.xz",
         )
         self.assertEqual(
             module.build_model_artifact_path(
@@ -165,7 +153,7 @@ class ResultsLayoutTests(unittest.TestCase):
         )
 
     def test_named_artifact_helpers_accept_canonical_filenames(self) -> None:
-        results_layout_module = load_results_layout_module()
+        results_layout_module = enzymado.artifacts.results_layout
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = (
                 Path(tmp)
@@ -203,7 +191,7 @@ class ResultsLayoutTests(unittest.TestCase):
             )
 
     def test_run_complete_requires_current_artifact_set(self) -> None:
-        results_layout_module = load_results_layout_module()
+        results_layout_module = enzymado.artifacts.results_layout
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = (
                 Path(tmp)

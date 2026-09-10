@@ -7,3 +7,7 @@ data/processed/** filter=lfs diff=lfs merge=lfs -text
 data/** filter=lfs diff=lfs merge=lfs -text
 data/processed/properties/*/dataset_card.json -filter -diff -merge text
 results/predictions/**/*_test_predictions.safetensors.xz filter=lfs diff=lfs merge=lfs -text
+# Small manifest templates stay readable on GitHub instead of going to LFS.
+embeddings_models_output.example.json -filter -diff -merge text
+embeddings_models_output_mean_pooled.example.json -filter -diff -merge text
+

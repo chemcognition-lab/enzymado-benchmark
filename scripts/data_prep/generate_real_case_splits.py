@@ -10,9 +10,9 @@ import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from src.dataset_splitting import (  # noqa: E402
+from enzymado.dataset_splitting import (  # noqa: E402
     build_metadata_path,
     build_output_csv_path,
     split_dataset_csv,
@@ -83,9 +83,7 @@ def _metadata_paths(source_path: Path) -> tuple[Path, ...]:
         f"{source_path.stem}_random_80_10_10_splits.metadata.json"
     )
     existing_paths = tuple(
-        path
-        for path in (canonical_path, legacy_path)
-        if path.exists()
+        path for path in (canonical_path, legacy_path) if path.exists()
     )
     return existing_paths or (canonical_path,)
 

@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
     REPO="${SLURM_SUBMIT_DIR}"
 else
-    REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    REPO="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 fi
 
 if ! type module >/dev/null 2>&1; then
@@ -44,6 +44,7 @@ fi
 : "${RESIDUE_STORE_MODE:=auto}"
 : "${EMBEDDING_MODES:=}"
 : "${OVERWRITE_RESULTS:=0}"
+: "${ATTACH_PROBABILITIES:=0}"
 : "${SEED:=42}"
 
 if [[ -z "${UV_CACHE_DIR:-}" || "${UV_CACHE_DIR}" == /scratch/* ]]; then
@@ -169,6 +170,7 @@ if [[ -n "${EMBEDDING_MODES}" ]]; then
     echo "Embedding modes: ${EMBEDDING_MODES}"
 fi
 echo "Overwrite results: ${OVERWRITE_RESULTS}"
+echo "Attach probabilities: ${ATTACH_PROBABILITIES}"
 echo "Training seed: ${SEED}"
 
 TRAIN_ARGS=(
@@ -232,6 +234,11 @@ fi
 
 if [[ "${OVERWRITE_RESULTS}" == "1" || "${OVERWRITE_RESULTS}" == "true" || "${OVERWRITE_RESULTS}" == "TRUE" ]]; then
     TRAIN_ARGS+=(--overwrite_results)
+fi
+
+# Restore published weights and add probabilities instead of training.
+if [[ "${ATTACH_PROBABILITIES}" == "1" || "${ATTACH_PROBABILITIES}" == "true" || "${ATTACH_PROBABILITIES}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(--attach_probabilities)
 fi
 
 python -u "${REPO}/scripts/run_benchmark.py" "${TRAIN_ARGS[@]}"

@@ -4,33 +4,33 @@ This document describes how training pipelines are selected in this repository a
 
 ## Source Of Truth
 
-The training flow is split across four places:
+The active training flow is defined by:
 
-1. `benchmark_card.json`
-   Defines the benchmark properties and their high-level `task_type` (`classification` or `regression`).
-2. `models/train.py`
-   Orchestrates the end-to-end training loop, maps card names to registry names, and delegates each task to a training route with `prepare`, `train`, and `save_predictions` steps.
-3. `src/data_loading/data_registry.py`
-   Defines the dataset-level configuration for each task, especially `batch_kind` and `label_kind`.
-4. `models/models.py`
-   Defines the available model families through `MODEL_MAP` and `STRUCTURED_MODEL_MAP`.
+1. `benchmark_card.json`: benchmark metadata and rating eligibility rules.
+2. `scripts/run_benchmark.py` and `src/enzymado/pipeline/`: CLI selection, data
+   preparation, and execution of each model/task/embedding combination.
+3. `src/enzymado/data_loading/data_registry.py`: task configuration, including
+   `batch_kind`, `label_kind`, target columns, and available dataset splits.
+4. `src/enzymado/training/model_registry.py` and `training/train.py`: model
+   families and pooled, residue, or attention training routes.
+5. `src/enzymado/prediction/`: prediction, model persistence, and optional
+   attachment of probabilities from restored checkpoints.
 
 ## How A Pipeline Is Resolved
 
-For each property in `benchmark_card.json`, training follows this order:
+For each selected task in `TASK_REGISTRY`, training follows this order:
 
-1. The property name is resolved to a registry task name.
-   Example: `phopt -> ph_opt`, `binding_site -> binding_sites`.
+1. The CLI selects registered tasks and validates requested task names.
 2. The task config is loaded from `TASK_REGISTRY`.
 3. The task's `batch_kind` and `label_kind` determine which data-building path is used.
-4. The task's `label_kind` and card `task_type` determine which model map is used.
+4. The task's `label_kind` determines the task type and model map.
 5. The selected route trains the model through either:
    - direct pooled arrays with `fit(...)`, or
    - residue-aware `DataLoader` batches with `fit_loader(...)`.
 6. Each run writes prediction files plus experiment-style artifacts:
    compressed `*.safetensors.xz` predictions, `hparams.json`,
-   `metrics.json`, `training_log.csv`, and the saved model. Torch models
-   also emit `model.safetensors` weights.
+   `training_log.csv`, `run_manifest.json`, and the saved model. Torch models
+   also emit safetensors weights. The evaluation CLI writes `metrics.json`.
 
 ## CLI Filters For SLURM
 
@@ -49,8 +49,13 @@ python scripts/run_benchmark.py embeddings_models_output.json \
 - `--model_prefix` selects a model family: `mlp_`, `linear_`, or `xgb_`.
 - `--task_name` selects a property. Repeat it to train multiple properties.
 - `--split_variant` selects `random` or `similarity`. If omitted,
-  each task uses the card's `default_split`.
+  the CLI uses `random`.
 - `--allowed_ids` optionally restricts rows to embeddings present in an ID allowlist.
+
+Similarity splits were generated with an MMseqs2 minimum sequence identity of
+`0.3`. The `0.5` threshold recorded in dataset cards belongs to a separate
+whole-dataset diversity analysis and does not define the train/validation/test
+splits.
 
 ## Main Training Routes
 
@@ -68,6 +73,21 @@ There are five training routes:
    Build mutant minus wildtype pooled embeddings, then train on 2D arrays.
 5. `protein_residue` + `residue_binary_vector`
    Keep residue-level structure and train through `DataLoader` batches.
+
+## Computational Policy
+
+Early stopping intentionally monitors validation loss. Computing full
+validation metrics after every epoch is too expensive for high-dimensional EC
+number outputs and per-residue active-site and binding-site tasks. Changing the
+early-stopping signal is a benchmark-protocol change, not a structural
+refactor.
+
+Classification accuracy, precision, recall, and F1 use saved hard labels.
+AUROC and AUPRC use score histograms when the artifact includes probabilities;
+otherwise they use the hard-label fallback. `ranking_source` records that choice.
+`--attach_probabilities` restores completed classification runs and adds test
+probabilities while preserving their hard-label tensors. Metrics and bootstrap
+must then be recomputed to reflect the new ranking scores.
 
 ## Model Selection Rules
 
@@ -107,10 +127,10 @@ There are five training routes:
 
 If you want to inspect the exact code path for a task:
 
-1. Start in `src/data_loading/data_registry.py` to find `batch_kind` and `label_kind`.
-2. Open `models/train.py` and look at the branch conditions in `main(...)`.
-3. Open `src/data_loading/datasets.py` to see how the dataset and builders are assembled.
-4. Open `models/models.py` to see which wrapper class each model name actually instantiates.
+1. Start in `src/enzymado/data_loading/data_registry.py` to find `batch_kind` and `label_kind`.
+2. Open `src/enzymado/pipeline/run_data.py` and inspect `prepare(...)` and its selected training route.
+3. Open `src/enzymado/data_loading/datasets.py` to see how the dataset and builders are assembled.
+4. Open `src/enzymado/training/model_registry.py` to see which wrapper class each model name actually instantiates.
 
 ## Short Answer To A Common Question
 
@@ -136,9 +156,8 @@ python scripts/results/compute_metrics.py --filter-task ec_number
 Classification tasks are reduced to per-row TP, FP, FN, and TN counts under
 `results/evaluation_statistics/`. Each cache records the SHA-256 digest of its
 source prediction. Multi-head EC tensors are processed level by level, avoiding
-their dense concatenation. Accuracy, precision, recall, F1, AUROC, and AUPRC are
-computed with global micro aggregation. AUROC and AUPRC use the saved hard-label
-predictions because the current artifacts do not contain probability scores.
+their dense concatenation. Accuracy, precision, recall, and F1 use global micro aggregation. AUROC and AUPRC
+use probability histograms when available and confusion counts otherwise.
 The bootstrap pass reuses these statistics:
 
 ```bash
@@ -147,6 +166,11 @@ python scripts/results/compute_bootstrap_metrics.py \
 ```
 
 Bootstrap units are proteins for EC and residue tasks and rows for other tasks.
-Experiments with the same number of units reuse indices by row position. When
-the unit count differs, the run receives a deterministic independent resample
-and `paired_by_position` is recorded as `false` in `metrics.json`.
+Experiments share resampling groups by `(split, task)` across model families and
+pooling modes. Stored sample identity is checked before sharing indices.
+
+Every registered metric is computed and bootstrapped. Rating eligibility is a
+separate step: `r2` has weight zero; `benchmark_card.json:rating_exclusions` can
+withhold accuracy for low-prevalence splits, or Kendall tau/AUROC cells whose best
+competitor does not exceed the configured ceiling. These exclusions do not remove
+metrics from per-model result files.

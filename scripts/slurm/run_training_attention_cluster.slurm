@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
     REPO="${SLURM_SUBMIT_DIR}"
 else
-    REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    REPO="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 fi
 
 if ! type module >/dev/null 2>&1; then
@@ -68,6 +68,7 @@ mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${T
 # embeddings_json.
 : "${EMBEDDING_MODES:=attention}"
 : "${OVERWRITE_RESULTS:=0}"
+: "${ATTACH_PROBABILITIES:=0}"
 
 if [[ -n "${EXPERIMENT_NAME}" ]]; then
     if [[ ! "${EXPERIMENT_NAME}" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -186,6 +187,7 @@ if [[ -n "${EMBEDDING_MODES}" ]]; then
     echo "Embedding modes: ${EMBEDDING_MODES}"
 fi
 echo "Overwrite results: ${OVERWRITE_RESULTS}"
+echo "Attach probabilities: ${ATTACH_PROBABILITIES}"
 
 TRAIN_ARGS=(
     "${EMBEDDINGS_JSON}"
@@ -266,6 +268,11 @@ fi
 
 if [[ "${OVERWRITE_RESULTS}" == "1" || "${OVERWRITE_RESULTS}" == "true" || "${OVERWRITE_RESULTS}" == "TRUE" ]]; then
     TRAIN_ARGS+=(--overwrite_results)
+fi
+
+# Restore published weights and add probabilities instead of training.
+if [[ "${ATTACH_PROBABILITIES}" == "1" || "${ATTACH_PROBABILITIES}" == "true" || "${ATTACH_PROBABILITIES}" == "TRUE" ]]; then
+    TRAIN_ARGS+=(--attach_probabilities)
 fi
 
 python -u "${REPO}/scripts/run_benchmark.py" "${TRAIN_ARGS[@]}"

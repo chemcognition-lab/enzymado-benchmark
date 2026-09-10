@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
     REPO="${SLURM_SUBMIT_DIR}"
 else
-    REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    REPO="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 fi
 
 if ! type module >/dev/null 2>&1; then

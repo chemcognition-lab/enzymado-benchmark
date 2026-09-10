@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 import tempfile
 from unittest import TestCase
+import unittest.mock
 
 import numpy as np
 from scripts.results import compute_ratings as ratings_script
+import sklearn.metrics as skm
 
-from src.evaluation import binary_statistics, statistics_cache, task_types
-from src.evaluation import metrics_registry as metrics_module
-from src.evaluation.bootstrap import (
+from enzymado.evaluation import binary_statistics, loaders, statistics_cache, task_types
+from enzymado.evaluation import metrics_registry as metrics_module
+from enzymado.evaluation.bootstrap import (
     _bootstrap_additive_regression,
     _bootstrap_classification_counts,
     _precompute_binary_counts,
@@ -22,28 +25,22 @@ from src.evaluation.bootstrap import (
     n_resample_units,
     summarise_replicates,
 )
-from src.evaluation.discover import (
+from enzymado.evaluation.discover import (
     Experiment,
-    TrackKey,
-    assign_track,
     discover_experiments,
-    group_into_tracks,
 )
-from src.evaluation.loaders import PredictionPayload, derive_task_type
-from src.evaluation.metrics_registry import (
-    classification_f1,
+from enzymado.evaluation.loaders import PredictionPayload, derive_task_type
+import enzymado.evaluation.metrics_registry as metrics_registry
+from enzymado.evaluation.metrics_registry import (
     higher_is_better_for,
-    metric_set_for,
     primary_metric_for,
     regression_mae,
     regression_rmse,
 )
-from src.evaluation.rating_lib import (
-    determine_outcome_aggregate,
-    determine_outcome_raw,
-    fit_batch_mle,
+from enzymado.evaluation.rating_lib import (
     fit_weighted_mle,
 )
+import enzymado.types
 
 
 class TestMetrics(TestCase):
@@ -54,19 +51,29 @@ class TestMetrics(TestCase):
         self.assertAlmostEqual(regression_mae(y, p, mask), 0.5)
 
     def test_classification_f1_binary(self) -> None:
+        """F1 from the production count path, against a hand-computed value."""
         y = np.array([1, 0, 1, 0, 1, 1, 0, 0], dtype=np.float32)
         p = np.array([1, 0, 1, 1, 0, 1, 0, 0], dtype=np.float32)
+        metrics = metrics_registry.evaluate(
+            binary_statistics.count_payload(PredictionPayload(y, p, None)),
+            split="test",
+        )
         self.assertAlmostEqual(
-            classification_f1(y, p, None), 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4)
+            metrics["f1"], 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4)
         )
 
-    def test_metric_set_dispatch(self) -> None:
-        self.assertIn("mae", metric_set_for("regression"))
-        self.assertIn("f1", metric_set_for("classification"))
-        self.assertIn("auroc", metric_set_for("classification"))
-        self.assertIn("auprc", metric_set_for("classification"))
+    def test_metric_catalog_dispatch(self) -> None:
+        expected = {
+            "regression": {"mae", "rmse", "r2", "kendall_tau"},
+            "classification": {
+                "accuracy", "precision", "recall", "f1", "auroc", "auprc"
+            },
+        }
+        for task_type, names in expected.items():
+            specs = metrics_module.metric_specs(task_type)
+            self.assertEqual({spec.name for spec in specs}, names)
         with self.assertRaises(ValueError):
-            metric_set_for("nonsense")
+            metrics_module.metric_specs("nonsense")
 
     def test_primary_metric_table(self) -> None:
         self.assertEqual(primary_metric_for("regression"), "mae")
@@ -74,22 +81,78 @@ class TestMetrics(TestCase):
         self.assertEqual(higher_is_better_for("regression")["mae"], -1)
         self.assertEqual(higher_is_better_for("classification")["f1"], +1)
 
-    def test_count_metrics_match_registered_classification_metrics(self) -> None:
+    def test_count_metrics_match_sklearn_reference(self) -> None:
+        """The confusion-count path must agree with sklearn on the same data.
+
+        sklearn is the reference implementation and is called here, from the
+        test. Production derives these six metrics from per-row counts, which
+        is what keeps bootstrapping the largest tasks tractable; registering a
+        sklearn version as the metric's own ``fn`` would declare a code path
+        production never executes.
+        """
         y_true = np.array([1, 0, 1, 0, 1, 0], dtype=np.float32)
         predictions = np.array([1, 1, 0, 0, 1, 0], dtype=np.float32)
         payload = PredictionPayload(y_true, predictions, None)
-        count_metrics = binary_statistics.evaluate(
+        count_metrics = metrics_registry.evaluate(
             binary_statistics.count_payload(payload),
             split="test",
         )
-        direct_metrics = metrics_module.evaluate_predictions(
-            y_true,
-            predictions,
-            "classification",
-            split="test",
+        y_label = np.rint(y_true).astype(np.int8)
+        p_label = np.rint(predictions).astype(np.int8)
+        expected = {
+            "accuracy": skm.accuracy_score(y_label, p_label),
+            "precision": skm.precision_score(
+                y_label, p_label, average="binary", zero_division=0
+            ),
+            "recall": skm.recall_score(
+                y_label, p_label, average="binary", zero_division=0
+            ),
+            "f1": skm.f1_score(y_label, p_label, average="binary", zero_division=0),
+            # AUROC/AUPRC rank by the raw prediction, as production does when a
+            # run carries probabilities; with hard labels this is the same order.
+            "auroc": skm.roc_auc_score(y_label, predictions),
+            "auprc": skm.average_precision_score(y_label, predictions),
+        }
+        for name, value in expected.items():
+            self.assertAlmostEqual(count_metrics[name], float(value))
+
+    def test_catalog_entry_reaches_all_classification_consumers(self) -> None:
+        recall_spec = next(
+            spec
+            for spec in metrics_module.metric_specs("classification")
+            if spec.name == "recall"
         )
-        for name in ("accuracy", "precision", "recall", "f1", "auroc", "auprc"):
-            self.assertAlmostEqual(count_metrics[name], direct_metrics[name])
+        alias_spec = dataclasses.replace(
+            recall_spec,
+            name="sensitivity_alias",
+            is_primary=False,
+        )
+        catalogue = metrics_module.METRICS + (alias_spec,)
+        y_true = np.array([1, 0, 1, 0], dtype=np.float32)
+        predictions = np.array([1, 0, 0, 0], dtype=np.float32)
+        payload = PredictionPayload(y_true, predictions, None)
+        counts = binary_statistics.count_payload(payload)
+        indices = np.arange(y_true.size, dtype=np.int64)[None, :]
+
+        with unittest.mock.patch.object(metrics_module, "METRICS", catalogue):
+            # evaluate_predictions is deliberately NOT a classification
+            # consumer: classification metrics declare no `fn` and are derived
+            # from counts, so a new entry must reach the count, bootstrap and
+            # direction consumers instead.
+            direct = metrics_module.evaluate_predictions(
+                y_true,
+                predictions,
+                "classification",
+                split="test",
+            )
+            aggregated = metrics_module.evaluate(counts, split="test")
+            replicates = metrics_module.bootstrap(counts, indices)
+            directions = metrics_module.higher_is_better_for("classification")
+
+        self.assertNotIn(alias_spec.name, direct)
+        self.assertIn(alias_spec.name, aggregated)
+        self.assertIn(alias_spec.name, replicates)
+        self.assertIn(alias_spec.name, directions)
 
 
 class TestBootstrap(TestCase):
@@ -105,24 +168,35 @@ class TestBootstrap(TestCase):
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
         idx = make_resample_indices(20, 8, seed=0)
         out = bootstrap_replicates(
-            payload, idx, metric_set_for("regression"), "regression"
+            payload,
+            idx,
+            metrics_module.metric_specs("regression"),
+        )
+        repeated = bootstrap_replicates(
+            payload,
+            make_resample_indices(20, 8, seed=0),
+            metrics_module.metric_specs("regression"),
         )
         self.assertEqual(set(out.keys()), {"mae", "rmse", "r2", "kendall_tau"})
         self.assertEqual(out["mae"].shape, (8,))
+        for metric_name in out:
+            np.testing.assert_array_equal(out[metric_name], repeated[metric_name])
         # Predictions are y + 0.5 → mae across any resample = 0.5
         np.testing.assert_allclose(out["mae"], 0.5, rtol=1e-6)
 
     def test_bootstrap_regression_task_type_not_misdetected_from_value_range(
         self,
     ) -> None:
-        """A [0, 1]-scaled regression target must not be routed to classification metrics."""
+        """A [0, 1]-scaled regression target must not route to classification."""
         rng = np.random.default_rng(3)
         y = rng.random(30).astype(np.float32)
         p = y + rng.normal(0, 0.05, 30).astype(np.float32)
         payload = PredictionPayload(y_true=y, predictions=p, target_mask=None)
         idx = make_resample_indices(30, 10, seed=0)
         out = bootstrap_replicates(
-            payload, idx, metric_set_for("regression"), "regression"
+            payload,
+            idx,
+            metrics_module.metric_specs("regression"),
         )
         self.assertEqual(set(out.keys()), {"mae", "rmse", "r2", "kendall_tau"})
 
@@ -139,9 +213,12 @@ class TestBootstrap(TestCase):
 
         idx = make_resample_indices(n_proteins, 50, seed=1)
         out = bootstrap_replicates(
-            payload, idx, metric_set_for("classification"), "classification"
+            payload,
+            idx,
+            metrics_module.metric_specs("classification"),
         )
-        # Across replicates the F1 should vary (some samples include only good proteins).
+        # Across replicates the F1 should vary (some samples include only
+        # good proteins).
         self.assertGreater(out["f1"].std(), 0.0)
 
     def test_summarise_replicates_handles_nan(self) -> None:
@@ -153,7 +230,7 @@ class TestBootstrap(TestCase):
 
 class TestLoaders(TestCase):
     def test_multi_head_ec_unification_concatenates_levels(self) -> None:
-        from src.evaluation.loaders import _unify_multi_head_levels
+        from enzymado.evaluation.loaders import _multi_head_blocks
 
         out = {
             "y_true_level_1": np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float32),
@@ -165,7 +242,11 @@ class TestLoaders(TestCase):
                 [True, False], dtype=bool
             ),  # row 1 unknown @ level 2
         }
-        payload = _unify_multi_head_levels(out)
+        with unittest.mock.patch(
+            "enzymado.evaluation.loaders.load_split_blocks",
+            return_value=_multi_head_blocks(out),
+        ):
+            payload = loaders.load_split_predictions(Path("/unused"), "test")
         assert payload is not None
         self.assertEqual(payload.y_true.shape, (2, 5))
         self.assertEqual(payload.predictions.shape, (2, 5))
@@ -184,15 +265,15 @@ class TestLoaders(TestCase):
         np.testing.assert_array_equal(payload.y_true[0], [1, 0, 0, 0, 1])
         np.testing.assert_array_equal(payload.y_true[1], [0, 1, 0, 1, 1])
 
-    def test_multi_head_unify_returns_none_for_flat_schema(self) -> None:
-        from src.evaluation.loaders import _unify_multi_head_levels
+    def test_multi_head_blocks_returns_none_for_flat_schema(self) -> None:
+        from enzymado.evaluation.loaders import _multi_head_blocks
 
         flat = {"y_true": np.zeros((2, 3)), "predictions": np.zeros((2, 3))}
-        self.assertIsNone(_unify_multi_head_levels(flat))
+        self.assertIsNone(_multi_head_blocks(flat))
 
     def test_multi_head_loader_preserves_encoded_sample_ids(self) -> None:
-        from src.evaluation import sample_identity
-        from src.evaluation.loaders import _unify_multi_head_levels
+        from enzymado.artifacts import sample_identity
+        from enzymado.evaluation.loaders import _multi_head_blocks
 
         byte_values, offsets = sample_identity.encode(("P1", "P2"))
         tensors = {
@@ -203,13 +284,13 @@ class TestLoaders(TestCase):
             sample_identity.SAMPLE_ID_OFFSETS_KEY: offsets,
         }
 
-        payload = _unify_multi_head_levels(tensors)
+        payload = _multi_head_blocks(tensors)[0]
 
         self.assertIsNotNone(payload)
         self.assertEqual(payload.sample_ids, ("P1", "P2"))
 
     def test_sample_identity_fingerprint_depends_on_order(self) -> None:
-        from src.evaluation import sample_identity
+        from enzymado.artifacts import sample_identity
 
         first = sample_identity.manifest(("P1", "P2"))
         same = sample_identity.manifest(("P1", "P2"))
@@ -286,7 +367,9 @@ class TestBootstrapClassificationCounts(TestCase):
 
         idx = make_resample_indices(n, 30, seed=42)
         direct = bootstrap_replicates(
-            payload, idx, metric_set_for("classification"), "classification"
+            payload,
+            idx,
+            metrics_module.metric_specs("classification"),
         )
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
@@ -306,7 +389,9 @@ class TestBootstrapClassificationCounts(TestCase):
 
         idx = make_resample_indices(n_proteins, 50, seed=7)
         direct = bootstrap_replicates(
-            payload, idx, metric_set_for("classification"), "classification"
+            payload,
+            idx,
+            metrics_module.metric_specs("classification"),
         )
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
@@ -322,7 +407,9 @@ class TestBootstrapClassificationCounts(TestCase):
 
         idx = make_resample_indices(n_rows, 40, seed=3)
         direct = bootstrap_replicates(
-            payload, idx, metric_set_for("classification"), "classification"
+            payload,
+            idx,
+            metrics_module.metric_specs("classification"),
         )
         counts = _precompute_binary_counts(payload)
         additive = _bootstrap_classification_counts(counts, idx)
@@ -344,7 +431,7 @@ class TestBootstrapClassificationCounts(TestCase):
             counts,
             np.array([[2, 1, 0, 2], [1, 0, 0, 1]], dtype=np.int64),
         )
-        metrics = binary_statistics.evaluate(counts, split="test")
+        metrics = metrics_registry.evaluate(counts, split="test")
         self.assertEqual(metrics["n"], 7)
 
     def test_statistics_cache_validates_prediction_fingerprint(self) -> None:
@@ -389,7 +476,11 @@ class TestBootstrapAdditiveRegression(TestCase):
         idx = make_resample_indices(n, 25, seed=11)
         direct = self._direct_mae_rmse(payload, idx)
         stats = _precompute_regression_errors(payload)
-        additive = _bootstrap_additive_regression(stats, idx, {"mae", "rmse"})
+        specs = metrics_module.metric_specs_for_statistic(
+            enzymado.types.MetricStatistic.ERROR_SUMS,
+            "regression",
+        )
+        additive = _bootstrap_additive_regression(stats, idx, specs)
         np.testing.assert_allclose(additive["mae"], direct["mae"], atol=1e-6)
         np.testing.assert_allclose(additive["rmse"], direct["rmse"], atol=1e-6)
 
@@ -404,7 +495,11 @@ class TestBootstrapAdditiveRegression(TestCase):
         idx = make_resample_indices(n_proteins, 20, seed=13)
         direct = self._direct_mae_rmse(payload, idx)
         stats = _precompute_regression_errors(payload)
-        additive = _bootstrap_additive_regression(stats, idx, {"mae", "rmse"})
+        specs = metrics_module.metric_specs_for_statistic(
+            enzymado.types.MetricStatistic.ERROR_SUMS,
+            "regression",
+        )
+        additive = _bootstrap_additive_regression(stats, idx, specs)
         np.testing.assert_allclose(additive["mae"], direct["mae"], atol=1e-6)
         np.testing.assert_allclose(additive["rmse"], direct["rmse"], atol=1e-6)
 
@@ -485,58 +580,6 @@ class TestDiscover(TestCase):
                 sigs,
             )
 
-    def test_assign_track_routes_into_no_attention(self) -> None:
-        e_mean = Experiment(
-            "properties",
-            "no_attention",
-            "random",
-            "linear",
-            "binding",
-            "ankh_base",
-            Path("/tmp"),
-        )
-        e_residue = Experiment(
-            "properties",
-            "no_attention",
-            "random",
-            "xgboost",
-            "active_sites",
-            "ankh_large",
-            Path("/tmp"),
-        )
-        e_attn = Experiment(
-            "properties",
-            "attention",
-            "similarity",
-            "mlp",
-            "kcat",
-            "esm2_650M",
-            Path("/tmp"),
-        )
-        e_real = Experiment(
-            "real_case",
-            "no_attention",
-            "random",
-            "linear",
-            "align_amylase_activity",
-            "ankh_base",
-            Path("/tmp"),
-        )
-        e_real_attn = Experiment(
-            "real_case",
-            "attention",
-            "random",
-            "mlp",
-            "align_amylase_activity",
-            "ankh_base",
-            Path("/tmp"),
-        )
-        rc = {"align_amylase_activity"}
-        self.assertEqual(assign_track(e_mean, rc), "no_attention")
-        self.assertEqual(assign_track(e_residue, rc), "no_attention")
-        self.assertEqual(assign_track(e_attn, rc), "attention")
-        self.assertEqual(assign_track(e_real, rc), "real_case")
-        self.assertEqual(assign_track(e_real_attn, rc), "real_case_attention")
 
     def test_experiment_task_type_prefers_hparams_over_metrics(self) -> None:
         import json
@@ -581,83 +624,6 @@ class TestDiscover(TestCase):
             )
             self.assertEqual(exp.task_type(), "regression")
 
-    def test_group_into_tracks_buckets_by_split_and_family(self) -> None:
-        exps = [
-            Experiment(
-                "properties",
-                "no_attention",
-                "random",
-                "linear",
-                "binding",
-                "ankh_base",
-                Path("/tmp/a"),
-            ),
-            Experiment(
-                "properties",
-                "no_attention",
-                "random",
-                "linear",
-                "active_sites",
-                "ankh_base",
-                Path("/tmp/b"),
-            ),
-            Experiment(
-                "properties",
-                "attention",
-                "random",
-                "mlp",
-                "kcat",
-                "esm2_650M",
-                Path("/tmp/c"),
-            ),
-        ]
-        groups = group_into_tracks(exps, real_case_tasks=set())
-        keys = sorted(groups.keys(), key=lambda k: (k.track, k.split, k.model_family))
-        self.assertEqual(keys[0], TrackKey("attention", "random", "mlp"))
-        self.assertEqual(keys[1], TrackKey("no_attention", "random", "linear"))
-        # no_attention track should hold both experiments sharing (split, model_family)
-        self.assertEqual(len(groups[TrackKey("no_attention", "random", "linear")]), 2)
-
-
-class TestRatingLib(TestCase):
-    def test_determine_outcome_raw_detects_clear_win(self) -> None:
-        baseline = np.full(200, 0.50)
-        candidate = np.full(200, 0.60)
-        # All differences are +0.10 → highly significant
-        self.assertEqual(determine_outcome_raw(baseline, candidate), 1.0)
-
-    def test_determine_outcome_raw_ties_when_identical(self) -> None:
-        arr = np.linspace(0.4, 0.6, 200)
-        # All differences = 0 → ValueError fallback returns tie
-        self.assertEqual(determine_outcome_raw(arr, arr), 0.5)
-
-    def test_determine_outcome_aggregate_zero_se(self) -> None:
-        # Both CIs are zero-width
-        a = (0.5, 0.5, 0.5)
-        b = (0.6, 0.6, 0.6)
-        self.assertEqual(determine_outcome_aggregate(a, b), 1.0)
-        self.assertEqual(determine_outcome_aggregate(b, a), 0.0)
-        self.assertEqual(determine_outcome_aggregate(a, a), 0.5)
-
-    def test_fit_batch_mle_produces_consistent_ranking(self) -> None:
-        # Three players: A always beats B, B always beats C
-        matches = [
-            ("A", "B", 1.0),
-            ("A", "B", 1.0),
-            ("A", "B", 1.0),
-            ("B", "C", 1.0),
-            ("B", "C", 1.0),
-            ("B", "C", 1.0),
-            ("A", "C", 1.0),
-            ("A", "C", 1.0),
-        ]
-        ratings = fit_batch_mle(
-            matches, ["A", "B", "C"], anchor_model="C", anchor_rating=1500.0
-        )
-        self.assertGreater(ratings["A"], ratings["B"])
-        self.assertGreater(ratings["B"], ratings["C"])
-        self.assertEqual(ratings["C"], 1500.0)
-
 
 class TestGlobalRatings(TestCase):
     def test_expected_competitors_include_all_five_configurations(self) -> None:
@@ -668,8 +634,87 @@ class TestGlobalRatings(TestCase):
     def test_kendall_weight_is_normalized_within_regression(self) -> None:
         weights = ratings_script._metric_weights("regression", 2.0)
         self.assertAlmostEqual(sum(weights.values()), 1.0)
-        self.assertAlmostEqual(weights["kendall_tau"], 0.4)
-        self.assertTrue(all(weights[name] == 0.2 for name in ("mae", "rmse", "r2")))
+        self.assertAlmostEqual(weights["kendall_tau"], 0.5)
+        self.assertTrue(all(weights[name] == 0.25 for name in ("mae", "rmse")))
+
+    def test_unrated_metrics_never_reach_the_leaderboard(self) -> None:
+        """A zero registry weight must drop out of the battles entirely."""
+        registered = metrics_registry.rating_weights_for("regression")
+        unrated = {name for name, weight in registered.items() if weight == 0.0}
+        self.assertTrue(unrated)
+        weights = ratings_script._metric_weights("regression", 2.0)
+        self.assertFalse(unrated & set(weights))
+
+    def test_excluded_metrics_are_renormalized_within_the_cell(self) -> None:
+        """Dropping a metric must not cost its task any leaderboard influence."""
+        weights = ratings_script._metric_weights(
+            "classification", 2.0, frozenset({"accuracy"})
+        )
+        self.assertAlmostEqual(sum(weights.values()), 1.0)
+        self.assertNotIn("accuracy", weights)
+        self.assertTrue(all(value == 0.2 for value in weights.values()))
+
+    def test_metric_weights_reject_a_fully_excluded_cell(self) -> None:
+        every = set(metrics_registry.rating_weights_for("classification"))
+        with self.assertRaisesRegex(ValueError, "ec_number/random"):
+            ratings_script._metric_weights(
+                "classification", 2.0, frozenset(every), label="ec_number/random"
+            )
+
+    def test_prevalence_rule_drops_only_the_imbalanced_splits(self) -> None:
+        """The rule reads the card, so a balanced split must keep accuracy."""
+        rule = {"metrics": ["accuracy"], "threshold": 0.05}
+        excluded = ratings_script._prevalence_exclusions(
+            rule,
+            {"rare": "classification", "even": "classification", "num": "regression"},
+            {"random": 1.0},
+            {("rare", "random"): 0.004, ("even", "random"): 0.5},
+        )
+        self.assertEqual(
+            [(item.task, item.split, item.metric) for item in excluded],
+            [("rare", "random", "accuracy")],
+        )
+
+    def test_prevalence_rule_requires_a_declared_prevalence(self) -> None:
+        with self.assertRaisesRegex(ValueError, "class_prevalence"):
+            ratings_script._prevalence_exclusions(
+                {"metrics": ["accuracy"], "threshold": 0.05},
+                {"rare": "classification"},
+                {"random": 1.0},
+                {},
+            )
+
+    def test_ceiling_rule_drops_only_cells_without_headroom(self) -> None:
+        """The ceiling is the best competitor, not the average one."""
+        rule = {"thresholds": {"kendall_tau": 0.10}}
+        arrays = {
+            ("flat", "random", "kendall_tau"): {
+                "a": np.full(4, 0.01),
+                "b": np.full(4, 0.05),
+            },
+            ("live", "random", "kendall_tau"): {
+                "a": np.full(4, 0.01),
+                "b": np.full(4, 0.40),
+            },
+        }
+        excluded = ratings_script._ceiling_exclusions(
+            rule,
+            {"flat": "regression", "live": "regression"},
+            {"random": 1.0},
+            arrays,
+        )
+        self.assertEqual([item.task for item in excluded], ["flat"])
+        self.assertAlmostEqual(excluded[0].measured, 0.05)
+
+    def test_ceiling_rule_rejects_a_lower_is_better_metric(self) -> None:
+        """A threshold on rmse would silently invert the comparison."""
+        with self.assertRaisesRegex(ValueError, "higher-is-better"):
+            ratings_script._ceiling_exclusions(
+                {"thresholds": {"rmse": 0.10}},
+                {"num": "regression"},
+                {"random": 1.0},
+                {("num", "random", "rmse"): {"a": np.full(4, -1.0)}},
+            )
 
     def test_weighted_mle_ranks_fractional_pairwise_wins(self) -> None:
         pair_a = np.array([0, 0, 1], dtype=np.int64)

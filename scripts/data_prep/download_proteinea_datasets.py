@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Export ProteinEA Hugging Face datasets into the repository's CSV schema."""
+
+from __future__ import annotations
 
 import argparse
 import csv
 from pathlib import Path
 from typing import Any
-
 
 SEQUENCE_ALIASES = (
     "protein_sequence",
@@ -43,9 +43,7 @@ DATASET_SPECS = {
             "label",
             "labels",
         ),
-        "output_path": Path(
-            "data/raw/proteinea/proteinea_fluorescence_raw.csv"
-        ),
+        "output_path": Path("data/raw/proteinea/proteinea_fluorescence_raw.csv"),
         "id_prefix": "fluorescence",
     },
     "solubility": {
@@ -130,7 +128,9 @@ def coerce_binary_label(value: Any) -> str:
 def ordered_split_names(split_names: list[str]) -> list[str]:
     seen = set(split_names)
     ordered = [name for name in DEFAULT_SPLIT_ORDER if name in seen]
-    ordered.extend(sorted(name for name in split_names if name not in DEFAULT_SPLIT_ORDER))
+    ordered.extend(
+        sorted(name for name in split_names if name not in DEFAULT_SPLIT_ORDER)
+    )
     return ordered
 
 
@@ -143,7 +143,9 @@ def inspect_dataset(
     dataset_bundle = load_dataset_fn(spec["hf_name"])
     if isinstance(dataset_bundle, dataset_dict_cls):
         split_names = ordered_split_names(list(dataset_bundle.keys()))
-        split_datasets = [(split_name, dataset_bundle[split_name]) for split_name in split_names]
+        split_datasets = [
+            (split_name, dataset_bundle[split_name]) for split_name in split_names
+        ]
     else:
         split_datasets = [("train", dataset_bundle)]
 
@@ -158,7 +160,7 @@ def inspect_dataset(
 def export_dataset(
     dataset_name: str,
     out_root: Path,
-    overwrite: bool,
+    overwrite: bool,  # noqa: FBT001 - retained for backward compatibility.
     dataset_dict_cls: Any,
     load_dataset_fn: Any,
 ) -> Path:
@@ -173,7 +175,9 @@ def export_dataset(
     dataset_bundle = load_dataset_fn(spec["hf_name"])
     if isinstance(dataset_bundle, dataset_dict_cls):
         split_names = ordered_split_names(list(dataset_bundle.keys()))
-        split_datasets = [(split_name, dataset_bundle[split_name]) for split_name in split_names]
+        split_datasets = [
+            (split_name, dataset_bundle[split_name]) for split_name in split_names
+        ]
     else:
         split_datasets = [("train", dataset_bundle)]
 
@@ -212,7 +216,12 @@ def export_dataset(
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["dataset_id", "protein_sequence", spec["target_column"], "split"],
+            fieldnames=[
+                "dataset_id",
+                "protein_sequence",
+                spec["target_column"],
+                "split",
+            ],
             lineterminator="\n",
         )
         writer.writeheader()
@@ -239,7 +248,10 @@ def parse_args() -> argparse.Namespace:
         "--out-root",
         type=Path,
         default=Path("."),
-        help="Repository root where the CSV paths will be created. Default: current directory",
+        help=(
+            "Repository root where the CSV paths will be created. Default: current "
+            "directory"
+        ),
     )
     parser.add_argument(
         "--overwrite",
@@ -258,11 +270,7 @@ def main() -> None:
     args = parse_args()
     dataset_dict_cls, load_dataset_fn = _load_dataset_module()
 
-    dataset_names = (
-        list(DATASET_SPECS)
-        if args.dataset == "all"
-        else [args.dataset]
-    )
+    dataset_names = list(DATASET_SPECS) if args.dataset == "all" else [args.dataset]
 
     for dataset_name in dataset_names:
         if args.inspect:

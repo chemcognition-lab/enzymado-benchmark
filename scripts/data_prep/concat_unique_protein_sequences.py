@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Build the canonical unique-sequence index consumed by embedding pipelines."""
 
 import argparse
+import collections
 import csv
-import re
-from collections import defaultdict
 from pathlib import Path
-
+import re
 
 ID_COLUMNS = ("uniprot_id", "dataset_id")
 PRIMARY_SEQUENCE_COLUMN = "protein_sequence"
@@ -63,9 +61,7 @@ def resolve_dataset_code(csv_path: Path) -> str:
     ]
     if not tokens:
         tokens = [
-            token
-            for token in re.split(r"[^a-z0-9]+", csv_path.stem.lower())
-            if token
+            token for token in re.split(r"[^a-z0-9]+", csv_path.stem.lower()) if token
         ]
     if not tokens:
         return "ds"
@@ -90,16 +86,18 @@ def load_sequence_records(csv_path: Path) -> list[dict[str, str | bool]]:
         fieldnames = reader.fieldnames or []
 
         present_sequence_columns = [
-            column
-            for column in SEQUENCE_COLUMNS
-            if column in fieldnames
+            column for column in SEQUENCE_COLUMNS if column in fieldnames
         ]
         if not present_sequence_columns:
-            raise ValueError(f"{csv_path} doesn't contain any expected sequence column: {SEQUENCE_COLUMNS}.")
+            raise ValueError(
+                f"{csv_path} doesn't contain any expected sequence column: "
+                f"{SEQUENCE_COLUMNS}."
+            )
 
         if not any(column in fieldnames for column in ID_COLUMNS):
             raise ValueError(
-                f"{csv_path} doesn't contain any of the expected id columns: {ID_COLUMNS}."
+                f"{csv_path} doesn't contain any of the expected id columns: "
+                f"{ID_COLUMNS}."
             )
 
         records = []
@@ -118,7 +116,10 @@ def load_sequence_records(csv_path: Path) -> list[dict[str, str | bool]]:
 
                 records.append(
                     {
-                        "base_sequence_id": build_sequence_id(base_sequence_id, sequence_column),
+                        "base_sequence_id": build_sequence_id(
+                            base_sequence_id,
+                            sequence_column,
+                        ),
                         PRIMARY_SEQUENCE_COLUMN: sequence,
                         "has_uniprot_id": bool(uniprot_id),
                         "dataset_code": dataset_code,
@@ -129,8 +130,10 @@ def load_sequence_records(csv_path: Path) -> list[dict[str, str | bool]]:
 
 
 def assign_disambiguated_sequence_ids(records: list[dict[str, str | bool]]) -> None:
-    sequences_by_base_id: dict[str, set[str]] = defaultdict(set)
-    sequences_by_base_id_and_dataset: dict[tuple[str, str], set[str]] = defaultdict(set)
+    sequences_by_base_id: dict[str, set[str]] = collections.defaultdict(set)
+    sequences_by_base_id_and_dataset: dict[tuple[str, str], set[str]] = (
+        collections.defaultdict(set)
+    )
 
     for record in records:
         base_sequence_id = str(record["base_sequence_id"])
@@ -140,9 +143,13 @@ def assign_disambiguated_sequence_ids(records: list[dict[str, str | bool]]) -> N
         sequences_by_base_id_and_dataset[(base_sequence_id, dataset_code)].add(sequence)
 
     index_by_base_id_dataset_and_sequence: dict[tuple[str, str, str], int] = {}
-    for (base_sequence_id, dataset_code), sequences in sequences_by_base_id_and_dataset.items():
+    for (
+        base_sequence_id,
+        dataset_code,
+    ), sequences in sequences_by_base_id_and_dataset.items():
         for index, sequence in enumerate(sorted(sequences), start=1):
-            index_by_base_id_dataset_and_sequence[(base_sequence_id, dataset_code, sequence)] = index
+            key = (base_sequence_id, dataset_code, sequence)
+            index_by_base_id_dataset_and_sequence[key] = index
 
     for record in records:
         base_sequence_id = str(record["base_sequence_id"])
@@ -153,7 +160,9 @@ def assign_disambiguated_sequence_ids(records: list[dict[str, str | bool]]) -> N
             record["sequence_id"] = base_sequence_id
             continue
 
-        dataset_sequences = sequences_by_base_id_and_dataset[(base_sequence_id, dataset_code)]
+        dataset_sequences = sequences_by_base_id_and_dataset[
+            (base_sequence_id, dataset_code)
+        ]
         if len(dataset_sequences) == 1:
             suffix = dataset_code
         else:
@@ -169,9 +178,7 @@ def build_unique_sequences(input_dirs: list[Path]) -> tuple[list[dict[str, str]]
     for input_dir in input_dirs:
         csv_paths.extend(
             sorted(
-                path
-                for path in input_dir.rglob("*.csv")
-                if should_include_csv(path)
+                path for path in input_dir.rglob("*.csv") if should_include_csv(path)
             )
         )
     if not csv_paths:
@@ -207,11 +214,13 @@ def build_unique_sequences(input_dirs: list[Path]) -> tuple[list[dict[str, str]]
     return list(unique_by_sequence.values()), original_count
 
 
-def main() -> None:
+def create_parser() -> argparse.ArgumentParser:
+    """Build the canonical sequence-index command-line parser."""
     parser = argparse.ArgumentParser(
         description=(
-            "Concatenate unique protein sequences from processed properties and real-case "
-            "datasets, including wildtype sequences from mutation datasets."
+            "Concatenate unique protein sequences from processed properties "
+            "and real-case datasets, including wildtype sequences from "
+            "mutation datasets."
         )
     )
     parser.add_argument(
@@ -220,8 +229,9 @@ def main() -> None:
         action="append",
         default=None,
         help=(
-            "Root folder to scan for datasets. Repeat the flag to include multiple roots. "
-            "Defaults to data/processed/properties and data/processed/real_case."
+            "Root folder to scan for datasets. Repeat the flag to include "
+            "multiple roots. Defaults to data/processed/properties and "
+            "data/processed/real_case."
         ),
     )
     parser.add_argument(
@@ -230,14 +240,22 @@ def main() -> None:
         default=DEFAULT_OUTPUT,
         help="Output CSV file with sequence_id and protein_sequence.",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    """Build and write the canonical unique-sequence index."""
+    args = create_parser().parse_args()
 
     input_dirs = args.input_dir or list(DEFAULT_INPUT_DIRS)
     unique_sequences, original_count = build_unique_sequences(input_dirs)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["sequence_id", PRIMARY_SEQUENCE_COLUMN])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["sequence_id", PRIMARY_SEQUENCE_COLUMN],
+        )
         writer.writeheader()
         writer.writerows(unique_sequences)
 
