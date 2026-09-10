@@ -640,8 +640,9 @@ def _add_core_args(parser: argparse.ArgumentParser) -> None:
         choices=("random", "similarity"),
         default=None,
         help=(
-            "Train only this split variant. Defaults to each task\x27s card "
-            "default_split."
+            "Train only this split variant. Defaults to \x27random\x27. A task that "
+            "registers no similarity split is skipped when \x27similarity\x27 is "
+            "requested."
         ),
     )
     parser.add_argument(

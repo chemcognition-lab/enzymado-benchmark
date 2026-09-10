@@ -29,8 +29,12 @@ For each selected task in `TASK_REGISTRY`, training follows this order:
    - residue-aware `DataLoader` batches with `fit_loader(...)`.
 6. Each run writes prediction files plus experiment-style artifacts:
    compressed `*.safetensors.xz` predictions, `hparams.json`,
-   `training_log.csv`, `run_manifest.json`, and the saved model. Torch models
-   also emit safetensors weights. The evaluation CLI writes `metrics.json`.
+   `training_log.csv`, and the saved model. Torch models also emit safetensors
+   weights. The evaluation CLI writes `metrics.json`. `hparams.json` is the
+   provenance record: it carries the resolved task config, dataset paths,
+   hyperparameters, and the random seed. `run_manifest.json` is also emitted by
+   `artifacts.reproducibility`, but no published run under `results/` carries
+   one, so nothing downstream may depend on it.
 
 ## CLI Filters For SLURM
 
@@ -47,10 +51,26 @@ python scripts/run_benchmark.py embeddings_models_output.json \
 
 - `--emb_name` selects one foundation model / embedding entry.
 - `--model_prefix` selects a model family: `mlp_`, `linear_`, or `xgb_`.
-- `--task_name` selects a property. Repeat it to train multiple properties.
-- `--split_variant` selects `random` or `similarity`. If omitted,
-  the CLI uses `random`.
-- `--allowed_ids` optionally restricts rows to embeddings present in an ID allowlist.
+- `--task_name` selects a task. Repeat it to train multiple tasks.
+- `--task_scope` selects a benchmark-card section, `properties` or `real_case`.
+  It defaults to `properties`, so real-case tasks need it explicitly.
+- `--split_variant` selects `random` or `similarity`. If omitted, the CLI uses
+  `random`. A task that registers no similarity split is skipped when
+  `similarity` is requested.
+- `--embedding_mode` selects `attention` or `no_attention` runs.
+- `--attention_embeddings_json` supplies the per-residue manifest. Attention
+  models do not train at all without it.
+- `--allowed_ids` optionally restricts rows to embeddings present in an ID
+  allowlist. The published runs pass
+  `results/embedding_intersection/common_ids.txt` so every embedding model is
+  scored on the same proteins.
+- `--residue_store_mode` forces `materialized` or `lazy` residue access instead
+  of the `auto` size heuristic.
+- `--overwrite_results` replaces existing artifacts instead of skipping
+  completed runs; `--deterministic` requires deterministic PyTorch kernels.
+
+`python scripts/run_benchmark.py --help` lists the remaining attention
+learning-rate and batch-diagnostic overrides.
 
 Similarity splits were generated with an MMseqs2 minimum sequence identity of
 `0.3`. The `0.5` threshold recorded in dataset cards belongs to a separate
@@ -104,7 +124,7 @@ must then be recomputed to reflect the new ranking scores.
 | Card property | Registry task | Task type | Batch kind | Label kind | Training route | Models that run |
 | --- | --- | --- | --- | --- | --- | --- |
 | `solubility` | `solubility` | classification | `protein_global` | `binary` | pooled protein-global | `mlp_classification`, `linear_classification`, `xgb_classification` |
-| `phopt` | `ph_opt` | regression | `protein_global` | `scalar_regression` | pooled protein-global | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
+| `ph_opt` | `ph_opt` | regression | `protein_global` | `scalar_regression` | pooled protein-global | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
 | `binding` | `binding` | classification | `protein_ligand_global` | `binary` | pooled protein + ligand | `mlp_classification`, `linear_classification`, `xgb_classification` |
 | `kcat` | `kcat` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
 | `km` | `km` | regression | `protein_ligand_global` | `scalar_regression` | pooled protein + ligand | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
@@ -112,16 +132,37 @@ must then be recomputed to reflect the new ranking scores.
 | `ddg` | `ddg` | regression | `mutation_delta_global` | `scalar_regression` | pooled mutation-delta | `mlp_regressor`, `linear_regressor`, `xgb_regression` |
 | `ec_number` | `ec_number` | classification | `protein_global` | `multilabel_ec` | pooled hierarchical EC or pooled flat EC for XGBoost | `mlp_classification`, `linear_classification`, `xgb_classification` |
 | `active_sites` | `active_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `linear_classification`, residue `xgb_classification` |
-| `binding_site` | `binding_sites` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `linear_classification`, residue `xgb_classification` |
+| `binding_site` | `binding_site` | classification | `protein_residue` | `residue_binary_vector` | residue-aware loader pipeline | `mlp_classification`, `linear_classification`, residue `xgb_classification` |
+
+## Real-Case Matrix
+
+`--task_scope real_case` selects the eight applied datasets. All are regression,
+all register only a `random` split, and all key rows by `dataset_id` alone.
+
+| Registry task | Batch kind | Training route | Extra features |
+| --- | --- | --- | --- |
+| `align_amylase_activity` | `protein_global` | pooled protein-global | - |
+| `align_amylase_expression` | `protein_global` | pooled protein-global | - |
+| `align_amylase_stability` | `protein_global` | pooled protein-global | - |
+| `align_glucosidase_activity` | `protein_global` | pooled protein-global | - |
+| `align_glucosidase_expression` | `protein_global` | pooled protein-global | - |
+| `align_glucosidase_melting` | `protein_global` | pooled protein-global | - |
+| `cleeveland_galox` | `protein_ligand_global` | pooled protein + ligand | `smiles`, `substrate_concentration` |
+| `erickson_petase` | `protein_global` | pooled protein-global | `temperature` |
+
+Because they are regression only, the `real_case` leaderboard scores 24 metric
+cells: 8 tasks x 1 split x 3 rating-eligible metrics (`mae`, `rmse`,
+`kendall_tau`; `r2` carries weight zero).
 
 ## Important Clarifications
 
-- Every registered property now has a training path for the repository's model families:
-  `MLP`, `SGD`, and `XGBoost`.
+- Every registered property has a training path for the repository's model families:
+  `MLP`, linear/SGD, and `XGBoost`.
 - For attention models, the linear baseline name is `attention_linear_*`.
 - `ec_number` supports XGBoost through a flat concatenated EC target vector.
 - `active_sites` and `binding_site` do use a dedicated structured model map.
-- `fluorescence` is present in the benchmark card but is skipped because it is does not contain enzymes.
+- `fluorescence` was dropped from the benchmark card because it does not contain
+  enzymes. It is neither registered nor scored.
 
 ## Reading Guide
 
@@ -141,7 +182,7 @@ Almost.
 - All registered properties have `MLP`, `XGBoost` and linear coverage.
 - `ec_number` uses a dedicated structured EC pipeline, and XGBoost follows a separate flat-label variant of that pipeline.
 - Residue-level tasks use a different structured pipeline.
-- Unregistered properties are skipped entirely, which currently means `fluorescence`.
+- Tasks absent from `TASK_REGISTRY` are skipped entirely.
 
 ## Post-training evaluation
 
