@@ -221,6 +221,10 @@ def _standard_xgb_classifier_entry() -> enzymado.types.ModelInfo:
             "learning_rate": 0.1,
             "n_jobs": -1,
             "device": "cuda",
+            # Select on the metric the leaderboard reports, matching the torch
+            # baselines, instead of spending the whole boosting budget blind.
+            "eval_metric": "aucpr",
+            "early_stopping_rounds": 20,
         },
     )
 
@@ -234,6 +238,9 @@ def _standard_xgb_regressor_entry() -> enzymado.types.ModelInfo:
             "learning_rate": 0.1,
             "n_jobs": -1,
             "device": "cuda",
+            # Regression boosting selects on RMSE under this protocol.
+            "eval_metric": "rmse",
+            "early_stopping_rounds": 20,
         },
     )
 
@@ -367,6 +374,16 @@ def train_model(
     if x_val is not None and y_val is not None and "x_val" in fit_signature.parameters:
         fit_kwargs["x_val"] = x_val
         fit_kwargs["y_val"] = y_val
+    # Gradient-boosting estimators take held-out data as sklearn's eval_set
+    # rather than x_val/y_val, so they need their own hand-off; without it
+    # early_stopping_rounds is silently inert.
+    if (
+        x_val is not None
+        and y_val is not None
+        and "eval_set" in fit_signature.parameters
+        and "x_val" not in fit_signature.parameters
+    ):
+        fit_kwargs["eval_set"] = [(x_val, y_val)]
     for key, value in extra_fit_kwargs.items():
         if value is not None and key in fit_signature.parameters:
             fit_kwargs[key] = value

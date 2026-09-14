@@ -20,6 +20,7 @@ from enzymado.models.common import (
     run_wrapper_training,
 )
 from enzymado.models.nn_blocks import MLPModel
+import enzymado.models.training_protocol
 
 
 class ResidueBinaryClassifierImplementation:
@@ -116,7 +117,7 @@ class ResidueBinaryClassifierImplementation:
                 logits = forward_batch(x_t)
                 loss = compute_batch_loss(logits, y_t, target_mask_t)
                 optimizer.zero_grad()
-                loss.backward()
+                enzymado.models.training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():

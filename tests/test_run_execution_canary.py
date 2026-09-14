@@ -178,9 +178,11 @@ def test_single_model_run_matches_frozen_canary(
     assert payload is not None
     np.testing.assert_array_equal(payload.y_true, [-0.875, 0.875])
     assert payload.sample_ids == ("test-0", "test-1")
+    # Refrozen with the metric-based checkpoint selection; see the note in
+    # tests/test_route_execution_canaries.py.
     np.testing.assert_allclose(
         payload.predictions,
-        [0.44976968, 0.16300891],
+        [0.5131318, 0.32744235],
         rtol=0.0,
         atol=1e-7,
     )

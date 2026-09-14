@@ -36,6 +36,9 @@ results/predictions/**
 !results/predictions/**/metrics.json
 !results/predictions/**/hparams.json
 results/evaluation_statistics/
+# Historical bootstrap snapshots: kept locally for provenance, not part of
+# the release. The canonical numbers live in results/bootstrap/{properties,real_case}.
+results/bootstrap/experiments/
 results/*_audit_report.json
 pytest-of-chemist/
 .claude
@@ -56,7 +59,8 @@ results/dataprep_datacards/
 
 # Working notes and agent configuration (not part of the release).
 # README images live in assets/ instead, which stays tracked.
-docs/
+docs/*
+!docs/training_v3.md
 skills/
 
 # Local embedding manifests: they hold machine-specific absolute paths.

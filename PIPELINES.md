@@ -96,11 +96,24 @@ There are five training routes:
 
 ## Computational Policy
 
-Early stopping intentionally monitors validation loss. Computing full
-validation metrics after every epoch is too expensive for high-dimensional EC
-number outputs and per-residue active-site and binding-site tasks. Changing the
-early-stopping signal is a benchmark-protocol change, not a structural
-refactor.
+Training protocol v3 selects only trained neural epochs. Epoch 0 is saved as
+`initial_model.pt` and recorded as a reference, never as the final trained model.
+The history explicitly records whether the selected model improved that reference.
+
+Pooled neural tasks select on AUPRC for classification and Kendall tau for
+regression, evaluated on the whole validation split and negated for minimization.
+EC and per-residue networks retain validation loss. These are protocol choices;
+none guarantees agreement with every metric in the leaderboard. Standard XGBoost
+uses `aucpr` for classification and `rmse` for regression.
+
+Non-finite losses, gradients, weights and monitored predictions fail the run.
+Undefined Kendall from constant predictions makes an epoch ineligible; AUPRC with
+constant probabilities remains defined when both classes are present. A run with
+no eligible trained epoch fails explicitly. Old checkpoints remain loadable for
+inference, but resumption requires a matching v3 protocol and provenance contract.
+
+See [the v3 runbook](docs/training_v3.md) for reporting fields, migration rules and
+isolated launch/evaluation commands. These changes require a new benchmark version.
 
 Classification accuracy, precision, recall, and F1 use saved hard labels.
 AUROC and AUPRC use score histograms when the artifact includes probabilities;

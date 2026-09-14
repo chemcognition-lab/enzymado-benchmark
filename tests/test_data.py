@@ -123,7 +123,7 @@ def test_random_split_keeps_grouped_rows_together():
         "summary": summary,
     }
     assert behavior_digest(snapshot) == (
-        "9bf7ba70acc90f20922925e2874ca78eee2e79632844379e61bda4db448d29dc"
+        "dcd3054cece92d67b0166f05f4bd587a5f7c4a481a47bd11639584d75f665d19"
     )
 
 
@@ -175,7 +175,7 @@ def test_point_stratified_split_stays_within_protein_and_keeps_duplicate_ids_tog
         "summary": summary,
     }
     assert behavior_digest(snapshot) == (
-        "e28ef92c832a1fe236182bcc3b8896006e964863a93ee62abef230b965fcd748"
+        "24cb13af28dcd0eb421ef8945be51eab12ada5ada8fb6b06eac183a3f62f62e7"
     )
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections.abc
 import dataclasses
+import json
 from pathlib import Path
 import shutil
 import typing
@@ -326,12 +327,26 @@ def run(
         split_manifest=sample_manifest,
         deterministic_algorithms=context.deterministic_algorithms,
     )
-    saved_run = _train_and_predict(
-        context,
-        model_name,
-        seeded_info,
-        run_dir,
-    )
+    failure_path = run_dir / "training_failure.json"
+    if failure_path.exists():
+        raise ValueError(
+            f"Previous training failed: {failure_path}. Review it before retrying."
+        )
+    try:
+        saved_run = _train_and_predict(context, model_name, seeded_info, run_dir)
+    except (FloatingPointError, ValueError, RuntimeError) as exc:
+        failure_path.write_text(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        raise
     trained = saved_run.trained
     enzymado.artifacts.serialization.write_training_log_file(trained, run_dir)
     enzymado.prediction.run_artifacts.save_trained_model(
@@ -347,7 +362,7 @@ def run(
     if getattr(trained, "best_epoch_", None) is not None:
         enzymado.data_loading.stores.log(
             f"      Early stopping: best_epoch={trained.best_epoch_},"
-            f" best_val_loss={trained.best_val_loss_:.6f}"
+            f" best_validation_objective={trained.best_val_loss_:.6f}"
         )
     relative_dir = run_dir.relative_to(context.output_dir)
     enzymado.data_loading.stores.log(f"      Saved → {relative_dir} [{artifact_stem}]")

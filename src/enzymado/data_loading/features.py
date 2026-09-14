@@ -315,15 +315,23 @@ class MutationDeltaEmbeddingBuilder:
     embedding_store: EmbeddingStore
     mutation_sequence_column: str = "protein_sequence"
     wildtype_sequence_column: str = "wildtype_sequence"
-    index_columns: tuple[str, ...] = ("uniprot_id", "dataset_id")
 
     def build(self, row: dict[str, str]) -> torch.Tensor:
-        """Return the embedding delta (mutant minus wildtype) for a mutation row."""
-        mutant_embedding = self.embedding_store.lookup_row(
-            row,
-            id_columns=self.index_columns,
-            sequence_column=self.mutation_sequence_column,
-        )
+        """Return the embedding delta (mutant minus wildtype) for a mutation row.
+
+        Both ends are resolved by sequence and never by row identifier. A
+        mutation row's ``uniprot_id`` names the protein, not the variant, so an
+        identifier lookup would answer a missing mutant with the wildtype
+        embedding and make the delta silently zero — a row carrying a real ddG
+        target but no trace of the mutation it describes.
+        """
+        mutant_sequence = normalize_sequence(row.get(self.mutation_sequence_column))
+        if not mutant_sequence:
+            raise ValueError(
+                f"Missing mutant sequence in column "
+                f"'{self.mutation_sequence_column}' for sample "
+                f"'{row.get('sample_id', '')}'."
+            )
         wildtype_sequence = normalize_sequence(row.get(self.wildtype_sequence_column))
         if not wildtype_sequence:
             raise ValueError(
@@ -331,6 +339,7 @@ class MutationDeltaEmbeddingBuilder:
                 f"'{self.wildtype_sequence_column}' for sample "
                 f"'{row.get('sample_id', '')}'."
             )
+        mutant_embedding = self.embedding_store.lookup_sequence(mutant_sequence)
         wildtype_embedding = self.embedding_store.lookup_sequence(wildtype_sequence)
 
         if mutant_embedding.ndim == 2:
@@ -366,22 +375,24 @@ class MutationDeltaEmbeddingBuilder:
         return (mutant_embedding.float() - wildtype_embedding.float()).cpu()
 
     def validate_row(self, row: dict[str, str]) -> str | None:
-        """Check that both mutant and wildtype embeddings can be resolved."""
+        """Check that both mutant and wildtype embeddings resolve by sequence.
+
+        Accepting a row on its identifier alone would let ``build`` fall back to
+        the wildtype embedding for an absent mutant, so both sequences must be
+        present in the store for the delta to carry any mutation signal.
+        """
         store = self.embedding_store
-        for col in self.index_columns:
-            identifier = clean_text(row.get(col))
-            if identifier and store.has_id(identifier):
-                return None
+        missing = []
         mut_seq = normalize_sequence(row.get(self.mutation_sequence_column))
+        if not mut_seq or not store.has_sequence(mut_seq):
+            missing.append(self.mutation_sequence_column)
         wt_seq = normalize_sequence(row.get(self.wildtype_sequence_column))
-        if (
-            mut_seq
-            and store.has_sequence(mut_seq)
-            and wt_seq
-            and store.has_sequence(wt_seq)
-        ):
-            return None
-        return (
-            f"Missing residue embedding for mutation or wildtype. "
-            f"sample_id={row.get('sample_id', '')}"
-        )
+        if not wt_seq or not store.has_sequence(wt_seq):
+            missing.append(self.wildtype_sequence_column)
+        if missing:
+            return (
+                f"Missing embedding for {' and '.join(missing)}; a mutation "
+                f"delta needs both sequences. "
+                f"sample_id={row.get('sample_id', '')}"
+            )
+        return None

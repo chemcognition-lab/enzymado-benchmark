@@ -156,7 +156,11 @@ def find_model_artifact(run_dir: Path) -> Path | None:
         legacy_path = run_dir / legacy_name
         if legacy_path.exists():
             return legacy_path
-    matches = [path for path in run_dir.glob("*.pt") if path.is_file()]
+    matches = [
+        path
+        for path in run_dir.glob("*.pt")
+        if path.is_file() and path.name != "initial_model.pt"
+    ]
     matches.extend(path for path in run_dir.glob("*.joblib") if path.is_file())
     matches.extend(path for path in run_dir.glob("*.safetensors") if path.is_file())
     if not matches:
@@ -166,7 +170,9 @@ def find_model_artifact(run_dir: Path) -> Path | None:
 
 def is_run_complete(run_dir: Path) -> bool:
     """A run is complete when the current artifact set exists on disk."""
-    if (run_dir / INVALIDATION_MARKER).exists():
+    if (run_dir / INVALIDATION_MARKER).exists() or (
+        run_dir / "training_failure.json"
+    ).exists():
         return False
     has_predictions = (
         find_prediction_artifact(run_dir, "train") is not None

@@ -23,7 +23,7 @@ every split, so the numbers are comparable.
 | **Real-case datasets** | 8 - amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase. All regression. |
 | **Protein language models** | 14 - see the table below |
 | **Split types** | 2 - `random` and `similarity` (MMseqs2 at 30% minimum sequence identity, 80/10/10, so test proteins are not near-duplicates of training ones). Real-case datasets are `random` only. |
-| **Baselines** | 5 - linear, MLP and XGBoost over mean-pooled embeddings, plus linear and MLP over learned attention pooling |
+| **Baselines** | 5 - linear, MLP and XGBoost without attention, plus linear and MLP over learned attention pooling. How the embedding reaches the head depends on the task: protein-level tasks mean-pool it, residue-level tasks (`active_sites`, `binding_site`) feed one embedding per residue with no pooling at all. |
 
 The 14 embedding models, with the manifest key each one is addressed by:
 

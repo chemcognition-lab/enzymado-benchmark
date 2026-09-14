@@ -170,7 +170,7 @@ def test_checkpoint_resume_matches_continuous_training_exactly(
         map_location="cpu",
         weights_only=False,
     )
-    assert checkpoint.checkpoint_schema_version_ == 2
+    assert checkpoint.checkpoint_schema_version_ == 3
     assert set(checkpoint.resume_state_) == {
         "optimizer_state_dict",
         "scheduler_state_dict",
@@ -198,7 +198,7 @@ def test_checkpoint_resume_matches_continuous_training_exactly(
 
     assert resumed.current_epoch_ == continuous.current_epoch_ == 4
     assert resumed.training_log_ == continuous.training_log_
-    assert resumed.checkpoint_schema_version_ == 2
+    assert resumed.checkpoint_schema_version_ == 3
     for key, value in continuous.model.state_dict().items():
         torch.testing.assert_close(
             resumed.model.state_dict()[key],

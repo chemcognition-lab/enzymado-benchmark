@@ -208,18 +208,23 @@ def test_similarity_split_assignment_is_stable() -> None:
         seed=3,
     )
 
+    # Refrozen when the weight sort was removed from assign_items_to_splits.
+    # With only five groups the greedy pass balances the row quotas less
+    # tightly than the size-ordered pass did; on real datasets, which have
+    # thousands of groups, the quotas stay on target and the bias the sort
+    # introduced (val/test filling with the most-measured proteins) disappears.
     assignment = [(row["uniprot_id"], row["split"]) for row in split_rows]
     assert assignment == [
-        ("P1", "train"),
-        ("P1", "train"),
-        ("P2", "train"),
+        ("P1", "val"),
+        ("P1", "val"),
+        ("P2", "val"),
         ("P3", "train"),
         ("P4", "test"),
-        ("P5", "val"),
+        ("P5", "train"),
     ]
     assert summary == {
-        "train": {"rows": 4, "proteins": 3},
-        "val": {"rows": 1, "proteins": 1},
+        "train": {"rows": 2, "proteins": 2},
+        "val": {"rows": 3, "proteins": 2},
         "test": {"rows": 1, "proteins": 1},
     }
 

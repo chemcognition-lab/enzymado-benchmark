@@ -17,6 +17,7 @@ from enzymado.models.common import (
     mean_losses,
     restore_torch_training_state,
 )
+import enzymado.models.training_protocol
 from enzymado.training.attention_wrapper_base import _BaseAttentionWrapper
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
@@ -102,7 +103,7 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
                 )
                 optimizer.zero_grad()
                 loss = criterion(forward_logits(seq_t, mask_t, extra_t), y_t)
-                loss.backward()
+                enzymado.models.training_protocol.backward_checked(loss)
                 grad_norm = self._prepare_gradients()
                 self._record_batch_diagnostic(
                     epoch=diagnostic_epoch,
@@ -116,7 +117,10 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
 
         def val_loss():
             self.model.eval()
+            use_metric = self.validation_metric is not None
             losses = []
+            logit_chunks = []
+            label_chunks = []
             with torch.no_grad():
                 for batch in val_dataloader:
                     seq_t, mask_t, extra_t = batch_to_attention_tensors(
@@ -129,13 +133,16 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
                     )
                     seq_t = self._normalize_sequence(seq_t)
                     extra_t = self._normalize_extra(extra_t)
-                    losses.append(
-                        float(
-                            criterion(
-                                forward_logits(seq_t, mask_t, extra_t), y_t
-                            ).item()
-                        )
-                    )
+                    logits = forward_logits(seq_t, mask_t, extra_t)
+                    if use_metric:
+                        logit_chunks.append(logits)
+                        label_chunks.append(y_t)
+                    else:
+                        losses.append(float(criterion(logits, y_t).item()))
+            if use_metric:
+                return self._selection_objective(
+                    torch.cat(logit_chunks, dim=0), torch.cat(label_chunks, dim=0)
+                )
             return mean_losses(losses)
 
         return self._run_early_stopping(
@@ -183,6 +190,8 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
 class AttentionRegressorImplementation(_PooledAttentionWrapper):
     """Attention-pooled regressor for global tasks."""
 
+    validation_metric = "kendall_tau"
+
     def _make_criterion(self):
         return nn.MSELoss()
 
@@ -192,6 +201,8 @@ class AttentionRegressorImplementation(_PooledAttentionWrapper):
 
 class AttentionBinaryClassifierImplementation(_PooledAttentionWrapper):
     """Attention-pooled binary classifier for global tasks."""
+
+    validation_metric = "auprc"
 
     def _make_criterion(self):
         return nn.BCEWithLogitsLoss()

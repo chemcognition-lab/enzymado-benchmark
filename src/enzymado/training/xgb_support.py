@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 import time
 
+import enzymado.models.training_protocol
+
 try:
     import xgboost as xgb
     from xgboost import XGBClassifier, XGBRegressor
@@ -142,9 +144,12 @@ def _make_xgb_checkpoint_callback(wrapper, path: str | Path | None, interval: in
 
 
 def _maybe_resume_xgb_wrapper(wrapper, path: str | Path | None) -> bool:
-    if path is None:
+    path_obj = Path(path) if path is not None else None
+    wrapper.training_contract_ = enzymado.models.training_protocol.resume_contract(
+        wrapper, path_obj
+    )
+    if path_obj is None:
         return False
-    path_obj = Path(path)
     if not path_obj.exists():
         return False
     loaded = joblib.load(path_obj)
@@ -152,6 +157,11 @@ def _maybe_resume_xgb_wrapper(wrapper, path: str | Path | None) -> bool:
         raise TypeError(
             f"Checkpoint at {path_obj} contains {type(loaded).__name__}, "
             f"expected {wrapper.__class__.__name__}."
+        )
+    if getattr(loaded, "training_contract_", None) != wrapper.training_contract_:
+        raise ValueError(
+            "Incompatible XGBoost checkpoint; use a new run directory. "
+            "Old models remain available for inference."
         )
     current_device = getattr(wrapper, "device", None)
     wrapper.__dict__.update(loaded.__dict__)

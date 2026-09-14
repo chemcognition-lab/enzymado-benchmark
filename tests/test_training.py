@@ -81,7 +81,9 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertNotIn("loader_seed", torch_info)
         self.assertNotIn("random_state", xgb_info["params"])
 
-    def test_early_stopping_can_restore_epoch_zero(self) -> None:
+    def test_early_stopping_selects_trained_epoch_over_better_initialization(
+        self,
+    ) -> None:
         import torch
 
         from enzymado.models.common import run_training_with_early_stopping
@@ -108,12 +110,12 @@ class StructuredTrainingTests(unittest.TestCase):
             epoch_callback=lambda epoch, *_: callback_epochs.append(epoch),
         )
 
-        self.assertEqual(best_epoch, 0)
-        self.assertEqual(best_val_loss, 0.0)
-        self.assertEqual(callback_epochs, [0, 1])
+        self.assertEqual(best_epoch, 1)
+        self.assertEqual(best_val_loss, 1.0)
+        self.assertEqual(callback_epochs, [0, 1, 2])
         torch.testing.assert_close(
             model.weight,
-            torch.zeros_like(model.weight),
+            torch.ones_like(model.weight),
             rtol=0.0,
             atol=0.0,
         )
@@ -535,12 +537,15 @@ class StructuredTrainingTests(unittest.TestCase):
             wildtype_sequence_column="wildtype_sequence",
             index_columns=("uniprot_id",),
         )
+        # Both ends are keyed by sequence. A mutation row's uniprot_id names the
+        # protein, not the variant — in FireProtDB 3774 rows share 69 of them —
+        # so resolving the mutant by id would hand every variant of a protein
+        # the same embedding.
         store = PooledEmbeddingStore(
-            by_id={
-                "P1": np.asarray([3.0, 5.0, 7.0], dtype=np.float32),
-                "P2": np.asarray([0.0, 1.0, 2.0], dtype=np.float32),
-            },
+            by_id={},
             by_sequence={
+                "AAAA": np.asarray([3.0, 5.0, 7.0], dtype=np.float32),
+                "CCCC": np.asarray([0.0, 1.0, 2.0], dtype=np.float32),
                 "BBBB": np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
                 "DDDD": np.asarray([0.5, 0.5, 0.5], dtype=np.float32),
             },
@@ -867,7 +872,7 @@ class StructuredTrainingTests(unittest.TestCase):
 
     def test_residue_xgb_checkpoints_and_resumes_mid_boosting(self) -> None:
         """Residue XGBoost must checkpoint during boosting, resume a partial
-        fit by continuing, and treat legacy checkpoints as done."""
+        fit by continuing, and reject legacy training checkpoints."""
         import joblib
         import torch
         from torch.utils.data import DataLoader
@@ -951,6 +956,7 @@ class StructuredTrainingTests(unittest.TestCase):
         partial.n_estimators = (
             10  # resume reads hyperparameters back from the checkpoint
         )
+        partial.training_contract_["params"]["n_estimators"] = 10
         partial.training_complete_ = False
         partial.rounds_completed_ = 4
         joblib.dump(partial, self.root / "partial.bin")
@@ -968,12 +974,15 @@ class StructuredTrainingTests(unittest.TestCase):
         legacy = joblib.load(checkpoint)
         del legacy.__dict__["training_complete_"]
         legacy.__dict__.pop("rounds_completed_", None)
+        legacy.__dict__.pop("training_contract_", None)
         joblib.dump(legacy, self.root / "legacy.bin")
         legacy_model = new_model(10)
-        legacy_model.fit_loader(
-            make_loader(), "protein_residue", checkpoint_path=self.root / "legacy.bin"
-        )
-        self.assertEqual(legacy_model.booster.num_boosted_rounds(), 10)
+        with self.assertRaisesRegex(ValueError, "Incompatible XGBoost checkpoint"):
+            legacy_model.fit_loader(
+                make_loader(),
+                "protein_residue",
+                checkpoint_path=self.root / "legacy.bin",
+            )
 
     def test_residue_xgb_cache_prefers_largest_disk(self) -> None:
         """The external-memory cache must avoid small node-local /tmp and pick the
@@ -1318,7 +1327,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertTrue(checkpoint.exists())
 
         resumed = AttentionBinaryClassifierTorch(
-            hidden_dims=(), lr=1e-3, epochs=4, optimizer_name="adamw"
+            hidden_dims=(), lr=1e-3, epochs=2, optimizer_name="adamw"
         )
         with mock.patch.object(
             AttentionBinaryClassifierTorch,

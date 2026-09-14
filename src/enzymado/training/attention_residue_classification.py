@@ -20,6 +20,7 @@ from enzymado.models.common import (
     pad_1d_array_list,
     restore_torch_training_state,
 )
+import enzymado.models.training_protocol
 from enzymado.training.attention_wrapper_base import _BaseAttentionWrapper
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
@@ -121,7 +122,7 @@ class AttentionResidueBinaryClassifierImplementation(_BaseAttentionWrapper):
                 logits = forward_logits(x_t, mask_t)
                 loss = compute_batch_loss(logits, y_t, target_mask_t)
                 optimizer.zero_grad()
-                loss.backward()
+                enzymado.models.training_protocol.backward_checked(loss)
                 grad_norm = self._prepare_gradients()
                 self._record_batch_diagnostic(
                     epoch=diagnostic_epoch,

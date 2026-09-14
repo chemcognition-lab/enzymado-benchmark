@@ -3,9 +3,11 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from enzymado.models import common, nn_blocks
+import enzymado.prediction.restore
 from enzymado.training import (
     attention_wrappers,
     torch_standard_wrappers,
@@ -77,7 +79,7 @@ def test_training_checkpoint_roundtrip_preserves_resume_state(tmp_path: Path) ->
         },
     )
 
-    resumed = torch_standard_wrappers.LinearRegressorTorch(epochs=8, device="cpu")
+    resumed = torch_standard_wrappers.LinearRegressorTorch(epochs=4, device="cpu")
     resumed.model = nn_blocks.LinearModel(input_dim=2, output_dim=1)
     start_epoch = common.maybe_resume_torch_wrapper(resumed, checkpoint_path)
 
@@ -86,9 +88,8 @@ def test_training_checkpoint_roundtrip_preserves_resume_state(tmp_path: Path) ->
     assert resumed.current_epoch_ == 2
     assert resumed.best_epoch_ == 1
     assert resumed.best_val_loss_ == 0.25
-    assert resumed.training_log_ == [
-        {"epoch": 2, "best_epoch": 1, "best_val_loss": 0.25}
-    ]
+    assert resumed.training_log_ == trained.training_log_
+    assert resumed.training_log_[0]["best_validation_score"] == 0.25
     np.testing.assert_array_equal(resumed.x_mean_, trained.x_mean_)
     np.testing.assert_array_equal(resumed.x_scale_, trained.x_scale_)
     for key, value in trained.model.state_dict().items():
@@ -100,30 +101,18 @@ def test_training_checkpoint_roundtrip_preserves_resume_state(tmp_path: Path) ->
         )
 
 
-def test_legacy_v1_training_checkpoint_still_loads(tmp_path: Path) -> None:
-    """A checkpoint created before schema v2 must retain legacy resume behavior."""
-    checkpoint_path = tmp_path / "legacy_training_checkpoint.bin"
+def test_legacy_checkpoint_is_inference_only(tmp_path: Path) -> None:
+    """Old artifacts remain loadable but cannot resume under a new protocol."""
+    checkpoint_path = tmp_path / "training_checkpoint.bin"
     legacy = torch_standard_wrappers.LinearRegressorTorch(epochs=4, device="cpu")
     legacy.model = nn_blocks.LinearModel(input_dim=2, output_dim=1)
     legacy.current_epoch_ = 2
     legacy.best_epoch_ = 1
     legacy.best_val_loss_ = 0.25
     torch.save(legacy, checkpoint_path)
-
-    resumed = torch_standard_wrappers.LinearRegressorTorch(epochs=8, device="cpu")
-    resumed.model = nn_blocks.LinearModel(input_dim=2, output_dim=1)
-    start_epoch = common.maybe_resume_torch_wrapper(resumed, checkpoint_path)
-
-    assert start_epoch == 2
-    assert resumed.current_epoch_ == 2
-    assert resumed.best_epoch_ == 1
-    assert resumed.best_val_loss_ == 0.25
-    assert not hasattr(resumed, "checkpoint_schema_version_")
-    assert not hasattr(resumed, "resume_state_")
+    resumed = torch_standard_wrappers.LinearRegressorTorch(epochs=4, device="cpu")
+    with pytest.raises(ValueError, match="Incompatible training checkpoint"):
+        common.maybe_resume_torch_wrapper(resumed, checkpoint_path)
+    restored = enzymado.prediction.restore.restore_fitted_wrapper(tmp_path)
     for key, value in legacy.model.state_dict().items():
-        torch.testing.assert_close(
-            resumed.model.state_dict()[key],
-            value,
-            rtol=0.0,
-            atol=0.0,
-        )
+        torch.testing.assert_close(restored.model.state_dict()[key], value)

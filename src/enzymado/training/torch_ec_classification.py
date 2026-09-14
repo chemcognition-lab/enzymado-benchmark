@@ -13,6 +13,7 @@ import torch.nn as nn
 
 import enzymado.models.common
 import enzymado.models.nn_blocks
+import enzymado.models.training_protocol
 import enzymado.types
 
 type FloatArray = npt.NDArray[np.float32]
@@ -142,7 +143,7 @@ class ECMultiHeadClassifierImplementation:
             if loss is None:
                 continue
             optimizer.zero_grad()
-            loss.backward()
+            enzymado.models.training_protocol.backward_checked(loss)
             optimizer.step()
 
     def _validation_loss(

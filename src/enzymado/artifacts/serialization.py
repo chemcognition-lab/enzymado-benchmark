@@ -15,6 +15,8 @@ import numpy as np
 import safetensors.torch
 import torch
 
+import enzymado.models.training_protocol
+
 from . import sample_identity
 from .results_layout import (
     INVALIDATION_MARKER,
@@ -212,6 +214,9 @@ def write_hparams_file(
         "split_variant": split_variant,
         "wrapper": getattr(model_info["wrap"], "__name__", str(model_info["wrap"])),
         "params": model_info["params"],
+        "selection_protocol": enzymado.models.training_protocol.selection_protocol(
+            model_info["wrap"], model_info["params"]
+        ),
     }
     if random_seed is not None:
         payload["random_seed"] = int(random_seed)
@@ -232,8 +237,24 @@ def write_hparams_file(
         }
     if sample_identity_manifest is not None:
         payload["sample_identity"] = sample_identity_manifest
-    path.write_text(json.dumps(_json_ready(payload), indent=4) + "\n", encoding="utf-8")
+    payload = _json_ready(payload)
+    if (run_dir / "training_checkpoint.bin").exists():
+        if not path.exists() or json.loads(path.read_text()) != payload:
+            raise ValueError(
+                "Checkpoint configuration changed; use a new run directory."
+            )
+        return path
+    path.write_text(json.dumps(payload, indent=4) + "\n", encoding="utf-8")
     return path
+
+
+def _first_attr(obj, *names):
+    """Return the first attribute present on ``obj``, or None if none are."""
+    for name in names:
+        value = getattr(obj, name, None)
+        if value is not None:
+            return value
+    return None
 
 
 def write_training_log_file(trained, run_dir: Path) -> Path:
@@ -244,8 +265,14 @@ def write_training_log_file(trained, run_dir: Path) -> Path:
             {
                 "best_epoch": getattr(trained, "best_epoch_", None),
                 "best_val_loss": getattr(trained, "best_val_loss_", None),
-                "best_iteration": getattr(trained, "best_iteration", None),
-                "best_score": getattr(trained, "best_score", None),
+                # Two conventions are in play: this repo's boosting wrappers
+                # use the sklearn trailing underscore, while xgboost's own
+                # estimators expose the bare names. Reading only one silently
+                # logged None for half the runs.
+                "best_iteration": _first_attr(
+                    trained, "best_iteration_", "best_iteration"
+                ),
+                "best_score": _first_attr(trained, "best_score_", "best_score"),
             }
         ]
 

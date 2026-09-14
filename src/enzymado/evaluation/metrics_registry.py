@@ -397,6 +397,42 @@ def _histogram_auprc(totals: Array) -> Array:
     return _auprc_from_totals(totals[:, :n_bins], totals[:, n_bins:])
 
 
+def auprc_from_scores(
+    y_true: Array,
+    scores: Array,
+    target_mask: Array | None = None,
+) -> float:
+    """Average precision from raw probabilities, via the benchmark's estimator.
+
+    Checkpoint selection has to score a model the same way the leaderboard
+    will, so this reuses the histogram AUPRC rather than a second definition.
+    Invalid probabilities and splits without both classes fail explicitly.
+    """
+    scores_flat = np.asarray(scores, dtype=np.float64).ravel()
+    labels_flat = np.asarray(y_true, dtype=np.float64).ravel()
+    if target_mask is not None:
+        keep = np.asarray(target_mask, dtype=bool).ravel()
+        scores_flat, labels_flat = scores_flat[keep], labels_flat[keep]
+    if not np.isfinite(scores_flat).all() or not np.isfinite(labels_flat).all():
+        raise FloatingPointError("Non-finite validation labels or probabilities.")
+    if scores_flat.size == 0 or np.unique(labels_flat).size < 2:
+        raise ValueError("AUPRC selection requires both validation classes.")
+    if not np.isin(labels_flat, [0, 1]).all():
+        raise ValueError("AUPRC selection requires binary labels.")
+    if np.any((scores_flat < 0) | (scores_flat > 1)):
+        raise ValueError("AUPRC probabilities must lie in [0, 1].")
+
+    levels = np.clip(
+        np.rint(scores_flat * (RANKING_BINS - 1)).astype(np.int64),
+        0,
+        RANKING_BINS - 1,
+    )
+    totals = np.zeros((1, 2 * RANKING_BINS), dtype=np.int64)
+    offsets = (labels_flat == 1).astype(np.int64) * RANKING_BINS + levels
+    np.add.at(totals, (np.zeros(offsets.size, dtype=np.int64), offsets), 1)
+    return float(_histogram_auprc(totals.astype(np.float64))[0])
+
+
 def _score_specs() -> tuple[enzymado.types.MetricSpec, ...]:
     """Return metrics that can consume probability histograms."""
     return tuple(
@@ -585,6 +621,7 @@ _validate_catalog()
 __all__ = [
     "METRICS",
     "RANKING_BINS",
+    "auprc_from_scores",
     "aggregate_metrics",
     "bootstrap",
     "bootstrap_ranking",

@@ -21,6 +21,7 @@ from enzymado.models.common import (
     mean_losses,
     restore_torch_training_state,
 )
+import enzymado.models.training_protocol
 from enzymado.training.attention_wrapper_base import _BaseAttentionWrapper
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
@@ -156,7 +157,7 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
                 )
                 if loss is None:
                     continue
-                loss.backward()
+                enzymado.models.training_protocol.backward_checked(loss)
                 grad_norm = self._prepare_gradients()
                 self._record_batch_diagnostic(
                     epoch=diagnostic_epoch,

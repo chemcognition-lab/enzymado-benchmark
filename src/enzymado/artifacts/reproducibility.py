@@ -281,6 +281,27 @@ def write_run_manifest(
         "environment_sha256": _canonical_json_sha256(environment),
     }
     path = run_dir / "run_manifest.json"
+    if (run_dir / "training_checkpoint.bin").exists():
+        if not path.exists():
+            raise ValueError("Checkpoint has no provenance; use a new run directory.")
+        previous = json.loads(path.read_text())
+        keys = ("schema_version", "deterministic_algorithms", "inputs", "splits")
+        environment_keys = (
+            "packages",
+            "source_tree_sha256",
+            "cuda_runtime",
+            "gpu_names",
+        )
+        compatible = all(previous.get(key) == payload[key] for key in keys)
+        compatible &= all(
+            previous["environment"].get(key) == environment[key]
+            for key in environment_keys
+        )
+        if not compatible:
+            raise ValueError(
+                "Checkpoint data, splits or runtime changed; use a new run directory."
+            )
+        return path
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

@@ -8,11 +8,22 @@ from enzymado.models.common import (
     fit_feature_scaler,
     masked_mean_pool,
     run_wrapper_training,
+    validation_objective,
 )
+import enzymado.models.training_protocol
 
 
 class BaseStandardWrapper:
-    """Store training state shared by pooled and residue-aware wrappers."""
+    """Store training state shared by pooled and residue-aware wrappers.
+
+    ``validation_metric`` names the score early stopping selects on. Subclasses
+    that leave it ``None`` keep selecting on validation loss, which is what the
+    EC and residue routes do: evaluating a full metric every epoch is too
+    expensive there. This is a protocol choice, not a guarantee that loss and
+    ranking metrics agree.
+    """
+
+    validation_metric: str | None = None
 
     def __init__(
         self,
@@ -34,6 +45,9 @@ class BaseStandardWrapper:
         self.best_model_state_ = None
         self.x_mean_ = None
         self.x_scale_ = None
+        # Mirrored onto the instance so a resumed checkpoint records which
+        # criterion selected it, even if the class default later changes.
+        self.validation_metric_ = self.validation_metric
 
     def _forward(self, x_t, mask_t):
         out = self.model(x_t)
@@ -52,6 +66,27 @@ class BaseStandardWrapper:
         if self.x_mean_ is not None and self.x_scale_ is not None:
             return apply_feature_scaler(x, self.x_mean_, self.x_scale_)
         return x
+
+    def _selection_objective(self, logits_t, y_t):
+        """Return the negated selection metric for concatenated validation output.
+
+        Callers must pass the whole validation split at once: AUPRC and Kendall
+        tau are not averages, so scoring per batch and taking the mean would not
+        give the value the leaderboard reports.
+        """
+        enzymado.models.training_protocol.check_finite_tensors(
+            [logits_t], "validation logits"
+        )
+        scores = (
+            torch.sigmoid(logits_t)
+            if self.validation_metric == "auprc"
+            else logits_t
+        )
+        return validation_objective(
+            y_t.reshape(-1).detach().cpu().numpy(),
+            scores.reshape(-1).detach().cpu().numpy(),
+            self.validation_metric,
+        )
 
     def _run_training(
         self,

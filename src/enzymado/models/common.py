@@ -20,12 +20,15 @@ from torch import Tensor
 import torch.nn as nn
 import tqdm
 
+from enzymado.evaluation import metrics_registry
+from enzymado.models import training_protocol
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-TORCH_CHECKPOINT_SCHEMA_VERSION = 2
+TORCH_CHECKPOINT_SCHEMA_VERSION = 3
 
 type ModelState = dict[str, torch.Tensor]
 type TrainEpoch = collections.abc.Callable[[], object]
-type ValidationLoss = collections.abc.Callable[[], float]
+type ValidationLoss = collections.abc.Callable[[], float | None]
 type EpochCallback = collections.abc.Callable[
     [int, int | None, float | None, ModelState | None],
     None,
@@ -67,13 +70,18 @@ def make_optimizer(
     parameters, optimizer_name: str, lr: float, weight_decay: float = 0.0
 ):
     """Instantiate the optimizer requested by a lightweight wrapper config."""
-    if optimizer_name == "sgd":
-        return torch.optim.SGD(parameters, lr=lr, weight_decay=weight_decay)
-    if optimizer_name == "adam":
-        return torch.optim.Adam(parameters, lr=lr, weight_decay=weight_decay)
-    if optimizer_name == "adamw":
-        return torch.optim.AdamW(parameters, lr=lr, weight_decay=weight_decay)
-    raise ValueError(f"Unsupported optimizer_name '{optimizer_name}'.")
+    match optimizer_name:
+        case "sgd":
+            optimizer = torch.optim.SGD(parameters, lr=lr, weight_decay=weight_decay)
+        case "adam":
+            optimizer = torch.optim.Adam(parameters, lr=lr, weight_decay=weight_decay)
+        case "adamw":
+            optimizer = torch.optim.AdamW(parameters, lr=lr, weight_decay=weight_decay)
+        case _:
+            raise ValueError(f"Unsupported optimizer_name '{optimizer_name}'.")
+    optimizer.register_step_pre_hook(training_protocol.check_optimizer_gradients)
+    optimizer.register_step_post_hook(training_protocol.check_optimizer_parameters)
+    return optimizer
 
 
 def fit_feature_scaler(x, mask=None) -> tuple[np.ndarray, np.ndarray]:
@@ -158,6 +166,34 @@ def prepare_inputs(
     return torch.from_numpy(x).to(device), mask_t, input_dim
 
 
+def validation_objective(
+    y_true,
+    scores,
+    metric_name: str,
+    target_mask=None,
+) -> float | None:
+    """Minimize a negated metric; constant Kendall predictions are ineligible."""
+    y_array = np.asarray(y_true, dtype=np.float64).ravel()
+    score_array = np.asarray(scores, dtype=np.float64).ravel()
+    if target_mask is not None:
+        mask = np.asarray(target_mask, dtype=bool).ravel()
+        y_array, score_array = y_array[mask], score_array[mask]
+    if not np.isfinite(y_array).all() or not np.isfinite(score_array).all():
+        raise FloatingPointError("Non-finite validation labels or predictions.")
+    if y_array.size < 2 or np.unique(y_array).size < 2:
+        raise ValueError("Validation labels do not support the selection metric.")
+    if metric_name == "auprc":
+        return -metrics_registry.auprc_from_scores(y_array, score_array)
+    if metric_name != "kendall_tau":
+        raise ValueError(f"Unsupported validation metric: {metric_name}.")
+    if np.unique(score_array).size < 2:
+        return None
+    score = metrics_registry.regression_kendall_tau(y_array, score_array)
+    if not math.isfinite(score):
+        raise FloatingPointError("Non-finite validation metric.")
+    return -float(score)
+
+
 def _atomic_torch_save(payload, path: str | Path) -> None:
     """Write a torch-serialized payload atomically to avoid partial checkpoints."""
     path_obj = Path(path)
@@ -203,10 +239,13 @@ def maybe_resume_torch_wrapper(
     dataloader=None,
 ) -> int:
     """Load a previously saved wrapper checkpoint into the current wrapper instance."""
-    if path is None:
+    path_obj = Path(path) if path is not None else None
+    wrapper.training_contract_ = training_protocol.resume_contract(
+        wrapper, path_obj, dataloader
+    )
+    if path_obj is None:
         return 0
 
-    path_obj = Path(path)
     if not path_obj.exists():
         return 0
 
@@ -215,6 +254,18 @@ def maybe_resume_torch_wrapper(
         raise TypeError(
             f"Checkpoint at {path_obj} contains {type(loaded).__name__}, "
             f"expected {wrapper.__class__.__name__}."
+        )
+
+    if (
+        getattr(loaded, "checkpoint_schema_version_", None)
+        != TORCH_CHECKPOINT_SCHEMA_VERSION
+        or getattr(loaded, "training_contract_", None) != wrapper.training_contract_
+        or getattr(loaded, "resume_state_", None) is None
+    ):
+        raise ValueError(
+            "Incompatible training checkpoint: protocol, configuration or provenance "
+            "changed. Start a new run directory; old weights remain usable "
+            "for inference."
         )
 
     current_device = getattr(wrapper, "device", DEVICE)
@@ -272,10 +323,11 @@ def make_torch_checkpoint_callback(
     checkpoint_every: int = 1,
 ):
     """Build an epoch-end callback that updates state and saves checkpoints."""
-    if path is None:
-        return None
-
     checkpoint_every = int(checkpoint_every)
+    if not hasattr(wrapper, "training_contract_"):
+        wrapper.training_contract_ = training_protocol.resume_contract(
+            wrapper, Path(path) if path is not None else None, dataloader
+        )
 
     def _callback(epoch: int, best_epoch, best_val_loss, best_state) -> None:
         wrapper.current_epoch_ = int(epoch)
@@ -286,14 +338,37 @@ def make_torch_checkpoint_callback(
         )
         if not hasattr(wrapper, "training_log_") or wrapper.training_log_ is None:
             wrapper.training_log_ = []
+        if epoch == 0 and wrapper.training_log_:
+            return
         wrapper.training_log_.append(
             {
                 "epoch": int(epoch),
                 "best_epoch": best_epoch,
-                "best_val_loss": best_val_loss,
+                "selection_objective": training_protocol.selection_protocol(
+                    type(wrapper)
+                )["objective"],
+                "validation_score": getattr(wrapper, "validation_score_", None),
+                "best_validation_score": best_val_loss,
+                "baseline_validation_score": getattr(wrapper, "baseline_score_", None),
+                "improved_over_initialization": (
+                    best_val_loss
+                    < wrapper.baseline_score_ - wrapper.early_stopping_min_delta
+                    if best_epoch is not None
+                    and getattr(wrapper, "baseline_score_", None) is not None
+                    else None
+                ),
+                "status": (
+                    "baseline"
+                    if epoch == 0
+                    else "trained_without_validation"
+                    if not hasattr(wrapper, "baseline_score_")
+                    else "undefined_validation_metric"
+                    if wrapper.validation_score_ is None
+                    else "trained"
+                ),
             }
         )
-        if epoch % checkpoint_every == 0:
+        if path is not None and epoch % checkpoint_every == 0:
             wrapper.checkpoint_schema_version_ = TORCH_CHECKPOINT_SCHEMA_VERSION
             wrapper.resume_state_ = _capture_torch_training_state(
                 optimizer,
@@ -306,6 +381,23 @@ def make_torch_checkpoint_callback(
                 wrapper.resume_state_ = None
 
     return _callback
+
+
+def make_validation_callback(wrapper, checkpoint_path):
+    """Record validation values and preserve initialization as a reference."""
+
+    def observe(epoch: int, score: float | None) -> None:
+        wrapper.validation_score_ = score
+        if epoch != 0:
+            return
+        wrapper.baseline_score_ = score
+        if checkpoint_path is not None:
+            _atomic_torch_save(
+                wrapper.model.state_dict(),
+                Path(checkpoint_path).parent / "initial_model.pt",
+            )
+
+    return observe
 
 
 def _epoch_progress_bar(start_epoch: int, epochs: int) -> tqdm.tqdm:
@@ -330,6 +422,10 @@ class _EarlyStoppingState:
     best_epoch: int | None
     best_val_loss: float
     epochs_without_improvement: int
+    # Patience is measured against this, not against best_val_loss. Using one
+    # value for both made min_delta silently discard better checkpoints: a run
+    # improving by less than min_delta each epoch kept the older, worse model.
+    patience_reference: float = float("inf")
 
 
 def _copy_model_state(model: nn.Module) -> ModelState:
@@ -354,8 +450,7 @@ def _run_without_validation(
             progress.set_postfix({"s/epoch": f"{epoch_time:.1f}"})
             if (epoch + 1) % log_every == 0 or epoch == 0:
                 progress.write(
-                    f"        epoch {epoch + 1}/{epochs}  "
-                    f"({epoch_time:.1f}s/epoch)"
+                    f"        epoch {epoch + 1}/{epochs}  ({epoch_time:.1f}s/epoch)"
                 )
             if epoch_callback is not None:
                 epoch_callback(epoch + 1, None, None, None)
@@ -372,6 +467,7 @@ def _initialize_early_stopping(
     initial_best_epoch: int | None,
     initial_best_val_loss: float | None,
     epoch_callback: EpochCallback | None,
+    validation_callback,
 ) -> _EarlyStoppingState:
     """Restore resumed state or evaluate the untrained validation baseline."""
     best_model = (
@@ -387,42 +483,30 @@ def _initialize_early_stopping(
     epochs_without_improvement = (
         max(0, int(start_epoch) - int(initial_best_epoch))
         if initial_best_val_loss is not None and initial_best_epoch is not None
-        else 0
+        else start_epoch
     )
     state = _EarlyStoppingState(
         best_model=best_model,
         best_epoch=initial_best_epoch,
         best_val_loss=best_val_loss,
         epochs_without_improvement=epochs_without_improvement,
+        # A resumed run carries its patience reference over, so the counter
+        # keeps measuring against the same value it did before the restart.
+        patience_reference=best_val_loss,
     )
     if initial_best_val_loss is not None:
         return state
 
-    # The untrained or resumed model is a real candidate. Otherwise one
-    # catastrophic optimizer step could become "best" only because later
-    # steps were even worse.
-    baseline_epoch = int(start_epoch)
-    baseline_loss = float(val_loss_fn())
-    if not math.isfinite(baseline_loss):
-        raise RuntimeError(
-            "Training produced a non-finite validation loss at epoch "
-            f"{baseline_epoch}: {baseline_loss}."
-        )
-    state.best_epoch = baseline_epoch
-    state.best_val_loss = baseline_loss
-    state.best_model = _copy_model_state(model)
-    print(
-        f"        epoch {baseline_epoch}/{epochs}  "
-        f"val_loss={baseline_loss:.4f}  (baseline)",
-        flush=True,
-    )
+    if start_epoch != 0:
+        return state
+    baseline_score = val_loss_fn()
+    if baseline_score is not None and not math.isfinite(baseline_score):
+        raise FloatingPointError("Non-finite validation objective at initialization.")
+    if validation_callback is not None:
+        validation_callback(0, baseline_score)
+    print(f"        epoch 0/{epochs}  baseline_objective={baseline_score}", flush=True)
     if epoch_callback is not None:
-        epoch_callback(
-            baseline_epoch,
-            state.best_epoch,
-            state.best_val_loss,
-            state.best_model,
-        )
+        epoch_callback(0, None, None, None)
     return state
 
 
@@ -438,7 +522,7 @@ def _log_validation_epoch(
     """Update the progress display for one validation epoch."""
     progress.set_postfix(
         {
-            "val_loss": f"{val_loss:.4f}",
+            "validation_objective": f"{val_loss:.4f}",
             "best": f"{state.best_val_loss:.4f}",
             "no_improve": state.epochs_without_improvement,
             "s/epoch": f"{epoch_time:.1f}",
@@ -447,7 +531,7 @@ def _log_validation_epoch(
     if (epoch + 1) % log_every == 0 or epoch == 0:
         progress.write(
             f"        epoch {epoch + 1}/{epochs}  "
-            f"val_loss={val_loss:.4f}  best={state.best_val_loss:.4f}  "
+            f"validation_objective={val_loss:.4f}  best={state.best_val_loss:.4f}  "
             f"no_improve={state.epochs_without_improvement}  "
             f"({epoch_time:.1f}s/epoch)"
         )
@@ -463,8 +547,8 @@ def _notify_epoch(
         epoch_callback(
             epoch,
             state.best_epoch,
-            state.best_val_loss,
-            state.best_model,
+            state.best_val_loss if state.best_epoch is not None else None,
+            state.best_model if state.best_epoch is not None else None,
         )
 
 
@@ -481,8 +565,11 @@ def run_training_with_early_stopping(
     initial_best_epoch: int | None = None,
     initial_best_val_loss: float | None = None,
     epoch_callback: EpochCallback | None = None,
+    validation_callback=None,
 ) -> tuple[int | None, float | None]:
-    """Run a training loop and optionally restore the best validation checkpoint."""
+    """Select a trained epoch and retain initialization only as a reference."""
+    if initial_best_epoch is not None and initial_best_epoch < 1:
+        raise ValueError("An initialization checkpoint is not a trained candidate.")
     if val_loss_fn is None or patience is None or patience <= 0:
         _run_without_validation(
             epochs,
@@ -502,18 +589,24 @@ def run_training_with_early_stopping(
         initial_best_epoch,
         initial_best_val_loss,
         epoch_callback,
+        validation_callback,
     )
+    if state.best_epoch is not None and state.epochs_without_improvement >= patience:
+        model.load_state_dict(state.best_model)
+        return state.best_epoch, state.best_val_loss
     progress = _epoch_progress_bar(start_epoch, epochs)
     try:
         for epoch in progress:
             started_at = time.time()
             train_epoch_fn()
-            val_loss = float(val_loss_fn())
-            if not math.isfinite(val_loss):
+            score = val_loss_fn()
+            if score is not None and not math.isfinite(score):
                 raise RuntimeError(
-                    "Training produced a non-finite validation loss: "
-                    f"{val_loss}."
+                    f"Training produced a non-finite validation objective: {score}."
                 )
+            if validation_callback is not None:
+                validation_callback(epoch + 1, score)
+            val_loss = float(score) if score is not None else float("inf")
             epoch_time = time.time() - started_at
             _log_validation_epoch(
                 progress,
@@ -525,27 +618,30 @@ def run_training_with_early_stopping(
                 log_every,
             )
 
-            if val_loss < (state.best_val_loss - min_delta):
+            # Keep the best epoch outright, and count patience separately.
+            if val_loss < state.best_val_loss:
                 state.best_val_loss = val_loss
                 state.best_epoch = epoch + 1
                 state.best_model = _copy_model_state(model)
+            if val_loss < state.patience_reference - min_delta:
+                state.patience_reference = val_loss
                 state.epochs_without_improvement = 0
-                _notify_epoch(epoch_callback, epoch + 1, state)
-                continue
-
-            state.epochs_without_improvement += 1
+            else:
+                state.epochs_without_improvement += 1
             _notify_epoch(epoch_callback, epoch + 1, state)
             if state.epochs_without_improvement >= patience:
                 print(
                     f"        early stopping at epoch {epoch + 1}, "
                     f"best_epoch={state.best_epoch}, "
-                    f"best_val_loss={state.best_val_loss:.4f}",
+                    f"best_validation_objective={state.best_val_loss:.4f}",
                     flush=True,
                 )
                 break
     finally:
         progress.close()
 
+    if state.best_epoch is None:
+        raise ValueError("No trained epoch has a defined validation metric.")
     model.load_state_dict(state.best_model)
     return state.best_epoch, state.best_val_loss
 
@@ -573,6 +669,7 @@ def run_wrapper_training(
         initial_best_state=wrapper.best_model_state_,
         initial_best_epoch=wrapper.best_epoch_,
         initial_best_val_loss=wrapper.best_val_loss_,
+        validation_callback=make_validation_callback(wrapper, checkpoint_path),
         epoch_callback=make_torch_checkpoint_callback(
             wrapper,
             checkpoint_path,

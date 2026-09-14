@@ -19,8 +19,11 @@ from enzymado.models.attention_blocks import (
 from enzymado.models.common import (
     DEVICE,
     make_torch_checkpoint_callback,
+    make_validation_callback,
     run_training_with_early_stopping,
+    validation_objective,
 )
+import enzymado.models.training_protocol
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
 _DIAGNOSTIC_FLUSH_EVERY = 100
@@ -40,6 +43,11 @@ _BATCH_DIAGNOSTIC_FIELDS = (
 
 class _BaseAttentionWrapper:
     """Shared training boilerplate for attention-based wrappers."""
+
+    # Same rationale as BaseStandardWrapper: pooled attention tasks select on
+    # the metric the leaderboard reports; the EC and residue attention routes
+    # override this back to None and keep selecting on loss.
+    validation_metric: str | None = None
 
     def __init__(
         self,
@@ -83,6 +91,7 @@ class _BaseAttentionWrapper:
         self.model = None
         self.best_epoch_ = None
         self.best_val_loss_ = None
+        self.validation_metric_ = self.validation_metric
         self.input_dim_ = None
         self.extra_dim_ = 0
         self.batch_kind_ = None
@@ -352,6 +361,23 @@ class _BaseAttentionWrapper:
         if self.extra_dim_ > 0:
             self._fit_extra_scaler(dataloader, batch_kind)
 
+
+    def _selection_objective(self, logits_t, y_t):
+        """Return the negated selection metric for concatenated validation output."""
+        enzymado.models.training_protocol.check_finite_tensors(
+            [logits_t], "validation logits"
+        )
+        scores = (
+            torch.sigmoid(logits_t)
+            if self.validation_metric == "auprc"
+            else logits_t
+        )
+        return validation_objective(
+            y_t.reshape(-1).detach().cpu().numpy(),
+            scores.reshape(-1).detach().cpu().numpy(),
+            self.validation_metric,
+        )
+
     def _run_early_stopping(
         self,
         train_epoch,
@@ -375,6 +401,7 @@ class _BaseAttentionWrapper:
                 initial_best_state=self.best_model_state_,
                 initial_best_epoch=self.best_epoch_,
                 initial_best_val_loss=self.best_val_loss_,
+                validation_callback=make_validation_callback(self, checkpoint_path),
                 epoch_callback=make_torch_checkpoint_callback(
                     self,
                     checkpoint_path,

@@ -411,7 +411,6 @@ def build_dataset_from_config(
             embedding_store=embedding_store,
             mutation_sequence_column=config.sequence_column,
             wildtype_sequence_column=str(config.wildtype_sequence_column),
-            index_columns=config.index_columns,
         )
         dataset = MutationDeltaGlobalDataset(
             rows=dataset_rows,

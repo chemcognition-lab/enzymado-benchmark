@@ -69,6 +69,20 @@ def prep_swissprot(
             active["active_site"] = active["active_site"].apply(
                 parsing.parse_active_sites
             )
+            # Deduplicate on parsed positions, not on the raw annotation text:
+            # two accessions for one sequence often differ only in wording, and
+            # sometimes one is annotated less completely than the other.
+            active, merged, conflicts = common.merge_residue_annotations_by_sequence(
+                active,
+                sequence_column=constants.protein_sequence,
+                position_column="active_site",
+                id_column=constants.uniprot_id,
+                stats=st,
+            )
+            print(
+                f"Active sites: merged {merged} duplicate sequence rows "
+                f"({conflicts} had disagreeing annotations)."
+            )
 
             out_dir = paths.data_processed_properties / "active_sites"
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +125,24 @@ def prep_swissprot(
 
             binding_site.to_csv(
                 out_dir_interim / "swissprot_binding_site2.csv", index=False
+            )
+
+            # Same reasoning as the active-site path above: collapse to one row
+            # per sequence, keeping the union of the annotated positions.
+            (
+                binding_site,
+                merged,
+                conflicts,
+            ) = common.merge_residue_annotations_by_sequence(
+                binding_site,
+                sequence_column=constants.protein_sequence,
+                position_column="binding_positions",
+                id_column=constants.uniprot_id,
+                stats=st,
+            )
+            print(
+                f"Binding sites: merged {merged} duplicate sequence rows "
+                f"({conflicts} had disagreeing annotations)."
             )
 
             binding_site.drop(

@@ -30,8 +30,18 @@ source "${REPO}/.venv/bin/activate"
 
 : "${FILTER_TASKS:=}"
 : "${SKIP_EXISTING:=1}"
+# Roots default to the script's own defaults (results/predictions), which is the
+# pre-protocol-v3 tree. Always set these when scoring a different run root.
+: "${PREDICTIONS_ROOT:=}"
+: "${STATISTICS_ROOT:=}"
 
 ARGS=()
+if [[ -n "${PREDICTIONS_ROOT}" ]]; then
+    ARGS+=(--predictions-root "${PREDICTIONS_ROOT}")
+fi
+if [[ -n "${STATISTICS_ROOT}" ]]; then
+    ARGS+=(--statistics-root "${STATISTICS_ROOT}")
+fi
 if [[ "${SKIP_EXISTING}" == "1" || "${SKIP_EXISTING}" == "true" || "${SKIP_EXISTING}" == "TRUE" ]]; then
     ARGS+=(--skip-existing)
 fi
@@ -46,4 +56,6 @@ fi
 
 echo "Filter tasks: ${FILTER_TASKS:-<none>}"
 echo "Skip existing: ${SKIP_EXISTING}"
+echo "Predictions root: ${PREDICTIONS_ROOT:-<default>}"
+echo "Statistics root: ${STATISTICS_ROOT:-<default>}"
 python -u "${REPO}/scripts/results/compute_metrics.py" "${ARGS[@]}"

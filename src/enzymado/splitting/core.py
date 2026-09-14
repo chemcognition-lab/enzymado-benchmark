@@ -174,7 +174,12 @@ def assign_items_to_splits(
 
     rng = random.Random(seed)
     rng.shuffle(items)
-    items.sort(key=lambda pair: pair[1], reverse=True)
+    # The shuffled order is what makes this split random. Sorting by weight here
+    # used to override it: groups were placed largest-first, so the few proteins
+    # carrying many measurements filled val and test before the rest were
+    # considered. kcat ended up with 2.7 rows per protein in train against 18.8
+    # in test. Groups of equal weight were unaffected -- a stable sort leaves
+    # them alone -- which is why the one-row-per-protein tasks never showed it.
 
     total_weight = sum(item_weights.values())
     target_weights = {split: total_weight * fractions[split] for split in SPLIT_NAMES}

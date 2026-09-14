@@ -15,11 +15,14 @@ from enzymado.models.common import (
     restore_torch_training_state,
 )
 from enzymado.models.nn_blocks import LinearModel, MLPModel
+import enzymado.models.training_protocol
 from enzymado.training.torch_wrapper_base import BaseStandardWrapper
 
 
 class LinearRegressorImplementation(BaseStandardWrapper):
     """Implement full-batch linear regression for the public wrapper."""
+
+    validation_metric = "kendall_tau"
 
     def __init__(
         self,
@@ -78,14 +81,17 @@ class LinearRegressorImplementation(BaseStandardWrapper):
             self.model.train()
             optimizer.zero_grad()
             loss = criterion(self._forward(x_t, mask_t), y_t)
-            loss.backward()
+            enzymado.models.training_protocol.backward_checked(loss)
             optimizer.step()
 
         def val_loss():
             self.model.eval()
             with torch.no_grad():
                 x_val_t, mask_val_t, y_val_t = val_payload
-                return criterion(self._forward(x_val_t, mask_val_t), y_val_t).item()
+                preds = self._forward(x_val_t, mask_val_t)
+                if self.validation_metric is None:
+                    return float(criterion(preds, y_val_t).item())
+                return self._selection_objective(preds, y_val_t)
 
         self._run_training(
             train_epoch,
@@ -129,12 +135,16 @@ class LinearRegressorImplementation(BaseStandardWrapper):
                 x_t, mask_t, y_np = batch_to_input(batch, batch_kind, self.device)
                 y_t = torch.from_numpy(y_np).unsqueeze(1).to(self.device)
                 optimizer.zero_grad()
-                criterion(self._forward(x_t, mask_t), y_t).backward()
+                loss = criterion(self._forward(x_t, mask_t), y_t)
+                enzymado.models.training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
             self.model.eval()
+            use_metric = self.validation_metric is not None
             losses = []
+            pred_chunks = []
+            label_chunks = []
             with torch.no_grad():
                 for batch in val_dataloader:
                     x_t, mask_t, y_np = batch_to_input(
@@ -143,9 +153,16 @@ class LinearRegressorImplementation(BaseStandardWrapper):
                         self.device,
                     )
                     y_t = torch.from_numpy(y_np).unsqueeze(1).to(self.device)
-                    losses.append(
-                        float(criterion(self._forward(x_t, mask_t), y_t).item())
-                    )
+                    preds = self._forward(x_t, mask_t)
+                    if use_metric:
+                        pred_chunks.append(preds)
+                        label_chunks.append(y_t)
+                    else:
+                        losses.append(float(criterion(preds, y_t).item()))
+            if use_metric:
+                return self._selection_objective(
+                    torch.cat(pred_chunks, dim=0), torch.cat(label_chunks, dim=0)
+                )
             return mean_losses(losses)
 
         self._run_training(
@@ -170,6 +187,8 @@ class LinearRegressorImplementation(BaseStandardWrapper):
 
 class MLPRegressorImplementation(BaseStandardWrapper):
     """Implement minibatch MLP regression for the public wrapper."""
+
+    validation_metric = "kendall_tau"
 
     def __init__(
         self,
@@ -252,21 +271,30 @@ class MLPRegressorImplementation(BaseStandardWrapper):
                 yb = y_t[idx]
                 optimizer.zero_grad()
                 loss = criterion(self._forward(xb, mb), yb)
-                loss.backward()
+                enzymado.models.training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
             self.model.eval()
             x_val_t, mask_val_t, y_val_t = val_payload
             nv = x_val_t.shape[0]
+            use_metric = self.validation_metric is not None
             losses = []
+            chunks = []
             with torch.no_grad():
                 for start in range(0, nv, self.batch_size):
                     stop = min(start + self.batch_size, nv)
                     xb = x_val_t[start:stop]
                     mb = mask_val_t[start:stop] if mask_val_t is not None else None
-                    yb = y_val_t[start:stop]
-                    losses.append(float(criterion(self._forward(xb, mb), yb).item()))
+                    preds = self._forward(xb, mb)
+                    if use_metric:
+                        chunks.append(preds)
+                    else:
+                        losses.append(
+                            float(criterion(preds, y_val_t[start:stop]).item())
+                        )
+            if use_metric:
+                return self._selection_objective(torch.cat(chunks, dim=0), y_val_t)
             return mean_losses(losses)
 
         self._run_training(
@@ -326,12 +354,16 @@ class MLPRegressorImplementation(BaseStandardWrapper):
                 x_t, mask_t, y_np = batch_to_input(batch, batch_kind, self.device)
                 y_t = torch.from_numpy(y_np).unsqueeze(1).to(self.device)
                 optimizer.zero_grad()
-                criterion(self._forward(x_t, mask_t), y_t).backward()
+                loss = criterion(self._forward(x_t, mask_t), y_t)
+                enzymado.models.training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
             self.model.eval()
+            use_metric = self.validation_metric is not None
             losses = []
+            pred_chunks = []
+            label_chunks = []
             with torch.no_grad():
                 for batch in val_dataloader:
                     x_t, mask_t, y_np = batch_to_input(
@@ -340,9 +372,16 @@ class MLPRegressorImplementation(BaseStandardWrapper):
                         self.device,
                     )
                     y_t = torch.from_numpy(y_np).unsqueeze(1).to(self.device)
-                    losses.append(
-                        float(criterion(self._forward(x_t, mask_t), y_t).item())
-                    )
+                    preds = self._forward(x_t, mask_t)
+                    if use_metric:
+                        pred_chunks.append(preds)
+                        label_chunks.append(y_t)
+                    else:
+                        losses.append(float(criterion(preds, y_t).item()))
+            if use_metric:
+                return self._selection_objective(
+                    torch.cat(pred_chunks, dim=0), torch.cat(label_chunks, dim=0)
+                )
             return mean_losses(losses)
 
         self._run_training(
