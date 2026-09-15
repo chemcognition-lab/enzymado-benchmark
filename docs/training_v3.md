@@ -53,9 +53,10 @@ a fresh directory makes changes to the failed configuration auditable.
 `bash scripts/slurm/plan_training_v3.sh` prints the commands; it does not submit
 jobs. Review and freeze the code and data before submission. The plan uses
 `results/protocol_v3/predictions` and separate logs, and keeps seed 42 and the
-existing common-ID filter. Eight arrays separate scopes, splits, pooling and
-residue inputs. No-attention site tasks require residue embeddings, so they must
-not be submitted with the mean-pooled embedding manifest.
+existing common-ID filter. Twenty-two arrays separate scopes, splits, pooling,
+residue inputs and model family. No-attention site tasks require residue
+embeddings, so they must not be submitted with the mean-pooled embedding
+manifest.
 
 First run a pilot with one embedding (array index 2, `ankh_base`) and a small
 selection of tasks. Include at least one pooled classifier, one pooled regressor,
@@ -69,7 +70,12 @@ failures. Attach classification probabilities using the same launch commands
 with `ATTACH_PROBABILITIES=1` and the same output root. This loads existing weights
 rather than retraining. Do not run it concurrently with training.
 
-Then run evaluation on a compute node, with every output root isolated:
+Then run evaluation on a compute node, with every output root isolated. The
+paths below stage the results away from the published tree; promote them into
+`results/{predictions,bootstrap,ratings}` only once the run is verified.
+`compute_bootstrap_metrics.py` writes `metrics.json` itself, so the
+`compute_metrics.py` step is only needed when the point estimates are wanted
+without paying for the resampling.
 
 ```bash
 .venv/bin/python scripts/results/compute_metrics.py \

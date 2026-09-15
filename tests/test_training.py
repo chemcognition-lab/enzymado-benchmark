@@ -1360,8 +1360,7 @@ class StructuredTrainingTests(unittest.TestCase):
                 allowed_ids={"P1"},
                 sequence_to_id={},
             )
-        # positional signature:
-        # (config, task_name, emb_path, split, rows, mode, dim, seq_to_id)
+        # build is called positionally; argument 5 is the embedding mode.
         self.assertEqual(build.call_args.args[5], "auto")
 
     def test_get_target_payload_for_residue_tasks_does_not_reload_embeddings(

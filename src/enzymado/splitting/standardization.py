@@ -211,10 +211,10 @@ def build_standardized_dataset_rows(
             split_name = row.get("split")
             parsed = parse_finite_float(row.get(column))
             if split_name in value_counts_by_split:
-                if parsed is None:
-                    missing_counts_by_split[split_name] += 1
-                else:
-                    value_counts_by_split[split_name] += 1
+                counted = (
+                    missing_counts_by_split if parsed is None else value_counts_by_split
+                )
+                counted[split_name] += 1
             row[standardized_column] = (
                 ""
                 if parsed is None

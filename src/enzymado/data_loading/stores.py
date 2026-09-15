@@ -152,6 +152,27 @@ def _safetensor_files(source: Path) -> list[Path]:
     raise FileNotFoundError(f"No .safetensors files found in '{source}'.")
 
 
+def _sequence_keys_from_index(
+    index_path: Path,
+    normalized_sequences: set[str],
+    available_keys: set[str],
+) -> dict[str, str]:
+    """Map sequences to the tensor keys the sequence index assigns them."""
+    with index_path.open(newline="", encoding="utf-8") as fh:
+        pairs = (
+            (
+                normalize_sequence(row.get("protein_sequence", "")),
+                clean_text(row.get("sequence_id", "")),
+            )
+            for row in csv.DictReader(fh)
+        )
+        return {
+            seq: sid
+            for seq, sid in pairs
+            if seq in normalized_sequences and sid in available_keys
+        }
+
+
 def _load_sequence_key_map(
     needed_sequences: set[str],
     available_keys: set[str],
@@ -160,35 +181,39 @@ def _load_sequence_key_map(
     normalized_sequences = {
         normalize_sequence(s) for s in needed_sequences if normalize_sequence(s)
     }
-    seq_to_key: dict[str, str] = {}
-
     seq_index_path = resolve_sequence_index_path()
-    if seq_index_path is not None and normalized_sequences:
-        with seq_index_path.open(newline="", encoding="utf-8") as fh:
-            for row in csv.DictReader(fh):
-                seq = normalize_sequence(row.get("protein_sequence", ""))
-                sid = clean_text(row.get("sequence_id", ""))
-                if seq in normalized_sequences and sid in available_keys:
-                    seq_to_key[seq] = sid
-
+    seq_to_key = (
+        _sequence_keys_from_index(
+            seq_index_path, normalized_sequences, available_keys
+        )
+        if seq_index_path is not None and normalized_sequences
+        else {}
+    )
     for seq in normalized_sequences:
         if seq not in seq_to_key and seq in available_keys:
             seq_to_key[seq] = seq
     return seq_to_key
 
 
+def _safetensor_keys(file_path: Path) -> list[str]:
+    """Return the cleaned tensor keys stored in one safetensors file."""
+    with safetensors.safe_open(
+        str(file_path), framework="pt", device="cpu"
+    ) as handle:
+        return [clean_text(str(raw_key)) for raw_key in handle.keys()]
+
+
 def _index_safetensors(source: Path) -> dict[str, Path]:
     """Index tensor keys to the safetensors file that stores them."""
-
     key_to_file: dict[str, Path] = {}
     for file_path in _safetensor_files(source):
-        with safetensors.safe_open(
-            str(file_path), framework="pt", device="cpu"
-        ) as handle:
-            for raw_key in handle.keys():
-                key = clean_text(str(raw_key))
-                if key and key not in key_to_file:
-                    key_to_file[key] = file_path
+        key_to_file.update(
+            {
+                key: file_path
+                for key in _safetensor_keys(file_path)
+                if key and key not in key_to_file
+            }
+        )
     return key_to_file
 
 

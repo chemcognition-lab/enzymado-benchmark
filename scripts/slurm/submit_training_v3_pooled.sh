@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Relaunch only the four pooled arrays cancelled while the random splits were
-# regenerated. Same sizing as submit_training_v3_resubmit.sh (124G / 8 cpus /
-# 4h): the pooled tasks are the cheap ones, they just had to wait for the new
-# split CSVs.
+# One-off: relaunches the four pooled arrays that were cancelled while the
+# random splits were regenerated (2026-09-11). Kept as a record of how that
+# partial resubmission was issued; for a new partial run, prefer
+# submit_training_v3_resubmit.sh with SKIP set. Same sizing as that script
+# (124G / 8 cpus / 4h): the pooled tasks are the cheap ones, they just had to
+# wait for the new split CSVs.
 set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
