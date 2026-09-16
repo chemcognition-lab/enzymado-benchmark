@@ -57,7 +57,12 @@ def main() -> None:
     parser.add_argument("shard_dir", type=Path)
     args = parser.parse_args()
 
-    shards = sorted(args.shard_dir.glob("*.safetensors"))
+    # A manifest entry is either a shard directory (residue embeddings) or one
+    # pooled file, and both need the same fingerprint to be comparable.
+    if args.shard_dir.is_file():
+        shards = [args.shard_dir]
+    else:
+        shards = sorted(args.shard_dir.glob("*.safetensors"))
     if not shards:
         raise SystemExit(f"{args.shard_dir} holds no .safetensors shards.")
 
