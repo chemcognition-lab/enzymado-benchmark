@@ -227,7 +227,10 @@ def _load_expected_targets(
     config, dataset_variant: str, split_name: str
 ) -> np.ndarray | None:
     dataset_path = config.dataset_paths.get(dataset_variant)
-    if dataset_path is None or config.target_column is None:
+    # Ask what kind of label the task has instead of inferring it from an
+    # unset column: a regression task that forgets target_column should fail
+    # here, not be skipped silently.
+    if dataset_path is None or config.label_kind != "scalar_regression":
         return None
     values: list[float] = []
     with Path(dataset_path).open("r", encoding="utf-8", newline="") as handle:

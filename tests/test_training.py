@@ -584,8 +584,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": self.root / "unused.csv"},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         materialized_store = types.SimpleNamespace(by_id={"P1": None}, by_sequence={})
@@ -630,8 +629,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": self.root / "unused.csv"},
-            target_column=None,
-            residue_positions_column="binding_positions",
+            target_column="binding_positions",
             index_columns=("uniprot_id",),
         )
         lazy_store = types.SimpleNamespace(_available_ids=["P1"], _seq_to_key={})
@@ -731,8 +729,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": self.root / "unused.csv"},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         lazy_store = types.SimpleNamespace(_available_ids=["P1"], _seq_to_key={})
@@ -826,8 +823,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         lazy_store = load_lazy_safetensors_embedding_store(
@@ -906,8 +902,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         bundle = build_dataset_from_config(
@@ -1069,8 +1064,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         import torch
@@ -1393,8 +1387,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -1451,8 +1444,7 @@ class StructuredTrainingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="binding_positions",
+            target_column="binding_positions",
             index_columns=("uniprot_id",),
         )
         import torch

@@ -49,7 +49,6 @@ def _config(
     label_kind: enzymado.data_loading.data_registry.LabelType,
     *,
     target_column: str | None,
-    residue_positions_column: str | None = None,
 ) -> enzymado.data_loading.data_registry.TaskConfig:
     """Build one synthetic task configuration using canonical similarity naming."""
     return enzymado.data_loading.data_registry.TaskConfig(
@@ -58,7 +57,6 @@ def _config(
         label_kind=label_kind,
         dataset_paths={"similarity": Path("canary.csv")},
         target_column=target_column,
-        residue_positions_column=residue_positions_column,
     )
 
 
@@ -257,8 +255,7 @@ def test_residue_route_matches_frozen_canary(tmp_path: Path) -> None:
         "active_sites",
         enzymado.data_loading.data_registry.TaskType.PROTEIN_RESIDUE,
         enzymado.data_loading.data_registry.LabelType.RESIDUE_BINARY_VECTOR,
-        target_column=None,
-        residue_positions_column="positions",
+        target_column="positions",
     )
     train_embeddings = [
         [[-2.0, -1.0], [-1.0, -0.5], [1.0, 0.5]],

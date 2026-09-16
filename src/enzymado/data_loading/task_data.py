@@ -109,7 +109,7 @@ def _load_and_filter_rows(
     ec_vocabulary = None
     if config.label_kind == "multilabel_ec":
         ec_builder = HierarchicalECLabelBuilder(
-            target_column=str(config.target_column),
+            target_column=config.target_column,
             separator=config.ec_separator,
         ).fit(train_rows)
         ec_vocabulary = ec_builder.vocabulary_by_level
@@ -186,14 +186,14 @@ def _build_pooled_data(
             )
         log("    Using canonical EC vocabulary from the complete train split...")
         ec_builder = HierarchicalECLabelBuilder(
-            target_column=str(config.target_column),
+            target_column=config.target_column,
             separator=config.ec_separator,
             vocabulary_by_level=rows.ec_vocabulary,
         )
         flat_builder = FlatECLabelBuilder(
-            target_column=str(config.target_column),
+            target_column=config.target_column,
             separator=config.ec_separator,
-            vocabulary_by_level=ec_builder.vocabulary_by_level,
+            vocabulary_by_level=rows.ec_vocabulary,
         )
 
         log("    Building pooled hierarchical EC arrays...")

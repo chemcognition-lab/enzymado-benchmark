@@ -560,7 +560,6 @@ def build_flat_ec_arrays(
     if missing_policy not in {"raise", "skip"}:
         raise ValueError("missing_policy must be either 'raise' or 'skip'.")
 
-    label_builder._ensure_flat_index()
     x_list: list[torch.Tensor] = []
     targets: list[torch.Tensor] = []
     target_masks: list[torch.Tensor] = []
@@ -588,7 +587,7 @@ def build_flat_ec_arrays(
         log(f"      Skipped {skipped} rows (missing embeddings)")
 
     if not x_list:
-        empty_dim = len(label_builder.flat_vocabulary or ())
+        empty_dim = label_builder.flat_target_width()
         return (
             torch.empty((0, 0), dtype=torch.float32),
             torch.empty((0, empty_dim), dtype=torch.float32),

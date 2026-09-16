@@ -256,6 +256,15 @@ class FlatECLabelBuilder(HierarchicalECLabelBuilder):
             offset += len(vocabulary)
         self.flat_vocabulary = tuple(flat_labels)
 
+    def flat_target_width(self) -> int:
+        """Width of one flattened target, built on demand.
+
+        Callers that must size an empty batch need this before any row is built,
+        because ``build`` is what would otherwise trigger the lazy index.
+        """
+        self._ensure_flat_index()
+        return len(self.flat_vocabulary or ())
+
     def build(self, row: dict[str, str]) -> dict[str, np.ndarray]:
         """Concatenate hierarchical levels into one flat EC target."""
         self._ensure_flat_index()

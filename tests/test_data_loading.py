@@ -534,8 +534,7 @@ class DataLoadingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -680,8 +679,7 @@ class DataLoadingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
         store = ResidueEmbeddingStore(
@@ -728,8 +726,7 @@ class DataLoadingTests(unittest.TestCase):
             batch_kind="protein_residue",
             label_kind="residue_binary_vector",
             dataset_paths={"random": dataset_path},
-            target_column=None,
-            residue_positions_column="active_site",
+            target_column="active_site",
             index_columns=("uniprot_id",),
         )
 
