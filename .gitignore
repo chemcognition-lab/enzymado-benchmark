@@ -59,8 +59,7 @@ results/dataprep_datacards/
 
 # Working notes and agent configuration (not part of the release).
 # README images live in assets/ instead, which stays tracked.
-docs/*
-!docs/training_v3.md
+docs/
 skills/
 
 # Local embedding manifests: they hold machine-specific absolute paths.

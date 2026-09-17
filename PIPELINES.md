@@ -112,8 +112,9 @@ constant probabilities remains defined when both classes are present. A run with
 no eligible trained epoch fails explicitly. Old checkpoints remain loadable for
 inference, but resumption requires a matching v3 protocol and provenance contract.
 
-See [the v3 runbook](docs/training_v3.md) for reporting fields, migration rules and
-isolated launch/evaluation commands. These changes require a new benchmark version.
+The v3 runbook under `docs/` carries the reporting fields, migration rules and
+isolated launch/evaluation commands; it is kept locally and not published. These
+changes require a new benchmark version.
 
 Classification accuracy, precision, recall, and F1 use saved hard labels.
 AUROC and AUPRC use score histograms when the artifact includes probabilities;
