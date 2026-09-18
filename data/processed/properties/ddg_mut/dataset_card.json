@@ -1,12 +1,10 @@
 {
-  "property_name": "ddg_mut",
+  "property_name": "ddg",
   "dataset_id": "fireprotdb_ddg",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "FireProtDB",
+    "doi": "10.1093/nar/gkaa981",
+    "url": "https://doi.org/10.1093/nar/gkaa981"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -30,10 +28,11 @@
         "wildtype_sequence": 0,
         "mutation": 0,
         "protein_sequence": 0,
-        "ddg": 0
+        "ddg": 0,
+        "split": 0,
+        "ddg_standardized": 0
       },
-      "duplicate_rows_full": 0,
-      "duplicate_rows_by_key": 1242
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -115,17 +114,109 @@
       }
     },
     "split_sizes_by_method": {
-      "fireprotdb_ddg_random_80_10_10_splits": {
-        "train": 3019,
-        "val": 378,
+      "fireprotdb_ddg_random_80_10_10_standardized": {
+        "val": 377,
+        "train": 3020,
         "test": 377
       },
-      "fireprotdb_ddg_similarity_mmseqs2_80_10_10_splits": {
-        "train": 65,
-        "test": 3,
-        "val": 1
+      "fireprotdb_ddg_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 2741,
+        "val": 656,
+        "test": 377
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "fireprotdb_ddg_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 3774,
+          "mean": -0.01,
+          "std": 0.9949,
+          "min": -6.919,
+          "max": 10.0762,
+          "median": -0.1504
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 3020,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -6.919,
+          "max": 10.0762,
+          "median": -0.1504
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 377,
+          "mean": -0.0736,
+          "std": 0.9397,
+          "min": -4.6168,
+          "max": 3.9015,
+          "median": -0.1504
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 377,
+          "mean": -0.0267,
+          "std": 1.0053,
+          "min": -6.0902,
+          "max": 3.7634,
+          "median": -0.1596
+        }
+      },
+      "fireprotdb_ddg_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 3774,
+          "mean": 0.0203,
+          "std": 0.9512,
+          "min": -6.5851,
+          "max": 9.6633,
+          "median": -0.1139
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2741,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -6.5851,
+          "max": 9.6633,
+          "median": -0.1491
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 656,
+          "mean": 0.0223,
+          "std": 0.8264,
+          "min": -2.1257,
+          "max": 4.8297,
+          "median": -0.1139
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 377,
+          "mean": 0.1643,
+          "std": 0.7582,
+          "min": -2.5791,
+          "max": 3.1437,
+          "median": 0.1062
+        }
+      }
+    },
+    "rows": 3774,
+    "distinct_proteins": 2532,
+    "sequence_length_summary": {
+      "min": 96,
+      "max": 34350,
+      "mean": 351.55,
+      "median": 164.0,
+      "p95": 537,
+      "count_greater_than_1024": 38
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -152,5 +243,14 @@
       "label_colored": "results/figures/umaps/ddg_mut_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/ddg_mut_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Change in folding free energy on point mutation, from FireProtDB. One row is one mutant with its wild-type sequence.",
+  "label": {
+    "column": "ddg_standardized",
+    "label_kind": "scalar_regression",
+    "description": "delta delta G in kcal/mol, standardized on the training split. Sign convention follows the source, where positive is stabilising.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }

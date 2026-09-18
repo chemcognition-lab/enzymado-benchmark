@@ -2,11 +2,9 @@
   "property_name": "dtm",
   "dataset_id": "fireprotdb_dtm",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "FireProtDB",
+    "doi": "10.1093/nar/gkaa981",
+    "url": "https://doi.org/10.1093/nar/gkaa981"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -30,10 +28,11 @@
         "wildtype_sequence": 0,
         "mutation": 0,
         "protein_sequence": 0,
-        "dtm": 0
+        "dtm": 0,
+        "split": 0,
+        "dtm_standardized": 0
       },
-      "duplicate_rows_full": 0,
-      "duplicate_rows_by_key": 1026
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -115,17 +114,109 @@
       }
     },
     "split_sizes_by_method": {
-      "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
-        "train": 83,
-        "test": 7,
-        "val": 1
-      },
-      "fireprotdb_dtm_random_80_10_10_splits": {
+      "fireprotdb_dtm_random_80_10_10_standardized": {
         "train": 2670,
-        "test": 334,
-        "val": 334
+        "val": 335,
+        "test": 333
+      },
+      "fireprotdb_dtm_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 2326,
+        "val": 679,
+        "test": 333
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "fireprotdb_dtm_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 3338,
+          "mean": 0.0021,
+          "std": 0.9737,
+          "min": -7.945,
+          "max": 10.2486,
+          "median": 0.192
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2670,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -7.945,
+          "max": 10.2486,
+          "median": 0.192
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 335,
+          "mean": -0.0032,
+          "std": 0.9062,
+          "min": -4.4115,
+          "max": 3.6584,
+          "median": 0.1783
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 333,
+          "mean": 0.0239,
+          "std": 0.8119,
+          "min": -3.1921,
+          "max": 2.7404,
+          "median": 0.192
+        }
+      },
+      "fireprotdb_dtm_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 3338,
+          "mean": -0.0553,
+          "std": 1.0042,
+          "min": -8.2513,
+          "max": 10.5121,
+          "median": 0.1406
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2326,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -8.2513,
+          "max": 4.2808,
+          "median": 0.183
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 679,
+          "mean": -0.2413,
+          "std": 0.8429,
+          "min": -5.568,
+          "max": 1.9775,
+          "median": -0.0289
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 333,
+          "mean": -0.0625,
+          "std": 1.2582,
+          "min": -3.4626,
+          "max": 10.5121,
+          "median": 0.0558
+        }
+      }
+    },
+    "rows": 3338,
+    "distinct_proteins": 2312,
+    "sequence_length_summary": {
+      "min": 96,
+      "max": 2527,
+      "mean": 270.74,
+      "median": 231.0,
+      "p95": 537,
+      "count_greater_than_1024": 3
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -152,5 +243,14 @@
       "label_colored": "results/figures/umaps/dtm_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/dtm_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Change in melting temperature on point mutation, from FireProtDB's manually curated stability records. One row is one mutant, paired with its wild-type sequence.",
+  "label": {
+    "column": "dtm_standardized",
+    "label_kind": "scalar_regression",
+    "description": "delta T_m in degrees Celsius, mutant minus wild type, standardized on the training split. Positive means the mutation stabilises.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }

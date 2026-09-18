@@ -1,0 +1,91 @@
+{
+  "property_name": "erickson_petase",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "PET hydrolase activity for a panel of naturally occurring scaffolds, measured as aromatic degradation products released.",
+  "origin_of_data": {
+    "source_name": "Thermotolerant PETase scaffolds from natural diversity",
+    "doi": "10.1038/s41467-022-35237-x",
+    "url": "https://doi.org/10.1038/s41467-022-35237-x"
+  },
+  "label": {
+    "column": "sum_aromatic_products_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Sum of aromatic products in the assay units of the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-09-17",
+    "split_sizes_by_method": {
+      "erickson_random_80_10_10_standardized": {
+        "train": 456,
+        "test": 53,
+        "val": 61
+      }
+    },
+    "label_distribution_by_method": {
+      "erickson_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 570,
+          "mean": 0.0121,
+          "std": 1.0174,
+          "min": -0.4703,
+          "max": 7.3054,
+          "median": -0.4257
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 456,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -0.4703,
+          "max": 7.3054,
+          "median": -0.4292
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 61,
+          "mean": -0.0369,
+          "std": 0.9233,
+          "min": -0.4703,
+          "max": 5.4507,
+          "median": -0.4225
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 53,
+          "mean": 0.1726,
+          "std": 1.2315,
+          "min": -0.4703,
+          "max": 6.1977,
+          "median": -0.3899
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "temperature": 0,
+        "sum_aromatic_products": 0,
+        "split": 0,
+        "sum_aromatic_products_standardized": 0
+      },
+      "duplicate_rows_full": 3
+    },
+    "rows": 570,
+    "distinct_proteins": 19,
+    "sequence_length_summary": {
+      "min": 186,
+      "max": 290,
+      "mean": 262.63,
+      "median": 270.0,
+      "p95": 290,
+      "count_greater_than_1024": 0
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

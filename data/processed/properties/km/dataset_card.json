@@ -2,11 +2,9 @@
   "property_name": "km",
   "dataset_id": "catpred_km",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "CatPred-DB",
+    "doi": "10.1038/s41467-025-57215-9",
+    "url": "https://doi.org/10.1038/s41467-025-57215-9"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -30,10 +28,11 @@
         "smiles": 0,
         "temperature": 1831,
         "ph": 1430,
-        "km": 0
+        "km": 0,
+        "split": 0,
+        "km_standardized": 0
       },
-      "duplicate_rows_full": 0,
-      "duplicate_rows_by_key": 0
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -115,17 +114,107 @@
       }
     },
     "split_sizes_by_method": {
-      "catpred_km_random_80_10_10_splits": {
-        "train": 11914,
-        "test": 277,
-        "val": 275
+      "catpred_km_random_80_10_10_standardized": {
+        "train": 32939,
+        "test": 4118,
+        "val": 4117
       },
-      "catpred_km_similarity_mmseqs2_80_10_10_splits": {
-        "train": 10596,
-        "val": 1042,
-        "test": 828
+      "catpred_km_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 32939,
+        "val": 4118,
+        "test": 4117
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "catpred_km_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 41174,
+          "mean": 0.0002,
+          "std": 0.9972,
+          "min": -5.6939,
+          "max": 3.7061,
+          "median": -0.0059
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 32939,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -5.6939,
+          "max": 3.7061,
+          "median": -0.0031
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 4117,
+          "mean": 0.0345,
+          "std": 0.9942,
+          "min": -3.7535,
+          "max": 3.1586,
+          "median": 0.0178
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 4118,
+          "mean": -0.0326,
+          "std": 0.9763,
+          "min": -3.4198,
+          "max": 3.2848,
+          "median": -0.0379
+        }
+      },
+      "catpred_km_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 41174,
+          "mean": -0.0193,
+          "std": 1.0078,
+          "min": -5.7739,
+          "max": 3.7261,
+          "median": -0.0254
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 32939,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -5.7739,
+          "max": 3.7261,
+          "median": -0.0116
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 4118,
+          "mean": 0.0574,
+          "std": 1.0108,
+          "min": -4.4289,
+          "max": 3.4719,
+          "median": 0.0828
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 4117,
+          "mean": -0.25,
+          "std": 1.0357,
+          "min": -4.4289,
+          "max": 3.7261,
+          "median": -0.2427
+        }
+      }
+    },
+    "rows": 41174,
+    "distinct_proteins": 12355,
+    "sequence_length_summary": {
+      "min": 5,
+      "max": 2590,
+      "mean": 437.55,
+      "median": 389.0,
+      "p95": 822,
+      "count_greater_than_1024": 996
+    },
+    "categorical_high_variance_columns": []
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -152,5 +241,14 @@
       "label_colored": "results/figures/umaps/km_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/km_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Michaelis constants for enzyme-substrate pairs from CatPred-DB. As with k_cat, one row is one enzyme-substrate measurement.",
+  "label": {
+    "column": "km_standardized",
+    "label_kind": "scalar_regression",
+    "description": "K_M in mM, log10-transformed and then standardized on the training split, for the same reason as k_cat.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }

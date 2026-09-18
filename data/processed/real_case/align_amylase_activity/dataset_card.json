@@ -1,0 +1,92 @@
+{
+  "property_name": "align_amylase_activity",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Measured activity for an amylase variant library from the Protein Engineering Tournament. Variants are close relatives of one parent, so this probes resolution well below the level of enzyme family.",
+  "origin_of_data": {
+    "source_name": "Protein Engineering Tournament (2023 ALIGN round)",
+    "doi": "10.1002/prot.70008",
+    "url": "https://doi.org/10.1002/prot.70008"
+  },
+  "label": {
+    "column": "specific_activity_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Specific activity in the assay units of the tournament release, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-09-17",
+    "split_sizes_by_method": {
+      "alpha_amylase__specific_activity_random_80_10_10_standardized": {
+        "test": 964,
+        "val": 964,
+        "train": 7627
+      }
+    },
+    "label_distribution_by_method": {
+      "alpha_amylase__specific_activity_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 9555,
+          "mean": 0.0005,
+          "std": 0.9997,
+          "min": -0.9835,
+          "max": 21.25,
+          "median": 0.067
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 7627,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -0.9835,
+          "max": 21.25,
+          "median": 0.067
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 964,
+          "mean": -0.0055,
+          "std": 0.9745,
+          "min": -0.9835,
+          "max": 14.543,
+          "median": 0.067
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 964,
+          "mean": 0.01,
+          "std": 1.0219,
+          "min": -0.9835,
+          "max": 11.9641,
+          "median": 0.067
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "source_split": 0,
+        "source_dataset": 0,
+        "specific_activity": 0,
+        "split": 0,
+        "specific_activity_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 9555,
+    "distinct_proteins": 9031,
+    "sequence_length_summary": {
+      "min": 425,
+      "max": 425,
+      "mean": 425.0,
+      "median": 425,
+      "p95": 425,
+      "count_greater_than_1024": 0
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

@@ -2,11 +2,9 @@
   "property_name": "solubility",
   "dataset_id": "proteinea_solubility",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "ProteinEA solubility benchmark (Ankh)",
+    "doi": "10.1101/2023.01.16.524265",
+    "url": "https://doi.org/10.1101/2023.01.16.524265"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -32,8 +30,7 @@
         "solubility": 0,
         "split": 0
       },
-      "duplicate_rows_full": 0,
-      "duplicate_rows_by_key": 0
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -150,17 +147,110 @@
       }
     },
     "split_sizes_by_method": {
-      "proteinea_solubility_random_80_10_10_splits": {
-        "train": 2932,
+      "proteinea_solubility_random_80_10_10_standardized": {
         "test": 367,
+        "train": 2932,
         "val": 366
       },
-      "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": {
+      "proteinea_solubility_similarity_mmseqs2_80_10_10_standardized": {
         "train": 2932,
         "test": 367,
         "val": 366
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "proteinea_solubility_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 3665,
+          "mean": 0.561,
+          "std": 0.4963,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 1.0
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2932,
+          "mean": 0.5628,
+          "std": 0.496,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 1.0
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 366,
+          "mean": 0.5164,
+          "std": 0.4997,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 1.0
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 367,
+          "mean": 0.5913,
+          "std": 0.4916,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 1.0
+        }
+      },
+      "proteinea_solubility_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 3665,
+          "mean": 0.561,
+          "std": 0.4963,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 1.0
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2932,
+          "mean": 0.5866,
+          "std": 0.4924,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 1.0
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 366,
+          "mean": 0.4973,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.0
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 367,
+          "mean": 0.4196,
+          "std": 0.4935,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.0
+        }
+      }
+    },
+    "rows": 3665,
+    "distinct_proteins": 3665,
+    "sequence_length_summary": {
+      "min": 61,
+      "max": 1645,
+      "mean": 358.85,
+      "median": 329,
+      "p95": 713,
+      "count_greater_than_1024": 32
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id",
+      "uniprot_id"
+    ]
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -187,5 +277,14 @@
       "label_colored": "results/figures/umaps/solubility_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/solubility_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Binary solubility labels for the protein set distributed with the Ankh benchmark suite, retained here so results are comparable with that literature.",
+  "label": {
+    "column": "solubility",
+    "label_kind": "binary",
+    "description": "Binary: 1 soluble, 0 insoluble.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }

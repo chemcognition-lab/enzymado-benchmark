@@ -2,11 +2,9 @@
   "property_name": "binding_site",
   "dataset_id": "swissprot_binding_site",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "UniProt / Swiss-Prot",
+    "doi": "10.1093/nar/gkae1010",
+    "url": "https://doi.org/10.1093/nar/gkae1010"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -27,10 +25,10 @@
       "nan_counts_per_column": {
         "uniprot_id": 0,
         "protein_sequence": 0,
-        "binding_positions": 0
+        "binding_positions": 0,
+        "split": 0
       },
-      "duplicate_rows_full": 0,
-      "duplicate_rows_by_key": 0
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -91,17 +89,349 @@
       }
     },
     "split_sizes_by_method": {
-      "swissprot_binding_site_random_80_10_10_splits": {
-        "train": 126945,
-        "val": 15868,
-        "test": 15868
+      "swissprot_binding_site_random_80_10_10_standardized": {
+        "val": 15479,
+        "test": 15445,
+        "train": 126509
       },
-      "swissprot_binding_site_similarity_mmseqs2_80_10_10_splits": {
-        "train": 126945,
-        "val": 15868,
-        "test": 15868
+      "swissprot_binding_site_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 125849,
+        "val": 15784,
+        "test": 15800
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "swissprot_binding_site_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "categorical",
+          "total_valid_labels": 157433,
+          "unique_classes": 56950,
+          "most_frequent": [
+            {
+              "value": "[19, 20, 21, 22, 23, 24, 25, 26, 26, 81, 82, 83, 84, 85, 136, 137, 138, 139]",
+              "count": 443
+            },
+            {
+              "value": "[169, 170, 171, 172, 173, 174, 175, 176]",
+              "count": 373
+            },
+            {
+              "value": "[38, 39, 40, 41, 42, 43, 44, 45]",
+              "count": 307
+            },
+            {
+              "value": "[11, 59, 87, 93, 104, 114]",
+              "count": 280
+            },
+            {
+              "value": "[37, 38, 39, 40, 41, 42, 43, 44]",
+              "count": 270
+            },
+            {
+              "value": "[57, 73, 74, 75]",
+              "count": 257
+            },
+            {
+              "value": "[170, 171, 172, 173, 174, 175, 176, 177]",
+              "count": 255
+            },
+            {
+              "value": "[10, 11, 12, 13, 14, 15, 16, 17]",
+              "count": 231
+            }
+          ]
+        },
+        "train": {
+          "kind": "categorical",
+          "total_valid_labels": 126509,
+          "unique_classes": 48866,
+          "most_frequent": [
+            {
+              "value": "[19, 20, 21, 22, 23, 24, 25, 26, 26, 81, 82, 83, 84, 85, 136, 137, 138, 139]",
+              "count": 362
+            },
+            {
+              "value": "[169, 170, 171, 172, 173, 174, 175, 176]",
+              "count": 297
+            },
+            {
+              "value": "[38, 39, 40, 41, 42, 43, 44, 45]",
+              "count": 247
+            },
+            {
+              "value": "[11, 59, 87, 93, 104, 114]",
+              "count": 240
+            },
+            {
+              "value": "[37, 38, 39, 40, 41, 42, 43, 44]",
+              "count": 221
+            },
+            {
+              "value": "[170, 171, 172, 173, 174, 175, 176, 177]",
+              "count": 213
+            },
+            {
+              "value": "[57, 73, 74, 75]",
+              "count": 207
+            },
+            {
+              "value": "[10, 11, 12, 13, 14, 15, 16, 17]",
+              "count": 177
+            }
+          ]
+        },
+        "val": {
+          "kind": "categorical",
+          "total_valid_labels": 15479,
+          "unique_classes": 10302,
+          "most_frequent": [
+            {
+              "value": "[169, 170, 171, 172, 173, 174, 175, 176]",
+              "count": 40
+            },
+            {
+              "value": "[19, 20, 21, 22, 23, 24, 25, 26, 26, 81, 82, 83, 84, 85, 136, 137, 138, 139]",
+              "count": 37
+            },
+            {
+              "value": "[15]",
+              "count": 33
+            },
+            {
+              "value": "[38, 39, 40, 41, 42, 43, 44, 45]",
+              "count": 31
+            },
+            {
+              "value": "[10, 11, 12, 13, 14, 15, 16, 17]",
+              "count": 29
+            },
+            {
+              "value": "[57, 73, 74, 75]",
+              "count": 27
+            },
+            {
+              "value": "[35, 36, 37, 38, 39, 40, 41, 42]",
+              "count": 26
+            },
+            {
+              "value": "[123, 173, 177, 201, 203, 204, 295, 327, 379]",
+              "count": 25
+            }
+          ]
+        },
+        "test": {
+          "kind": "categorical",
+          "total_valid_labels": 15445,
+          "unique_classes": 10353,
+          "most_frequent": [
+            {
+              "value": "[19, 20, 21, 22, 23, 24, 25, 26, 26, 81, 82, 83, 84, 85, 136, 137, 138, 139]",
+              "count": 44
+            },
+            {
+              "value": "[169, 170, 171, 172, 173, 174, 175, 176]",
+              "count": 36
+            },
+            {
+              "value": "[37, 38, 39, 40, 41, 42, 43, 44]",
+              "count": 31
+            },
+            {
+              "value": "[38, 39, 40, 41, 42, 43, 44, 45]",
+              "count": 29
+            },
+            {
+              "value": "[10, 11, 12, 13, 14, 15, 16, 17]",
+              "count": 25
+            },
+            {
+              "value": "[15]",
+              "count": 25
+            },
+            {
+              "value": "[57, 73, 74, 75]",
+              "count": 23
+            },
+            {
+              "value": "[161, 196, 196, 198, 198, 200, 200, 204, 207]",
+              "count": 21
+            }
+          ]
+        }
+      },
+      "swissprot_binding_site_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "categorical",
+          "total_valid_labels": 157433,
+          "unique_classes": 56950,
+          "most_frequent": [
+            {
+              "value": "[19, 20, 21, 22, 23, 24, 25, 26, 26, 81, 82, 83, 84, 85, 136, 137, 138, 139]",
+              "count": 443
+            },
+            {
+              "value": "[169, 170, 171, 172, 173, 174, 175, 176]",
+              "count": 373
+            },
+            {
+              "value": "[38, 39, 40, 41, 42, 43, 44, 45]",
+              "count": 307
+            },
+            {
+              "value": "[11, 59, 87, 93, 104, 114]",
+              "count": 280
+            },
+            {
+              "value": "[37, 38, 39, 40, 41, 42, 43, 44]",
+              "count": 270
+            },
+            {
+              "value": "[57, 73, 74, 75]",
+              "count": 257
+            },
+            {
+              "value": "[170, 171, 172, 173, 174, 175, 176, 177]",
+              "count": 255
+            },
+            {
+              "value": "[10, 11, 12, 13, 14, 15, 16, 17]",
+              "count": 231
+            }
+          ]
+        },
+        "train": {
+          "kind": "categorical",
+          "total_valid_labels": 125849,
+          "unique_classes": 50485,
+          "most_frequent": [
+            {
+              "value": "[38, 39, 40, 41, 42, 43, 44, 45]",
+              "count": 267
+            },
+            {
+              "value": "[57, 73, 74, 75]",
+              "count": 257
+            },
+            {
+              "value": "[10, 11, 12, 13, 14, 15, 16, 17]",
+              "count": 231
+            },
+            {
+              "value": "[86, 124, 125, 126]",
+              "count": 208
+            },
+            {
+              "value": "[15]",
+              "count": 203
+            },
+            {
+              "value": "[161, 196, 196, 198, 198, 200, 200, 204, 207]",
+              "count": 200
+            },
+            {
+              "value": "[37, 38, 39, 40, 41, 42, 43, 44]",
+              "count": 190
+            },
+            {
+              "value": "[12, 13, 14, 15, 16, 17, 18, 19]",
+              "count": 178
+            }
+          ]
+        },
+        "val": {
+          "kind": "categorical",
+          "total_valid_labels": 15784,
+          "unique_classes": 3746,
+          "most_frequent": [
+            {
+              "value": "[19, 20, 21, 22, 23, 24, 25, 26, 26, 81, 82, 83, 84, 85, 136, 137, 138, 139]",
+              "count": 443
+            },
+            {
+              "value": "[123, 173, 177, 201, 203, 204, 295, 327, 379]",
+              "count": 217
+            },
+            {
+              "value": "[46, 53, 54, 55, 99, 102, 107, 199, 213, 264, 321, 322, 323]",
+              "count": 189
+            },
+            {
+              "value": "[30, 31, 32, 33, 51, 87, 88, 89, 90, 91, 415, 479, 480, 481, 495]",
+              "count": 161
+            },
+            {
+              "value": "[12, 13, 14, 15, 16, 17, 18, 13, 14, 15, 16, 13, 38, 39, 40, 41, 40, 41, 42, 40, 128, 142, 223, 238, 298, 299, 300, 301, 302, 303, 304, 302, 304, 330, 331, 332, 412, 413, 414]",
+              "count": 135
+            },
+            {
+              "value": "[48, 54, 125, 126, 127, 238, 239, 278, 293, 294, 295, 296, 297, 319]",
+              "count": 125
+            },
+            {
+              "value": "[172, 173, 174, 175, 176, 177, 178, 179]",
+              "count": 121
+            },
+            {
+              "value": "[487, 493]",
+              "count": 112
+            }
+          ]
+        },
+        "test": {
+          "kind": "categorical",
+          "total_valid_labels": 15800,
+          "unique_classes": 3147,
+          "most_frequent": [
+            {
+              "value": "[169, 170, 171, 172, 173, 174, 175, 176]",
+              "count": 351
+            },
+            {
+              "value": "[11, 59, 87, 93, 104, 114]",
+              "count": 280
+            },
+            {
+              "value": "[170, 171, 172, 173, 174, 175, 176, 177]",
+              "count": 205
+            },
+            {
+              "value": "[9, 57, 85, 91, 102, 112]",
+              "count": 148
+            },
+            {
+              "value": "[111]",
+              "count": 147
+            },
+            {
+              "value": "[14, 15, 16, 17, 18, 19, 131, 132, 133, 134]",
+              "count": 141
+            },
+            {
+              "value": "[110, 111, 112, 113]",
+              "count": 118
+            },
+            {
+              "value": "[112, 113, 114, 115, 116, 117, 118]",
+              "count": 117
+            }
+          ]
+        }
+      }
+    },
+    "rows": 157433,
+    "distinct_proteins": 157433,
+    "sequence_length_summary": {
+      "min": 8,
+      "max": 35213,
+      "mean": 438.24,
+      "median": 369,
+      "p95": 914,
+      "count_greater_than_1024": 5537
+    },
+    "categorical_high_variance_columns": [
+      "uniprot_id"
+    ]
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -128,5 +458,14 @@
       "label_colored": "results/figures/umaps/binding_site_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/binding_site_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Ligand-contacting residue positions from Swiss-Prot BINDING annotations. One row is one protein; the same caveat about similarity-propagated annotation applies.",
+  "label": {
+    "column": "binding_positions",
+    "label_kind": "residue_binary_vector",
+    "description": "Per-residue binary vector, 1 at an annotated binding position. Roughly 2.5% of residues are positive.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }

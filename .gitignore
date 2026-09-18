@@ -62,6 +62,11 @@ results/dataprep_datacards/
 docs/
 skills/
 
+# Diagram sources stay local: the SVGs carry Inkscape-specific markup and refer
+# to rasters by relative path, so only the rendered PNG is published.
+assets/**/*.svg
+assets/images/
+
 # Local embedding manifests: they hold machine-specific absolute paths.
 # Copy the .example.json files and point them at your own embedding store.
 embeddings_models_output.json
