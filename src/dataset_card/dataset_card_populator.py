@@ -732,7 +732,6 @@ class DatasetCardPopulator:
         print("Pipeline Complete! All dataset_card.json files have been populated.")
 
 if __name__ == "__main__":
-<<<<<<< HEAD
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_dir", default="data/processed/properties")
@@ -748,7 +747,3 @@ if __name__ == "__main__":
         embeddings_json=args.embeddings_json,
         seq_identity=args.seq_identity,
     ).run()
-=======
-    BASE_DIR = "data/processed/properties"
-    DatasetCardPopulator(BASE_DIR).run()
->>>>>>> b6794baf7142e64fd0a3864acd461b297200046d

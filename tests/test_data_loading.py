@@ -429,6 +429,9 @@ class DataLoadingTests(unittest.TestCase):
         )
         self.assertEqual(len(bundle.dataset), 1)
         self.assertEqual(bundle.dataset.skipped_rows, 1)
+        # Skipping is silent otherwise, so the reason must name the dropped row.
+        self.assertEqual(len(bundle.dataset.skipped_reasons), 1)
+        self.assertIn("drop_me", bundle.dataset.skipped_reasons[0])
 
     def test_missing_policy_skip_filters_residue_rows_with_length_mismatch(self) -> None:
         dataset_path = self.root / "active_sites_skip_random_standardized.csv"
