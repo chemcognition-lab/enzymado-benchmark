@@ -1,0 +1,58 @@
+{
+    "ankh3_large": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/ankh3_large.safetensors",
+        "dim": 1536
+    },
+    "ankh3_xl": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/ankh3_xl.safetensors",
+        "dim": 2560
+    },
+    "ankh_base": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/ankh_base.safetensors",
+        "dim": 768
+    },
+    "ankh_large": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/ankh_large.safetensors",
+        "dim": 1536
+    },
+    "esm2_3B": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/esm2_3B.safetensors",
+        "dim": 2560
+    },
+    "esm2_650M": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/esm2_650M.safetensors",
+        "dim": 1280
+    },
+    "esm3_open": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/esm3_open.safetensors",
+        "dim": 1536
+    },
+    "esmc_300m": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/esmc_300m.safetensors",
+        "dim": 960
+    },
+    "esmc_600m": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/esmc_600m.safetensors",
+        "dim": 1152
+    },
+    "profluent_e1_300m": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/profluent_e1_300m.safetensors",
+        "dim": 1024
+    },
+    "profluent_e1_600m": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/profluent_e1_600m.safetensors",
+        "dim": 1280
+    },
+    "prost5": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/prost5.safetensors",
+        "dim": 1024
+    },
+    "prot5_xl_half_uniref50": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/prot5_xl_half_uniref50.safetensors",
+        "dim": 1024
+    },
+    "prot5_xl_uniref50": {
+        "path": "data/embeddings_mean_pooled/protein_sequences_unique/prot5_xl_uniref50.safetensors",
+        "dim": 1024
+    }
+}

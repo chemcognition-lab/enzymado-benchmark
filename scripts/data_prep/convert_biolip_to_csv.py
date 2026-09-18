@@ -5,15 +5,42 @@ import argparse
 import csv
 import gzip
 import os
+from typing import TextIO
+
+DEFAULT_HEADER = (
+    "pdb_id",
+    "chain_id",
+    "resolution",
+    "binding_site_id",
+    "ligand_id",
+    "ligand_chain_id",
+    "ligand_serial_number",
+    "binding_site_residues",
+    "nearby_residues",
+    "ligand_contact_residues",
+    "catalytic_site_residues",
+    "ec_number",
+    "go_terms",
+    "binding_affinity_1",
+    "binding_affinity_2",
+    "binding_affinity_3",
+    "binding_affinity_4",
+    "uniprot_id",
+    "pubmed_id",
+    "binding_site_range",
+    "protein_sequence",
+)
 
 
-def open_maybe_gzip(path):
+def open_maybe_gzip(path: str) -> TextIO:
+    """Open a plain-text or gzip-compressed input file."""
     if path.endswith(".gz"):
         return gzip.open(path, "rt", encoding="utf-8", newline="")
     return open(path, "rt", encoding="utf-8", newline="")
 
 
-def detect_delimiter(line):
+def detect_delimiter(line: str) -> str | None:
+    """Detect the supported delimiter without changing fallback behavior."""
     if "\t" in line:
         return "\t"
     if "," in line:
@@ -21,13 +48,15 @@ def detect_delimiter(line):
     return None
 
 
-def split_line(line, delimiter):
+def split_line(line: str, delimiter: str | None) -> list[str]:
+    """Split one input row using the detected delimiter."""
     if delimiter:
         return next(csv.reader([line], delimiter=delimiter))
     return line.split()
 
 
-def main():
+def create_parser() -> argparse.ArgumentParser:
+    """Create the BioLiP conversion command-line parser."""
     parser = argparse.ArgumentParser(
         description="Convert BioLiP tabular file to CSV for dataframe use."
     )
@@ -43,37 +72,17 @@ def main():
         default="data/processed/biolip/BioLiP_nr.csv",
         help="Output CSV path.",
     )
-    args = parser.parse_args()
+    return parser
 
-    os.makedirs(os.path.dirname(args.out_path) or ".", exist_ok=True)
 
-    default_header = [
-        "pdb_id",
-        "chain_id",
-        "resolution",
-        "binding_site_id",
-        "ligand_id",
-        "ligand_chain_id",
-        "ligand_serial_number",
-        "binding_site_residues",
-        "nearby_residues",
-        "ligand_contact_residues",
-        "catalytic_site_residues",
-        "ec_number",
-        "go_terms",
-        "binding_affinity_1",
-        "binding_affinity_2",
-        "binding_affinity_3",
-        "binding_affinity_4",
-        "uniprot_id",
-        "pubmed_id",
-        "binding_site_range",
-        "protein_sequence",
-    ]
+def convert_biolip(in_path: str, out_path: str) -> None:
+    """Convert BioLiP rows to CSV while preserving their values and order."""
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open_maybe_gzip(args.in_path) as fh, open(
-        args.out_path, "w", encoding="utf-8", newline=""
-    ) as out_fh:
+    with (
+        open_maybe_gzip(in_path) as fh,
+        open(out_path, "w", encoding="utf-8", newline="") as out_fh,
+    ):
         writer = csv.writer(out_fh)
 
         header = None
@@ -99,11 +108,11 @@ def main():
             raise RuntimeError("No data rows found in BioLiP file.")
 
         if header is None:
-            if len(first_data_row) != len(default_header):
+            if len(first_data_row) != len(DEFAULT_HEADER):
                 raise RuntimeError(
                     "BioLiP column count does not match expected schema."
                 )
-            header = default_header
+            header = DEFAULT_HEADER
 
         writer.writerow(header)
         writer.writerow(first_data_row)
@@ -114,6 +123,12 @@ def main():
                 continue
             row = split_line(line, delimiter)
             writer.writerow(row)
+
+
+def main() -> None:
+    """Run the BioLiP conversion command-line interface."""
+    args = create_parser().parse_args()
+    convert_biolip(args.in_path, args.out_path)
 
 
 if __name__ == "__main__":

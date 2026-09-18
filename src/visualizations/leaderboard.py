@@ -24,8 +24,10 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from src.evaluation.metrics_registry import higher_is_better_for, primary_metric_for  # noqa: E402
+from enzymado.evaluation.metrics_registry import higher_is_better_for, primary_metric_for  # noqa: E402
 
 MODEL_FAMILIES = ("linear", "mlp", "xgboost")
 TEMPLATE_PATH = Path(__file__).with_name("leaderboard_template.html")

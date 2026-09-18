@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail if TASK_REGISTRY and benchmark_card.json disagree on which tasks exist.
 
-TASK_REGISTRY (src/data_loading/data_registry.py) is the single runtime source
+TASK_REGISTRY (src/enzymado/data_loading/data_registry.py) is the single runtime source
 of truth for task configuration. benchmark_card.json is documentation only —
 it must list the same task names, or a contributor adding/renaming a task in
 one place and forgetting the other goes unnoticed until something downstream
@@ -11,16 +11,17 @@ fields (paths, schema, etc. are the card's own business, not TASK_REGISTRY's).
 Usage:
     python scripts/ci/check_registry_card_parity.py
 """
+
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
+import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from data_loading.data_registry import TASK_REGISTRY  # noqa: E402
+from enzymado.data_loading.data_registry import TASK_REGISTRY  # noqa: E402
 
 
 def main() -> int:
@@ -54,7 +55,10 @@ def main() -> int:
             print(f"FAIL: {p}")
         return 1
 
-    print(f"OK: {len(registry_properties)} properties + {len(registry_real_case)} real_case tasks match.")
+    print(
+        f"OK: {len(registry_properties)} properties + {len(registry_real_case)} "
+        f"real_case tasks match."
+    )
     return 0
 
 

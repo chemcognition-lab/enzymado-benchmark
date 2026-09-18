@@ -3,21 +3,26 @@ recording, per (job, embedding, task) block: how long it took and what it
 depended on (embedding dim, dataset size, split, route, model families).
 
 Cross-references `sacct` for the ground-truth job outcome (COMPLETED /
-TIMEOUT / OUT_OF_MEMORY / ...). Output feeds results/analysis/README_training_runtime.md.
+TIMEOUT / OUT_OF_MEMORY / ...). Output feeds
+results/analysis/README_training_runtime.md.
 
 Usage: run from the repo root, after `source .venv/bin/activate`:
     python scripts/results/parse_training_runtimes.py
 """
+
 import csv
+from datetime import datetime
 import json
+from pathlib import Path
 import re
 import subprocess
-from datetime import datetime
-from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
-EMB_DIMS = {k: v["dim"] for k, v in json.load(open(REPO / "embeddings_models_output.json")).items()}
+EMB_DIMS = {
+    k: v["dim"]
+    for k, v in json.load(open(REPO / "embeddings_models_output.json")).items()
+}
 
 TS_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\]")
 HEADER_EMB_RE = re.compile(r"^Embedding model: (\S+)")
@@ -52,14 +57,23 @@ def parse_log(path: Path, launcher: str):
     lines = path.read_text(errors="replace").splitlines()
     day_anchor = datetime.fromtimestamp(path.stat().st_mtime).date()
 
-    header = {"embedding": None, "split_variant": None, "model_prefix": None, "embedding_modes": None}
+    header = {
+        "embedding": None,
+        "split_variant": None,
+        "model_prefix": None,
+        "embedding_modes": None,
+    }
     emb_dim = None
     cur_task = None
     last_ts = None
     blocks = []
 
     def close_task(end_ts):
-        if cur_task is not None and cur_task.get("start_ts") is not None and end_ts is not None:
+        if (
+            cur_task is not None
+            and cur_task.get("start_ts") is not None
+            and end_ts is not None
+        ):
             dur = (end_ts - cur_task["start_ts"]).total_seconds()
             if dur < 0:
                 dur += 86400  # midnight wrap
@@ -156,10 +170,20 @@ def parse_log(path: Path, launcher: str):
 
 
 def load_sacct(user: str, since: str):
-    """Map (job_id, array_idx) -> {state, req_mem, job_elapsed_s} via a live sacct call."""
+    """Map (job_id, array_idx) to sacct state, memory, and elapsed time."""
     proc = subprocess.run(
-        ["sacct", "-u", user, f"--starttime={since}", "--format=JobID,State,ExitCode,Elapsed,ReqMem", "-X", "-P"],
-        capture_output=True, text=True, check=True,
+        [
+            "sacct",
+            "-u",
+            user,
+            f"--starttime={since}",
+            "--format=JobID,State,ExitCode,Elapsed,ReqMem",
+            "-X",
+            "-P",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
     )
     lines = proc.stdout.splitlines()
     header = lines[0].split("|")
@@ -184,7 +208,10 @@ def main():
 
     sacct = load_sacct(getpass.getuser(), since="2026-01-01")
     rows = []
-    for pattern, launcher in [("enzymado_train_*.out", "no_attention"), ("enzymado_attn_*.out", "attention")]:
+    for pattern, launcher in [
+        ("enzymado_train_*.out", "no_attention"),
+        ("enzymado_attn_*.out", "attention"),
+    ]:
         for path in sorted(REPO.glob(pattern)):
             m = re.match(r"enzymado_(?:train|attn)_(\d+)_(\d+)\.out", path.name)
             if not m:
@@ -192,37 +219,43 @@ def main():
             job_id, array_idx = m.group(1), m.group(2)
             try:
                 blocks = parse_log(path, launcher)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - continue parsing other logs.
                 print(f"parse error {path}: {e}")
                 continue
             sacct_rec = sacct.get((job_id, array_idx), {})
             for b in blocks:
                 emb = b["embedding"] or "?"
                 dim = b["embedding_dim"] or EMB_DIMS.get(emb)
-                families = sorted({family_of(name) for name in b["models_trained"]}) or (
-                    [b["model_prefix"].rstrip("_")] if b["model_prefix"] else []
+                families = sorted(
+                    {family_of(name) for name in b["models_trained"]}
+                ) or ([b["model_prefix"].rstrip("_")] if b["model_prefix"] else [])
+                rows.append(
+                    {
+                        "job_id": job_id,
+                        "array_idx": array_idx,
+                        "launcher": launcher,
+                        "slurm_state": sacct_rec.get("state", ""),
+                        "slurm_req_mem": sacct_rec.get("req_mem", ""),
+                        "slurm_job_total_elapsed_s": sacct_rec.get("job_elapsed_s", ""),
+                        "embedding": emb,
+                        "embedding_dim": dim,
+                        "task_name": b["task_name"],
+                        "task_type": b["task_type"],
+                        "split": b["split"],
+                        "model_prefix_filter": b["model_prefix"] or "",
+                        "families_trained_this_block": ";".join(families),
+                        "models_skipped_already_done": ";".join(
+                            b["models_skipped"] or []
+                        ),
+                        "n_train_rows": b.get("n_train_raw"),
+                        "n_train_residues_concat": b.get("n_train"),
+                        "route": b.get("route"),
+                        "duration_seconds": round(b["duration_s"], 1)
+                        if b["duration_s"] is not None
+                        else None,
+                        "error": b.get("error") or "",
+                    }
                 )
-                rows.append({
-                    "job_id": job_id,
-                    "array_idx": array_idx,
-                    "launcher": launcher,
-                    "slurm_state": sacct_rec.get("state", ""),
-                    "slurm_req_mem": sacct_rec.get("req_mem", ""),
-                    "slurm_job_total_elapsed_s": sacct_rec.get("job_elapsed_s", ""),
-                    "embedding": emb,
-                    "embedding_dim": dim,
-                    "task_name": b["task_name"],
-                    "task_type": b["task_type"],
-                    "split": b["split"],
-                    "model_prefix_filter": b["model_prefix"] or "",
-                    "families_trained_this_block": ";".join(families),
-                    "models_skipped_already_done": ";".join(b["models_skipped"] or []),
-                    "n_train_rows": b.get("n_train_raw"),
-                    "n_train_residues_concat": b.get("n_train"),
-                    "route": b.get("route"),
-                    "duration_seconds": round(b["duration_s"], 1) if b["duration_s"] is not None else None,
-                    "error": b.get("error") or "",
-                })
 
     out_path = REPO / "results" / "analysis" / "training_runtime_breakdown.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)

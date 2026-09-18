@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
+"""Summarize overlap and shape consistency across mean-pooled embedding files."""
+
 from __future__ import annotations
-"""Summarize overlap and shape consistency across generated mean-pooled embedding files."""
 
 import argparse
+import csv
 import json
-import sys
 from pathlib import Path
-
+import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EMBEDDINGS_JSON = REPO_ROOT / "embeddings_models_output_mean_pooled.json"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "embedding_intersection"
 
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
-def inspect_embedding_file(path: Path, expected_dim: int) -> tuple[set[str], int, int, list[tuple[str, tuple[int, ...]]]]:
+from enzymado.data_loading.stores import normalize_sequence  # noqa: E402
+
+
+def inspect_embedding_file(
+    path: Path, expected_dim: int
+) -> tuple[set[str], int, int, list[tuple[str, tuple[int, ...]]]]:
     from safetensors import safe_open
 
     bad_shapes: list[tuple[str, tuple[int, ...]]] = []
@@ -21,19 +28,40 @@ def inspect_embedding_file(path: Path, expected_dim: int) -> tuple[set[str], int
     with safe_open(str(path), framework="numpy", device="cpu") as handle:
         all_keys = list(handle.keys())
         ids = set(all_keys)
-        # Check shape of the first key — all tensors in a mean-pooled file share the same dim
+        # Check shape of the first key — all tensors in a mean-pooled
+        # file share the same dim. Read the shape from the header rather than
+        # materializing the tensor: the stores are bfloat16, which numpy cannot
+        # represent, so get_tensor() raises "data type 'bfloat16' not understood"
+        # for every model and the whole intersection fails.
         if all_keys:
-            shape = tuple(handle.get_tensor(all_keys[0]).shape)
+            shape = tuple(handle.get_slice(all_keys[0]).get_shape())
             if shape != (expected_dim,):
                 bad_shapes.append((all_keys[0], shape))
 
     return ids, len(ids), len(bad_shapes), bad_shapes
 
 
+def _read_index(path: Path) -> dict[str, str]:
+    """Read a protein_sequences_unique.csv index as ``{sequence_id: sequence}``."""
+    csv.field_size_limit(sys.maxsize)
+    mapping: dict[str, str] = {}
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames or []
+        if "sequence_id" not in fields or "protein_sequence" not in fields:
+            raise SystemExit(f"{path} needs sequence_id and protein_sequence columns.")
+        for row in reader:
+            sid = row.get("sequence_id")
+            if sid:
+                mapping[sid] = normalize_sequence(row.get("protein_sequence", ""))
+    return mapping
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate pooled embedding safetensors files and build the common-ID intersection "
+            "Validate pooled embedding safetensors files and build the common-ID "
+            "intersection "
             "across all embedding models."
         )
     )
@@ -42,7 +70,8 @@ def create_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_EMBEDDINGS_JSON,
         help=(
-            "Embedding metadata JSON with model names, safetensors paths, and dimensions. "
+            "Embedding metadata JSON with model names, safetensors paths, and "
+            "dimensions. "
             f"Default: {DEFAULT_EMBEDDINGS_JSON}"
         ),
     )
@@ -56,13 +85,40 @@ def create_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
-        help=f"Directory for common_ids.txt, excluded_ids.txt, and report.tsv. Default: {DEFAULT_OUTPUT_DIR}",
+        help=(
+            f"Directory for common_ids.txt, excluded_ids.txt, and report.tsv. Default: "
+            f"{DEFAULT_OUTPUT_DIR}"
+        ),
+    )
+    parser.add_argument(
+        "--current-index",
+        type=Path,
+        default=None,
+        help=(
+            "Freshly built protein_sequences_unique.csv listing the sequences the "
+            "current datasets still use. When given, allowlist ids whose sequence no "
+            "dataset uses any more are dropped. Ids are NOT compared directly: a "
+            "rebuilt index may elect a different representative id for a sequence "
+            "that is still in use, and dropping that id would silently remove "
+            "training rows."
+        ),
+    )
+    parser.add_argument(
+        "--reference-index",
+        type=Path,
+        default=REPO_ROOT / "data" / "processed" / "protein_sequences_unique.csv",
+        help=(
+            "Index that training resolves sequences through, used to map each "
+            "allowlist id back to its sequence. Must be the index the embedding "
+            "stores were keyed by."
+        ),
     )
     parser.add_argument(
         "--allow-incomplete",
         action="store_true",
         help=(
-            "Still write intersection outputs for the currently readable files even if some "
+            "Still write intersection outputs for the currently readable files even if "
+            "some "
             "models are missing, partial, or have bad shapes."
         ),
     )
@@ -101,8 +157,10 @@ def main() -> int:
             continue
 
         try:
-            ids, n_ids, bad_shape_count, bad_shapes = inspect_embedding_file(path, expected_dim)
-        except Exception as exc:
+            ids, n_ids, bad_shape_count, bad_shapes = inspect_embedding_file(
+                path, expected_dim
+            )
+        except Exception as exc:  # noqa: BLE001 - report each unreadable file.
             statuses[model] = {
                 "status": "ERROR",
                 "path": str(path),
@@ -136,7 +194,9 @@ def main() -> int:
 
     report_path = args.output_dir / "report.tsv"
     with report_path.open("w", encoding="utf-8") as handle:
-        handle.write("model\tstatus\tn_ids\texpected_count\texpected_dim\tpath\tbad_shape_count\tbad_shape_examples\n")
+        handle.write(
+            "model\tstatus\tn_ids\texpected_count\texpected_dim\tpath\tbad_shape_count\tbad_shape_examples\n"
+        )
         for model in sorted(statuses):
             row = statuses[model]
             handle.write(
@@ -148,13 +208,16 @@ def main() -> int:
         row = statuses[model]
         print(
             f"{model:24} {row['status']:10} "
-            f"n={row['n_ids']}/{args.expected_count} dim={row['expected_dim']} path={row['path']}"
+            f"n={row['n_ids']}/{args.expected_count} dim={row['expected_dim']} "
+            f"path={row['path']}"
         )
         if row["bad_shape_examples"]:
             print(f"  bad_shape_examples={row['bad_shape_examples']}")
 
     blocking_statuses = {"MISSING", "PARTIAL", "BAD_SHAPE", "ERROR"}
-    blockers = [model for model, row in statuses.items() if row["status"] in blocking_statuses]
+    blockers = [
+        model for model, row in statuses.items() if row["status"] in blocking_statuses
+    ]
     if blockers and not args.allow_incomplete:
         print("\nRefusing to write intersection because some models are not complete.")
         print("Blocking models:", ", ".join(sorted(blockers)))
@@ -162,13 +225,29 @@ def main() -> int:
         return 1
 
     common_ids = common_ids or set()
+    if args.current_index is not None:
+        reference = _read_index(args.reference_index)
+        in_use = set(_read_index(args.current_index).values())
+        before = len(common_ids)
+        common_ids = {i for i in common_ids if reference.get(i) in in_use}
+        print(
+            f"\nDropped ids whose sequence no dataset uses any more: "
+            f"{before} -> {len(common_ids)} ({before - len(common_ids)} removed)"
+        )
+        print(f"  reference index: {args.reference_index}")
+        print(f"  current index  : {args.current_index}")
     excluded_ids = union_ids - common_ids
 
     common_path = args.output_dir / "common_ids.txt"
     excluded_path = args.output_dir / "excluded_ids.txt"
 
-    common_path.write_text("\n".join(sorted(common_ids)) + ("\n" if common_ids else ""), encoding="utf-8")
-    excluded_path.write_text("\n".join(sorted(excluded_ids)) + ("\n" if excluded_ids else ""), encoding="utf-8")
+    common_path.write_text(
+        "\n".join(sorted(common_ids)) + ("\n" if common_ids else ""), encoding="utf-8"
+    )
+    excluded_path.write_text(
+        "\n".join(sorted(excluded_ids)) + ("\n" if excluded_ids else ""),
+        encoding="utf-8",
+    )
 
     print()
     print(f"Union size: {len(union_ids)}")

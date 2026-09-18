@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Build a deduplicated FASTA file from the canonical protein sequence index."""
 
 import argparse
@@ -8,6 +7,7 @@ from pathlib import Path
 
 
 def build_fasta(input_csv: Path, output_fasta: Path) -> int:
+    """Write the first non-empty row for each sequence identifier to FASTA."""
     output_fasta.parent.mkdir(parents=True, exist_ok=True)
 
     seen_ids: set[str] = set()
@@ -33,6 +33,7 @@ def build_fasta(input_csv: Path, output_fasta: Path) -> int:
 
 
 def create_parser() -> argparse.ArgumentParser:
+    """Build the canonical sequence-to-FASTA command-line parser."""
     parser = argparse.ArgumentParser(
         description=(
             "Create a FASTA file from data/processed/protein_sequences_unique.csv "
@@ -57,8 +58,8 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    parser = create_parser()
-    args = parser.parse_args()
+    """Convert the selected canonical sequence index into FASTA."""
+    args = create_parser().parse_args()
 
     written = build_fasta(args.input, args.output)
     print(f"Wrote {written} sequences to {args.output}")

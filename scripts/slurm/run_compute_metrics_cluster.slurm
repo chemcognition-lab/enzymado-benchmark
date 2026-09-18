@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
     REPO="${SLURM_SUBMIT_DIR}"
 else
-    REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    REPO="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 fi
 
 if ! type module >/dev/null 2>&1; then
@@ -29,8 +29,22 @@ fi
 source "${REPO}/.venv/bin/activate"
 
 : "${FILTER_TASKS:=}"
+: "${SKIP_EXISTING:=1}"
+# Roots default to the script's own defaults (results/predictions), which is the
+# pre-protocol-v3 tree. Always set these when scoring a different run root.
+: "${PREDICTIONS_ROOT:=}"
+: "${STATISTICS_ROOT:=}"
 
-ARGS=(--skip-existing)
+ARGS=()
+if [[ -n "${PREDICTIONS_ROOT}" ]]; then
+    ARGS+=(--predictions-root "${PREDICTIONS_ROOT}")
+fi
+if [[ -n "${STATISTICS_ROOT}" ]]; then
+    ARGS+=(--statistics-root "${STATISTICS_ROOT}")
+fi
+if [[ "${SKIP_EXISTING}" == "1" || "${SKIP_EXISTING}" == "true" || "${SKIP_EXISTING}" == "TRUE" ]]; then
+    ARGS+=(--skip-existing)
+fi
 if [[ -n "${FILTER_TASKS}" ]]; then
     IFS=',' read -r -a _tasks <<< "${FILTER_TASKS}"
     for _task in "${_tasks[@]}"; do
@@ -41,4 +55,7 @@ if [[ -n "${FILTER_TASKS}" ]]; then
 fi
 
 echo "Filter tasks: ${FILTER_TASKS:-<none>}"
+echo "Skip existing: ${SKIP_EXISTING}"
+echo "Predictions root: ${PREDICTIONS_ROOT:-<default>}"
+echo "Statistics root: ${STATISTICS_ROOT:-<default>}"
 python -u "${REPO}/scripts/results/compute_metrics.py" "${ARGS[@]}"

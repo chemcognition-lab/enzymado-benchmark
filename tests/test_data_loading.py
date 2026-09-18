@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import csv
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
+import torch
 
-from src.data_loading.collators import ProteinResidueCollator, ProteinResidueConcatCollator
-from src.data_loading.datasets import build_dataset_from_config
-from src.data_loading.labels import FlatECLabelBuilder
-from src.data_loading.data_registry import TaskConfig
-from src.data_loading.features import ResidueEmbeddingStore
+from enzymado.data_loading.collators import (
+    ProteinResidueCollator,
+    ProteinResidueConcatCollator,
+)
+from enzymado.data_loading.data_registry import TaskConfig
+from enzymado.data_loading.datasets import build_dataset_from_config
+from enzymado.data_loading.features import ResidueEmbeddingStore
+from enzymado.data_loading.labels import FlatECLabelBuilder
+from enzymado.data_loading.stores import build_xy_pooled
+from enzymado.data_loading.task_csv import TaskCSVLoader
+from enzymado.models.attention_blocks import batch_to_attention_tensors
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -29,6 +36,37 @@ class DataLoadingTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_prediction_ids_distinguish_rows_with_the_same_protein(self) -> None:
+        dataset_path = self.root / "binding.csv"
+        write_csv(
+            dataset_path,
+            ["uniprot_id", "protein_sequence", "smiles", "binding", "split"],
+            [
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCO",
+                    "binding": "1",
+                    "split": "test",
+                },
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCN",
+                    "binding": "0",
+                    "split": "test",
+                },
+            ],
+        )
+        rows = TaskCSVLoader(
+            dataset_path=dataset_path,
+            index_columns=("uniprot_id",),
+            split_name="test",
+        ).load_rows()
+
+        self.assertEqual(rows[0]["sample_id"], rows[1]["sample_id"])
+        self.assertNotEqual(rows[0]["prediction_id"], rows[1]["prediction_id"])
 
     def test_protein_global_dataset_uses_split_column_and_padding_mask(self) -> None:
         dataset_path = self.root / "solubility.csv"
@@ -75,10 +113,14 @@ class DataLoadingTests(unittest.TestCase):
         )
         batch = bundle.collator([sample])
         self.assertEqual(batch.protein_emb.shape, (1, 4, 2))
-        np.testing.assert_array_equal(batch.protein_mask, np.array([[True, True, True, True]]))
+        np.testing.assert_array_equal(
+            batch.protein_mask, np.array([[True, True, True, True]])
+        )
         np.testing.assert_array_equal(batch.target, np.array([1.0], dtype=np.float32))
 
-    def test_hierarchical_ec_uses_train_vocabulary_and_masks_incomplete_levels(self) -> None:
+    def test_hierarchical_ec_uses_train_vocabulary_and_masks_incomplete_levels(
+        self,
+    ) -> None:
         dataset_path = self.root / "ec_random_standardized.csv"
         write_csv(
             dataset_path,
@@ -123,7 +165,9 @@ class DataLoadingTests(unittest.TestCase):
                 "level_4": ("1.1.1.1",),
             },
         )
-        with self.assertRaisesRegex(ValueError, "requires a vocabulary fit on train rows"):
+        with self.assertRaisesRegex(
+            ValueError, "requires a vocabulary fit on train rows"
+        ):
             build_dataset_from_config(config, store, split_name="val")
 
         val_bundle = build_dataset_from_config(
@@ -133,14 +177,30 @@ class DataLoadingTests(unittest.TestCase):
             ec_vocabulary=train_bundle.label_builder.vocabulary_by_level,
         )
         sample = val_bundle.dataset[0]
-        np.testing.assert_array_equal(sample["target"]["level_1"], np.array([0.0, 0.0], dtype=np.float32))
-        np.testing.assert_array_equal(sample["target"]["level_2"], np.array([0.0, 0.0], dtype=np.float32))
-        np.testing.assert_array_equal(sample["target"]["level_3"], np.array([0.0], dtype=np.float32))
-        np.testing.assert_array_equal(sample["target"]["level_4"], np.array([0.0], dtype=np.float32))
-        np.testing.assert_array_equal(sample["target_mask"]["level_1"], np.array([True, True]))
-        np.testing.assert_array_equal(sample["target_mask"]["level_2"], np.array([True, True]))
-        np.testing.assert_array_equal(sample["target_mask"]["level_3"], np.array([True]))
-        np.testing.assert_array_equal(sample["target_mask"]["level_4"], np.array([True]))
+        np.testing.assert_array_equal(
+            sample["target"]["level_1"], np.array([0.0, 0.0], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(
+            sample["target"]["level_2"], np.array([0.0, 0.0], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(
+            sample["target"]["level_3"], np.array([0.0], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(
+            sample["target"]["level_4"], np.array([0.0], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(
+            sample["target_mask"]["level_1"], np.array([True, True])
+        )
+        np.testing.assert_array_equal(
+            sample["target_mask"]["level_2"], np.array([True, True])
+        )
+        np.testing.assert_array_equal(
+            sample["target_mask"]["level_3"], np.array([True])
+        )
+        np.testing.assert_array_equal(
+            sample["target_mask"]["level_4"], np.array([True])
+        )
 
         train_sample = train_bundle.dataset[0]
         np.testing.assert_array_equal(
@@ -159,10 +219,18 @@ class DataLoadingTests(unittest.TestCase):
             train_sample["target"]["level_4"],
             np.array([1.0], dtype=np.float32),
         )
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_1"], np.array([True, True]))
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_2"], np.array([True, True]))
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_3"], np.array([True]))
-        np.testing.assert_array_equal(train_sample["target_mask"]["level_4"], np.array([True]))
+        np.testing.assert_array_equal(
+            train_sample["target_mask"]["level_1"], np.array([True, True])
+        )
+        np.testing.assert_array_equal(
+            train_sample["target_mask"]["level_2"], np.array([True, True])
+        )
+        np.testing.assert_array_equal(
+            train_sample["target_mask"]["level_3"], np.array([True])
+        )
+        np.testing.assert_array_equal(
+            train_sample["target_mask"]["level_4"], np.array([True])
+        )
 
         batch = train_bundle.collator([train_sample])
         np.testing.assert_array_equal(
@@ -180,8 +248,20 @@ class DataLoadingTests(unittest.TestCase):
             dataset_path,
             ["uniprot_id", "protein_sequence", "smiles", "binding", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "smiles": "CCO", "binding": "1", "split": "train"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "smiles": "N", "binding": "0", "split": "train"},
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCO",
+                    "binding": "1",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "P2",
+                    "protein_sequence": "AA",
+                    "smiles": "N",
+                    "binding": "0",
+                    "split": "train",
+                },
             ],
         )
         config = TaskConfig(
@@ -204,7 +284,9 @@ class DataLoadingTests(unittest.TestCase):
             config,
             store,
             split_name="train",
-            ligand_featurizer=lambda smiles: np.array([len(smiles), smiles.count("C")], dtype=np.float32),
+            ligand_featurizer=lambda smiles: np.array(
+                [len(smiles), smiles.count("C")], dtype=np.float32
+            ),
         )
         samples = [bundle.dataset[0], bundle.dataset[1]]
         batch = bundle.collator(samples)
@@ -217,6 +299,125 @@ class DataLoadingTests(unittest.TestCase):
         np.testing.assert_array_equal(
             batch.protein_mask,
             np.array([[True, True, True, True], [True, True, False, False]]),
+        )
+
+    def test_numeric_context_reaches_pooled_and_attention_protein_models(self) -> None:
+        dataset_path = self.root / "erickson.csv"
+        write_csv(
+            dataset_path,
+            ["dataset_id", "protein_sequence", "temperature", "target", "split"],
+            [
+                {
+                    "dataset_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "temperature": "30",
+                    "target": "1.5",
+                    "split": "train",
+                },
+                {
+                    "dataset_id": "P2",
+                    "protein_sequence": "AA",
+                    "temperature": "50",
+                    "target": "2.5",
+                    "split": "train",
+                },
+            ],
+        )
+        config = TaskConfig(
+            name="erickson_test",
+            batch_kind="protein_global",
+            label_kind="scalar_regression",
+            dataset_paths={"random": dataset_path},
+            target_column="target",
+            numeric_feature_columns=("temperature",),
+            index_columns=("dataset_id",),
+        )
+        store = ResidueEmbeddingStore(
+            by_id={
+                "P1": np.ones((4, 2), dtype=np.float32),
+                "P2": np.full((2, 2), 2.0, dtype=np.float32),
+            }
+        )
+
+        bundle = build_dataset_from_config(config, store, split_name="train")
+        batch = bundle.collator([bundle.dataset[0], bundle.dataset[1]])
+        np.testing.assert_array_equal(
+            batch.context_feat,
+            np.array([[30.0], [50.0]], dtype=np.float32),
+        )
+        pooled_x, _ = build_xy_pooled(bundle, config.batch_kind)
+        torch.testing.assert_close(
+            pooled_x,
+            torch.tensor([[1.0, 1.0, 30.0], [2.0, 2.0, 50.0]]),
+        )
+        _, _, attention_extra = batch_to_attention_tensors(
+            batch,
+            config.batch_kind,
+            torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            attention_extra,
+            torch.tensor([[30.0], [50.0]]),
+        )
+
+    def test_numeric_context_is_appended_after_ligand_features(self) -> None:
+        dataset_path = self.root / "cleeveland.csv"
+        write_csv(
+            dataset_path,
+            [
+                "dataset_id",
+                "protein_sequence",
+                "smiles",
+                "substrate_concentration",
+                "target",
+                "split",
+            ],
+            [
+                {
+                    "dataset_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "smiles": "CCO",
+                    "substrate_concentration": "300",
+                    "target": "1.5",
+                    "split": "train",
+                }
+            ],
+        )
+        config = TaskConfig(
+            name="cleeveland_test",
+            batch_kind="protein_ligand_global",
+            label_kind="scalar_regression",
+            dataset_paths={"random": dataset_path},
+            target_column="target",
+            ligand_column="smiles",
+            numeric_feature_columns=("substrate_concentration",),
+            index_columns=("dataset_id",),
+        )
+        store = ResidueEmbeddingStore(by_id={"P1": np.ones((4, 2), dtype=np.float32)})
+        bundle = build_dataset_from_config(
+            config,
+            store,
+            split_name="train",
+            ligand_featurizer=lambda smiles: np.array(
+                [len(smiles), smiles.count("C")],
+                dtype=np.float32,
+            ),
+        )
+        batch = bundle.collator([bundle.dataset[0]])
+
+        pooled_x, _ = build_xy_pooled(bundle, config.batch_kind)
+        torch.testing.assert_close(
+            pooled_x,
+            torch.tensor([[1.0, 1.0, 3.0, 2.0, 300.0]]),
+        )
+        _, _, attention_extra = batch_to_attention_tensors(
+            batch,
+            config.batch_kind,
+            torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            attention_extra,
+            torch.tensor([[3.0, 2.0, 300.0]]),
         )
 
     def test_flat_ec_label_builder_masks_unknown_descendants(self) -> None:
@@ -243,7 +444,9 @@ class DataLoadingTests(unittest.TestCase):
             np.array([1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
         )
 
-    def test_flat_ec_label_builder_allows_complete_label_to_override_unknown_branch(self) -> None:
+    def test_flat_ec_label_builder_allows_complete_label_to_override_unknown_branch(
+        self,
+    ) -> None:
         builder = FlatECLabelBuilder().fit(
             [
                 {"ec_number": "1.2.3.4"},
@@ -287,8 +490,12 @@ class DataLoadingTests(unittest.TestCase):
         )
         store = ResidueEmbeddingStore(
             by_sequence={
-                "ABCD": np.array([[2.0, 1.0], [3.0, 1.0], [4.0, 1.0], [5.0, 1.0]], dtype=np.float32),
-                "ABCE": np.array([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+                "ABCD": np.array(
+                    [[2.0, 1.0], [3.0, 1.0], [4.0, 1.0], [5.0, 1.0]], dtype=np.float32
+                ),
+                "ABCE": np.array(
+                    [[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]], dtype=np.float32
+                ),
             }
         )
 
@@ -296,7 +503,9 @@ class DataLoadingTests(unittest.TestCase):
         sample = bundle.dataset[0]
         np.testing.assert_array_equal(
             sample["protein_delta_emb"],
-            np.array([[1.0, 0.0], [2.0, 0.0], [3.0, 0.0], [4.0, 0.0]], dtype=np.float32),
+            np.array(
+                [[1.0, 0.0], [2.0, 0.0], [3.0, 0.0], [4.0, 0.0]], dtype=np.float32
+            ),
         )
         self.assertAlmostEqual(float(sample["target"]), -1.5)
 
@@ -306,8 +515,18 @@ class DataLoadingTests(unittest.TestCase):
             dataset_path,
             ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]", "split": "train"},
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "active_site": "[1, 3]",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "P2",
+                    "protein_sequence": "AA",
+                    "active_site": "[2]",
+                    "split": "train",
+                },
             ],
         )
         config = TaskConfig(
@@ -344,7 +563,9 @@ class DataLoadingTests(unittest.TestCase):
             [
                 {
                     "sample_id": "P1",
-                    "protein_emb": np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+                    "protein_emb": np.asarray(
+                        [[1.0, 0.0], [0.0, 1.0]], dtype=np.float32
+                    ),
                     "target_per_residue": np.asarray([1.0, 0.0], dtype=np.float32),
                 },
                 {
@@ -419,7 +640,9 @@ class DataLoadingTests(unittest.TestCase):
             target_column="solubility",
             index_columns=("dataset_id",),
         )
-        store = ResidueEmbeddingStore(by_sequence={"AAAA": np.ones((4, 2), dtype=np.float32)})
+        store = ResidueEmbeddingStore(
+            by_sequence={"AAAA": np.ones((4, 2), dtype=np.float32)}
+        )
 
         bundle = build_dataset_from_config(
             config,
@@ -433,14 +656,26 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(len(bundle.dataset.skipped_reasons), 1)
         self.assertIn("drop_me", bundle.dataset.skipped_reasons[0])
 
-    def test_missing_policy_skip_filters_residue_rows_with_length_mismatch(self) -> None:
+    def test_missing_policy_skip_filters_residue_rows_with_length_mismatch(
+        self,
+    ) -> None:
         dataset_path = self.root / "active_sites_skip_random_standardized.csv"
         write_csv(
             dataset_path,
             ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "keep_me", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
-                {"uniprot_id": "drop_me", "protein_sequence": "AAAAA", "active_site": "[2]", "split": "train"},
+                {
+                    "uniprot_id": "keep_me",
+                    "protein_sequence": "AAAA",
+                    "active_site": "[1, 3]",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "drop_me",
+                    "protein_sequence": "AAAAA",
+                    "active_site": "[2]",
+                    "split": "train",
+                },
             ],
         )
         config = TaskConfig(
@@ -469,14 +704,26 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(bundle.dataset.skipped_rows, 1)
         self.assertEqual(bundle.dataset[0]["sample_id"], "keep_me")
 
-    def test_protein_residue_dataset_build_uses_length_lookup_before_materializing(self) -> None:
+    def test_protein_residue_dataset_build_uses_length_lookup_before_materializing(
+        self,
+    ) -> None:
         dataset_path = self.root / "active_sites_length_lookup_random_standardized.csv"
         write_csv(
             dataset_path,
             ["uniprot_id", "protein_sequence", "active_site", "split"],
             [
-                {"uniprot_id": "P1", "protein_sequence": "AAAA", "active_site": "[1, 3]", "split": "train"},
-                {"uniprot_id": "P2", "protein_sequence": "AA", "active_site": "[2]", "split": "train"},
+                {
+                    "uniprot_id": "P1",
+                    "protein_sequence": "AAAA",
+                    "active_site": "[1, 3]",
+                    "split": "train",
+                },
+                {
+                    "uniprot_id": "P2",
+                    "protein_sequence": "AA",
+                    "active_site": "[2]",
+                    "split": "train",
+                },
             ],
         )
         config = TaskConfig(
@@ -495,7 +742,12 @@ class DataLoadingTests(unittest.TestCase):
                 self.lookup_row_calls = 0
                 self.lookup_row_length_calls = 0
 
-            def lookup_row(self, row, id_columns=("uniprot_id", "dataset_id"), sequence_column="protein_sequence"):
+            def lookup_row(
+                self,
+                row,
+                id_columns=("uniprot_id", "dataset_id"),
+                sequence_column="protein_sequence",
+            ):
                 self.lookup_row_calls += 1
                 return super().lookup_row(
                     row,
@@ -531,19 +783,24 @@ class DataLoadingTests(unittest.TestCase):
         self.assertEqual(sample["sample_id"], "P1")
         self.assertEqual(store.lookup_row_calls, 1)
 
-    def test_protein_residue_collator_raises_clear_error_on_length_mismatch(self) -> None:
+    def test_protein_residue_collator_raises_clear_error_on_length_mismatch(
+        self,
+    ) -> None:
         collator = ProteinResidueCollator()
 
         with self.assertRaisesRegex(
             ValueError,
-            "Protein embedding and residue target length mismatch for sample 'bad_sample'",
+            "Protein embedding and residue target length mismatch for sample "
+            "'bad_sample'",
         ):
             collator(
                 [
                     {
                         "sample_id": "bad_sample",
                         "protein_emb": np.ones((2, 2), dtype=np.float32),
-                        "target_per_residue": np.array([1.0, 0.0, 1.0], dtype=np.float32),
+                        "target_per_residue": np.array(
+                            [1.0, 0.0, 1.0], dtype=np.float32
+                        ),
                     }
                 ]
             )

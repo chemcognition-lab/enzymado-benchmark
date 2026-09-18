@@ -9,7 +9,8 @@ from scripts.data_prep.clean_real import (
     resolve_align_task_processed_dir,
     sync_align_benchmark_card,
 )
-from src.paths_and_constants import Paths
+
+from enzymado.paths_and_constants import Paths
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -82,7 +83,13 @@ def test_build_align_rows_splits_each_task_into_its_own_output(tmp_path):
         for _, task_name, fieldnames, rows in processed_outputs
     }
     assert by_task["expression"] == (
-        ["dataset_id", "protein_sequence", "source_split", "source_dataset", "expression"],
+        [
+            "dataset_id",
+            "protein_sequence",
+            "source_split",
+            "source_dataset",
+            "expression",
+        ],
         [
             {
                 "dataset_id": "align_alpha_amylase_000001",
@@ -119,24 +126,24 @@ def test_align_defaults_cover_supported_families_and_real_case_output_dir():
 def test_align_task_outputs_use_current_directory_layout(tmp_path):
     processed_dir = tmp_path / "real_case"
 
-    assert resolve_align_task_processed_dir(processed_dir, "alpha-amylase", "specific_activity") == (
-        processed_dir / "align_amylase_activity"
-    )
-    assert resolve_align_task_processed_dir(processed_dir, "alpha-amylase", "expression") == (
-        processed_dir / "align_amylase_expression"
-    )
-    assert resolve_align_task_processed_dir(processed_dir, "alpha-amylase", "thermostability") == (
-        processed_dir / "align_amylase_stability"
-    )
-    assert resolve_align_task_processed_dir(processed_dir, "b-glucosidase", "activity") == (
-        processed_dir / "align_glucosidase_activity"
-    )
-    assert resolve_align_task_processed_dir(processed_dir, "b-glucosidase", "expression") == (
-        processed_dir / "align_glucosidase_expression"
-    )
-    assert resolve_align_task_processed_dir(processed_dir, "b-glucosidase", "melting_point") == (
-        processed_dir / "align_glucosidase_melting"
-    )
+    assert resolve_align_task_processed_dir(
+        processed_dir, "alpha-amylase", "specific_activity"
+    ) == (processed_dir / "align_amylase_activity")
+    assert resolve_align_task_processed_dir(
+        processed_dir, "alpha-amylase", "expression"
+    ) == (processed_dir / "align_amylase_expression")
+    assert resolve_align_task_processed_dir(
+        processed_dir, "alpha-amylase", "thermostability"
+    ) == (processed_dir / "align_amylase_stability")
+    assert resolve_align_task_processed_dir(
+        processed_dir, "b-glucosidase", "activity"
+    ) == (processed_dir / "align_glucosidase_activity")
+    assert resolve_align_task_processed_dir(
+        processed_dir, "b-glucosidase", "expression"
+    ) == (processed_dir / "align_glucosidase_expression")
+    assert resolve_align_task_processed_dir(
+        processed_dir, "b-glucosidase", "melting_point"
+    ) == (processed_dir / "align_glucosidase_melting")
 
 
 def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
@@ -146,7 +153,13 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
 
     write_csv(
         processed_dir / "align_amylase_expression" / "alpha_amylase__expression.csv",
-        ["dataset_id", "protein_sequence", "source_split", "source_dataset", "expression"],
+        [
+            "dataset_id",
+            "protein_sequence",
+            "source_split",
+            "source_dataset",
+            "expression",
+        ],
         [
             {
                 "dataset_id": "align_alpha_amylase_000001",
@@ -158,7 +171,9 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
         ],
     )
     write_csv(
-        processed_dir / "align_glucosidase_melting" / "b_glucosidase__melting_point.csv",
+        processed_dir
+        / "align_glucosidase_melting"
+        / "b_glucosidase__melting_point.csv",
         ["dataset_id", "protein_sequence", "source_split", "melting_point"],
         [
             {
@@ -180,8 +195,17 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
                 "properties": {},
                 "real_case": {
                     "align": {"datasets": [{"path": "old/align.csv"}]},
-                    "align_phosphatase_carboxy": {"datasets": [{"path": "old/phosphatase.csv"}]},
-                    "cleeveland_galox": {"datasets": [{"path": "data/processed/real_case/cleeveland_galox/cleeveland.csv"}]},
+                    "align_phosphatase_carboxy": {
+                        "datasets": [{"path": "old/phosphatase.csv"}]
+                    },
+                    "cleeveland_galox": {
+                        "datasets": [
+                            {
+                                "path": "data/processed/real_case/"
+                                "cleeveland_galox/cleeveland.csv"
+                            }
+                        ]
+                    },
                 },
             },
             indent=4,
@@ -213,7 +237,9 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
     )
     assert amylase_entry["schema"]["target_col"] == "expression"
 
-    glucosidase_entry = updated_card["real_case"]["align_glucosidase_melting"]["datasets"][0]
+    glucosidase_entry = updated_card["real_case"]["align_glucosidase_melting"][
+        "datasets"
+    ][0]
     assert glucosidase_entry["dataset_id"] == "b_glucosidase__melting_point"
     assert glucosidase_entry["path"] == (
         "data/processed/real_case/align_glucosidase_melting/b_glucosidase__melting_point.csv"
