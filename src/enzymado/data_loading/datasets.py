@@ -325,12 +325,12 @@ def _build_label_builder(
 ) -> Any:
     """Create the label builder required by the task configuration."""
     if config.label_kind == "scalar_regression":
-        return RegressionLabelBuilder(target_column=str(config.target_column))
+        return RegressionLabelBuilder(target_column=config.target_column)
     if config.label_kind == "binary":
-        return BinaryLabelBuilder(target_column=str(config.target_column))
+        return BinaryLabelBuilder(target_column=config.target_column)
     if config.label_kind == "multilabel_ec":
         builder = HierarchicalECLabelBuilder(
-            target_column=str(config.target_column),
+            target_column=config.target_column,
             separator=config.ec_separator,
             vocabulary_by_level=ec_vocabulary,
         )
@@ -339,7 +339,7 @@ def _build_label_builder(
         return builder
     if config.label_kind == "residue_binary_vector":
         return ResidueBinaryVectorLabelBuilder(
-            positions_column=str(config.residue_positions_column),
+            positions_column=config.target_column,
             sequence_column=config.sequence_column,
         )
     raise ValueError(f"Unsupported label_kind '{config.label_kind}'.")
@@ -404,7 +404,7 @@ def build_dataset_from_config(
         collator = ProteinGlobalCollator()
     elif config.batch_kind == "protein_ligand_global":
         ligand_builder = RDKitLigandFeatureBuilder(
-            ligand_column=str(config.ligand_column),
+            ligand_column=config.ligand_column,
             featurize_smiles=ligand_featurizer,
         )
         dataset = ProteinLigandGlobalDataset(
@@ -420,7 +420,7 @@ def build_dataset_from_config(
         mutation_builder = MutationDeltaEmbeddingBuilder(
             embedding_store=embedding_store,
             mutation_sequence_column=config.sequence_column,
-            wildtype_sequence_column=str(config.wildtype_sequence_column),
+            wildtype_sequence_column=config.wildtype_sequence_column,
         )
         dataset = MutationDeltaGlobalDataset(
             rows=dataset_rows,

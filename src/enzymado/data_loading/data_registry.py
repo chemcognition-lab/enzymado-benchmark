@@ -48,7 +48,10 @@ class TaskConfig:
     batch_kind: TaskType
     label_kind: LabelType
     dataset_paths: dict[str, Path]
-    target_column: str | None
+    # Source column the label is built from. Every label_kind reads it: a scalar
+    # for regression, a class for binary, an EC string for multilabel_ec, and the
+    # annotated residue positions for residue_binary_vector.
+    target_column: str
     task_scope: str = "properties"
     sequence_column: str = "protein_sequence"
     split_column: str = "split"
@@ -56,7 +59,6 @@ class TaskConfig:
     numeric_feature_columns: tuple[str, ...] = ()
     index_columns: tuple[str, ...] = ("dataset_id", "uniprot_id")
     wildtype_sequence_column: str | None = None
-    residue_positions_column: str | None = None
     ec_separator: str = ";"
 
 
@@ -193,8 +195,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "properties/active_sites"
             / "swissprot_active_site_similarity_mmseqs2_80_10_10_standardized.csv",
         },
-        target_column=None,
-        residue_positions_column="active_site",
+        target_column="active_site",
         index_columns=("uniprot_id",),
     ),
     "binding_site": TaskConfig(
@@ -209,8 +210,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "properties/binding_site"
             / "swissprot_binding_site_similarity_mmseqs2_80_10_10_standardized.csv",
         },
-        target_column=None,
-        residue_positions_column="binding_positions",
+        target_column="binding_positions",
         index_columns=("uniprot_id",),
     ),
     "align_amylase_activity": TaskConfig(

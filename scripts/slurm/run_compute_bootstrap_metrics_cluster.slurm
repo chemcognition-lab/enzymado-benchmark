@@ -32,8 +32,9 @@ source "${REPO}/.venv/bin/activate"
 : "${SKIP_EXISTING:=1}"
 : "${N_REPLICATES:=1000}"
 : "${SEED:=0}"
-# Roots default to the script's own defaults (results/predictions), which is the
-# pre-protocol-v3 tree. Always set these when scoring a different run root.
+# Unset, the script falls back to its own defaults, which now point at the
+# published tree (results/predictions). Set these to score a staging root
+# instead, so a rerun cannot overwrite published numbers.
 : "${PREDICTIONS_ROOT:=}"
 : "${BOOTSTRAP_ROOT:=}"
 : "${STATISTICS_ROOT:=}"

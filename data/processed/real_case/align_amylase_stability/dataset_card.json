@@ -1,3 +1,92 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a12a5dddf044e1220639859735970396c84158c8be9bfdbe5e7f7afabcc70f7e
-size 2532
+{
+  "property_name": "align_amylase_stability",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Thermostability for the same amylase variant library.",
+  "origin_of_data": {
+    "source_name": "Protein Engineering Tournament (2023 ALIGN round)",
+    "doi": "10.1002/prot.70008",
+    "url": "https://doi.org/10.1002/prot.70008"
+  },
+  "label": {
+    "column": "thermostability_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Thermostability in the assay units of the tournament release, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-09-17",
+    "split_sizes_by_method": {
+      "alpha_amylase__thermostability_random_80_10_10_standardized": {
+        "train": 7323,
+        "test": 926,
+        "val": 926
+      }
+    },
+    "label_distribution_by_method": {
+      "alpha_amylase__thermostability_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 9175,
+          "mean": -0.0042,
+          "std": 0.98,
+          "min": -0.318,
+          "max": 9.3636,
+          "median": -0.1463
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 7323,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -0.318,
+          "max": 9.3636,
+          "median": -0.1463
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 926,
+          "mean": -0.0483,
+          "std": 0.7839,
+          "min": -0.3098,
+          "max": 8.2692,
+          "median": -0.1463
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 926,
+          "mean": 0.0064,
+          "std": 0.9951,
+          "min": -0.3098,
+          "max": 8.5557,
+          "median": -0.1463
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "source_split": 0,
+        "source_dataset": 0,
+        "thermostability": 0,
+        "split": 0,
+        "thermostability_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 9175,
+    "distinct_proteins": 8736,
+    "sequence_length_summary": {
+      "min": 425,
+      "max": 425,
+      "mean": 425.0,
+      "median": 425,
+      "p95": 425,
+      "count_greater_than_1024": 0
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

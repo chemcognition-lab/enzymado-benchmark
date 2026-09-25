@@ -23,14 +23,16 @@ RESIDUE="${REPO}/embeddings_models_output.json"
 
 mkdir -p "${LOGS}"
 
-# Arrays with work already done: they keep their original 32-cpu jobs.
-SKIP="bsite_attn_mlp_XXX sites_na_xgb_rand sites_na_xgb_simi bsite_attn_lin_rand bsite_na_mlp_rand"
+# Arrays that were still running from the original 32-cpu submission when this
+# resubmission went out; they were left alone rather than duplicated. Override
+# with SKIP="..." to reuse the script for a different partial resubmission.
+: "${SKIP:=sites_na_xgb_rand sites_na_xgb_simi bsite_attn_lin_rand bsite_na_mlp_rand}"
 
 submit() {
     local name=$1 scope=$2 split=$3 mode=$4 manifest=$5 tasks=$6 skip=$7 prefix=$8 mem=$9 time=${10} cpus=${11}
     for _skip in ${SKIP}; do
         if [[ "${name}" == "${_skip}" ]]; then
-            printf '# omitido (ya en curso): v3_%s\n' "${name}"
+            printf '# skipped (already running): v3_%s\n' "${name}"
             return 0
         fi
     done

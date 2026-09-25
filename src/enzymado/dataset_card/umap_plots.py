@@ -30,6 +30,22 @@ def _candidate_keys(
     return keys
 
 
+def _pooled_embedding(
+    handle: typing.Any,
+    available_keys: set[str],
+    sequence: typing.Any,
+    uniprot_id: typing.Any,
+) -> np.ndarray | None:
+    """Mean-pool the tensor stored under the first candidate key that exists."""
+    for key in _candidate_keys(sequence, uniprot_id):
+        if key not in available_keys:
+            continue
+        tensor = handle.get_tensor(key)
+        raw = tensor.float().cpu().numpy().astype(np.float32, copy=False)
+        return raw.mean(axis=0) if raw.ndim == 2 else raw
+    return None
+
+
 def load_embeddings(
     sequences: list[typing.Any],
     uniprot_ids: list[typing.Any],
@@ -50,18 +66,14 @@ def load_embeddings(
     ) as handle:
         available_keys = set(handle.keys())
         for index, (sequence, uniprot_id) in enumerate(zip(sequences, uniprot_ids)):
-            embedding = None
-            for key in _candidate_keys(sequence, uniprot_id):
-                if key in available_keys:
-                    tensor = handle.get_tensor(key)
-                    raw = tensor.float().cpu().numpy().astype(np.float32, copy=False)
-                    embedding = raw.mean(axis=0) if raw.ndim == 2 else raw
-                    break
-            if embedding is not None:
-                embeddings.append(embedding)
-                valid_indices.append(index)
-            else:
+            embedding = _pooled_embedding(
+                handle, available_keys, sequence, uniprot_id
+            )
+            if embedding is None:
                 n_missing += 1
+                continue
+            embeddings.append(embedding)
+            valid_indices.append(index)
 
     n_found = len(embeddings)
     if n_missing > 0:

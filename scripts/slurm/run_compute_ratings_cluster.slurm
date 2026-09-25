@@ -28,9 +28,9 @@ fi
 # shellcheck disable=SC1091
 source "${REPO}/.venv/bin/activate"
 
-# Roots default to the script's own defaults (results/predictions and
-# results/bootstrap), which is the pre-protocol-v3 tree. Always set these when
-# rating a different run root.
+# Unset, the script falls back to its own defaults, which now point at the
+# published tree (results/predictions and results/bootstrap). Set these to
+# rate a staging root instead.
 : "${PREDICTIONS_ROOT:=}"
 : "${BOOTSTRAP_ROOT:=}"
 : "${RATINGS_ROOT:=}"

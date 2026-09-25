@@ -1,3 +1,93 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:89f3907242b7e370be8b271bb1c898641d7902955fa4d038f7785113970c84ab
-size 2458
+{
+  "property_name": "cleeveland_galox",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Specific activity of fungal copper radical oxidases, the family galactose oxidase belongs to, measured across a panel of alcohol and diol substrates. One row is one enzyme-substrate pair, which makes this the only real-case suite with a ligand axis.",
+  "origin_of_data": {
+    "source_name": "Cleveland et al., Fusarium copper radical oxidases",
+    "doi": "10.1186/s13068-021-01984-0",
+    "url": "https://doi.org/10.1186/s13068-021-01984-0"
+  },
+  "label": {
+    "column": "specific_activity_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Specific activity in the assay units of the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-09-17",
+    "split_sizes_by_method": {
+      "cleeveland_random_80_10_10_standardized": {
+        "train": 316,
+        "val": 34,
+        "test": 35
+      }
+    },
+    "label_distribution_by_method": {
+      "cleeveland_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 385,
+          "mean": -0.0004,
+          "std": 0.9822,
+          "min": -0.2739,
+          "max": 6.3867,
+          "median": -0.2642
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 316,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -0.2739,
+          "max": 6.3867,
+          "median": -0.2642
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 34,
+          "mean": 0.0162,
+          "std": 1.0294,
+          "min": -0.2739,
+          "max": 5.168,
+          "median": -0.264
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 35,
+          "mean": -0.02,
+          "std": 0.7442,
+          "min": -0.2739,
+          "max": 3.7697,
+          "median": -0.2645
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "ligand_name": 0,
+        "smiles": 0,
+        "substrate_concentration": 0,
+        "specific_activity": 0,
+        "split": 0,
+        "specific_activity_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 385,
+    "distinct_proteins": 12,
+    "sequence_length_summary": {
+      "min": 506,
+      "max": 1068,
+      "mean": 702.98,
+      "median": 667,
+      "p95": 1068,
+      "count_greater_than_1024": 35
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

@@ -312,23 +312,28 @@ def _extract_ec_numbers_from_uniprot_json(payload: object) -> list[str]:
     ec_numbers: list[str] = []
     seen: set[str] = set()
 
+    def record_all(items: list) -> None:
+        """Record every new EC string in one ``ecNumbers`` payload, in order."""
+        for item in items:
+            raw = (item.get("value") or "") if isinstance(item, dict) else str(item)
+            ec = raw.strip()
+            if ec and ec not in seen:
+                seen.add(ec)
+                ec_numbers.append(ec)
+
     def walk(node: object) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key == "ecNumbers" and isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, dict):
-                            ec = (item.get("value") or "").strip()
-                        else:
-                            ec = str(item).strip()
-                        if ec and ec not in seen:
-                            seen.add(ec)
-                            ec_numbers.append(ec)
-                else:
-                    walk(value)
-        elif isinstance(node, list):
+        """Recurse through the entry, collecting every ``ecNumbers`` list."""
+        if isinstance(node, list):
             for item in node:
                 walk(item)
+            return
+        if not isinstance(node, dict):
+            return
+        for key, value in node.items():
+            if key == "ecNumbers" and isinstance(value, list):
+                record_all(value)
+            else:
+                walk(value)
 
     walk(payload)
     return ec_numbers

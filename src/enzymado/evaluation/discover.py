@@ -39,39 +39,37 @@ class Experiment:
 
 
 def discover_experiments(predictions_root: Path) -> list[Experiment]:
-    """Enumerate every experiment dir matching the canonical 6-level layout."""
-    out: list[Experiment] = []
+    """Enumerate every experiment dir matching the canonical 6-level layout.
+
+    Globbing one scope at a time keeps the walk pruned to the two known scopes,
+    and sorting the name tuples reproduces the lexicographic order a nested
+    ``sorted(iterdir())`` descent produced.
+    """
     if not predictions_root.exists():
-        return out
-    for scope_dir in sorted(predictions_root.iterdir()):
-        if not scope_dir.is_dir() or scope_dir.name not in TASK_SCOPES:
+        return []
+    layouts = sorted(
+        run_dir.relative_to(predictions_root).parts
+        for scope in TASK_SCOPES
+        for run_dir in (predictions_root / scope).glob("*/*/*/*/*")
+        if run_dir.is_dir()
+    )
+    out: list[Experiment] = []
+    for scope, pool, split, family, task, embedding in layouts:
+        if pool not in POOL_TYPES:
             continue
-        for pool_dir in sorted(scope_dir.iterdir()):
-            if not pool_dir.is_dir() or pool_dir.name not in POOL_TYPES:
-                continue
-            for split_dir in sorted(pool_dir.iterdir()):
-                if not split_dir.is_dir():
-                    continue
-                for fam_dir in sorted(split_dir.iterdir()):
-                    if not fam_dir.is_dir():
-                        continue
-                    for task_dir in sorted(fam_dir.iterdir()):
-                        if not task_dir.is_dir():
-                            continue
-                        for emb_dir in sorted(task_dir.iterdir()):
-                            if not emb_dir.is_dir():
-                                continue
-                            out.append(
-                                Experiment(
-                                    task_scope=scope_dir.name,
-                                    pool_type=pool_dir.name,
-                                    split=split_dir.name,
-                                    model_family=fam_dir.name,
-                                    task=task_dir.name,
-                                    embedding_model=emb_dir.name,
-                                    run_dir=emb_dir,
-                                )
-                            )
+        out.append(
+            Experiment(
+                task_scope=scope,
+                pool_type=pool,
+                split=split,
+                model_family=family,
+                task=task,
+                embedding_model=embedding,
+                run_dir=predictions_root.joinpath(
+                    scope, pool, split, family, task, embedding
+                ),
+            )
+        )
     return out
 
 

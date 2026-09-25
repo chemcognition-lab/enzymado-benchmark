@@ -1,3 +1,92 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e1155f8eb495239576a24e5bbfac6bdda1adc790cd74eed835590619a80dc72c
-size 2493
+{
+  "property_name": "align_amylase_expression",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Soluble expression level for the same amylase variant library.",
+  "origin_of_data": {
+    "source_name": "Protein Engineering Tournament (2023 ALIGN round)",
+    "doi": "10.1002/prot.70008",
+    "url": "https://doi.org/10.1002/prot.70008"
+  },
+  "label": {
+    "column": "expression_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Expression level in the assay units of the tournament release, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-09-17",
+    "split_sizes_by_method": {
+      "alpha_amylase__expression_random_80_10_10_standardized": {
+        "train": 8011,
+        "test": 1016,
+        "val": 1016
+      }
+    },
+    "label_distribution_by_method": {
+      "alpha_amylase__expression_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 10043,
+          "mean": -0.0002,
+          "std": 0.998,
+          "min": -1.1889,
+          "max": 5.8025,
+          "median": 0.0164
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 8011,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -1.1889,
+          "max": 5.8025,
+          "median": 0.0119
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 1016,
+          "mean": -0.0033,
+          "std": 0.9903,
+          "min": -1.1889,
+          "max": 3.5254,
+          "median": 0.0241
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 1016,
+          "mean": 0.0013,
+          "std": 0.99,
+          "min": -1.1889,
+          "max": 3.7322,
+          "median": 0.0319
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "source_split": 0,
+        "source_dataset": 0,
+        "expression": 0,
+        "split": 0,
+        "expression_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 10043,
+    "distinct_proteins": 9421,
+    "sequence_length_summary": {
+      "min": 425,
+      "max": 425,
+      "mean": 425.0,
+      "median": 425,
+      "p95": 425,
+      "count_greater_than_1024": 0
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

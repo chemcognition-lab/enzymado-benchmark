@@ -2,11 +2,9 @@
   "property_name": "ph_opt",
   "dataset_id": "brenda_phopt",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "BRENDA",
+    "doi": "10.1093/nar/gkaa1025",
+    "url": "https://doi.org/10.1093/nar/gkaa1025"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -29,10 +27,11 @@
         "protein_sequence": 0,
         "phopt_median": 0,
         "n_measurements": 0,
-        "phopt_std": 9539
+        "phopt_std": 9539,
+        "split": 0,
+        "phopt_median_standardized": 0
       },
-      "duplicate_rows_full": 0,
-      "duplicate_rows_by_key": 296
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -114,17 +113,109 @@
       }
     },
     "split_sizes_by_method": {
-      "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
-        "train": 8954,
-        "val": 1113,
-        "test": 1101
+      "brenda_phopt_random_80_10_10_standardized": {
+        "train": 9171,
+        "val": 1146,
+        "test": 1147
       },
-      "brenda_phopt_random_80_10_10_splits": {
-        "train": 9081,
-        "test": 1047,
-        "val": 1040
+      "brenda_phopt_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 9171,
+        "test": 1146,
+        "val": 1147
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "brenda_phopt_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 11464,
+          "mean": 0.0021,
+          "std": 1.0019,
+          "min": -4.7921,
+          "max": 4.0501,
+          "median": 0.2185
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 9171,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -4.7921,
+          "max": 4.0501,
+          "median": 0.2185
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 1146,
+          "mean": 0.0406,
+          "std": 0.9708,
+          "min": -4.0342,
+          "max": 4.0501,
+          "median": 0.2606
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 1147,
+          "mean": -0.0197,
+          "std": 1.0454,
+          "min": -3.8658,
+          "max": 4.0501,
+          "median": 0.2185
+        }
+      },
+      "brenda_phopt_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 11464,
+          "mean": -0.0412,
+          "std": 1.0486,
+          "min": -5.0592,
+          "max": 4.1958,
+          "median": 0.1853
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 9171,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -5.0592,
+          "max": 4.1958,
+          "median": 0.2294
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 1147,
+          "mean": -0.2686,
+          "std": 1.1291,
+          "min": -4.6185,
+          "max": 3.7551,
+          "median": 0.0531
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 1146,
+          "mean": -0.1431,
+          "std": 1.283,
+          "min": -4.2659,
+          "max": 4.1958,
+          "median": 0.1413
+        }
+      }
+    },
+    "rows": 11464,
+    "distinct_proteins": 11110,
+    "sequence_length_summary": {
+      "min": 5,
+      "max": 7096,
+      "mean": 469.81,
+      "median": 408.0,
+      "p95": 921,
+      "count_greater_than_1024": 411
+    },
+    "categorical_high_variance_columns": [
+      "uniprot_id"
+    ]
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -151,5 +242,14 @@
       "label_colored": "results/figures/umaps/ph_opt_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/ph_opt_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Optimal pH per enzyme, taken from BRENDA. Where an enzyme carries several reported optima the published value is their median, and the number of underlying measurements is kept alongside it.",
+  "label": {
+    "column": "phopt_median_standardized",
+    "label_kind": "scalar_regression",
+    "description": "pH optimum in pH units, the median over reported measurements, standardized on the training split. No log is applied: pH is already a logarithmic scale.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }

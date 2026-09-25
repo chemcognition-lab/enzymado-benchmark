@@ -359,6 +359,12 @@ def run(
         split_variant=context.split_variant,
     )
 
+    # AUROC and AUPRC are areas under a curve swept over a score, so a single
+    # confusion matrix cannot express them. Writing probabilities here keeps the
+    # ranking metrics on their real definition instead of a one-threshold lower
+    # bound; wrappers without a probability method are skipped inside.
+    _attach_run_probabilities(context, model_name, model_info, run_dir)
+
     if getattr(trained, "best_epoch_", None) is not None:
         enzymado.data_loading.stores.log(
             f"      Early stopping: best_epoch={trained.best_epoch_},"

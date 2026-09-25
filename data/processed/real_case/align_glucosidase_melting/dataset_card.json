@@ -1,3 +1,93 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:2149738414878c2fa47968fcb19518376c70226ea42db79323fd1064277b4c76
-size 4552
+{
+  "property_name": "align_glucosidase_melting",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Melting temperature for the glucosidase variant library. This is the smallest dataset in the benchmark.",
+  "origin_of_data": {
+    "source_name": "Protein Engineering Tournament (2023 ALIGN round)",
+    "doi": "10.1002/prot.70008",
+    "url": "https://doi.org/10.1002/prot.70008"
+  },
+  "label": {
+    "column": "melting_point_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Melting temperature in degrees Celsius, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-09-17",
+    "split_sizes_by_method": {
+      "b_glucosidase__melting_point_random_80_10_10_standardized": {
+        "train": 98,
+        "val": 11,
+        "test": 11
+      }
+    },
+    "label_distribution_by_method": {
+      "b_glucosidase__melting_point_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 120,
+          "mean": 0.0148,
+          "std": 1.045,
+          "min": -3.2483,
+          "max": 3.4245,
+          "median": -0.0044
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 98,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -3.2483,
+          "max": 3.2395,
+          "median": -0.0139
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 11,
+          "mean": 0.0982,
+          "std": 1.3099,
+          "min": -1.9039,
+          "max": 3.4245,
+          "median": -0.0044
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 11,
+          "mean": 0.0637,
+          "std": 1.1302,
+          "min": -2.2552,
+          "max": 2.0613,
+          "median": 0.2599
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "source_split": 0,
+        "melting_point": 0,
+        "split": 0,
+        "melting_point_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 120,
+    "distinct_proteins": 106,
+    "sequence_length_summary": {
+      "min": 445,
+      "max": 445,
+      "mean": 445.0,
+      "median": 445.0,
+      "p95": 445,
+      "count_greater_than_1024": 0
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id",
+      "melting_point",
+      "melting_point_standardized"
+    ]
+  }
+}

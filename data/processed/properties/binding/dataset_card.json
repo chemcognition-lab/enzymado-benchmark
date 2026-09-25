@@ -2,11 +2,9 @@
   "property_name": "binding",
   "dataset_id": "biolip_binding",
   "origin_of_data": {
-    "source_name": null,
-    "source_url": null,
-    "source_version": null,
-    "release_date": null,
-    "citation": null
+    "source_name": "BioLiP2",
+    "doi": "10.1093/nar/gkad630",
+    "url": "https://doi.org/10.1093/nar/gkad630"
   },
   "amount_of_removed_data": {
     "datapoints_before_cleaning": null,
@@ -27,13 +25,13 @@
       "nan_counts_per_column": {
         "uniprot_id": 0,
         "protein_sequence": 0,
-        "ligand_id": 24775,
-        "ligand_name": 24775,
+        "ligand_id": 0,
+        "ligand_name": 0,
         "smiles": 0,
-        "binding": 0
+        "binding": 0,
+        "split": 0
       },
-      "duplicate_rows_full": 11303,
-      "duplicate_rows_by_key": 16149
+      "duplicate_rows_full": 0
     },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -150,17 +148,107 @@
       }
     },
     "split_sizes_by_method": {
-      "biolip_binding_random_80_10_10_splits": {
-        "train": 18526,
-        "test": 760,
-        "val": 644
+      "biolip_binding_random_80_10_10_standardized": {
+        "train": 22846,
+        "test": 2856,
+        "val": 2856
       },
-      "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
-        "train": 16869,
-        "test": 1700,
-        "val": 1361
+      "biolip_binding_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 22846,
+        "val": 2856,
+        "test": 2856
       }
-    }
+    },
+    "generated": "2026-09-17",
+    "label_distribution_by_method": {
+      "biolip_binding_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 28558,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 22846,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 2856,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 2856,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        }
+      },
+      "biolip_binding_similarity_mmseqs2_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 28558,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 22846,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 2856,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 2856,
+          "mean": 0.5,
+          "std": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "median": 0.5
+        }
+      }
+    },
+    "rows": 28558,
+    "distinct_proteins": 11332,
+    "sequence_length_summary": {
+      "min": 31,
+      "max": 4426,
+      "mean": 403.06,
+      "median": 348.0,
+      "p95": 794,
+      "count_greater_than_1024": 648
+    },
+    "categorical_high_variance_columns": []
   },
   "additional_important": {
     "sequence_length_summary": {
@@ -187,5 +275,14 @@
       "label_colored": "results/figures/umaps/binding_prot5_xl_uniref50_labels.png",
       "split_colored": "results/figures/umaps/binding_prot5_xl_uniref50_splits.png"
     }
+  },
+  "task_scope": "properties",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Whether a protein binds a given small molecule. Positives are protein-ligand pairs observed in BioLiP2 structures; negatives are sampled to balance the set, so prevalence is close to 50% by construction and not by nature. Sequences come from the crystallised construct, which can be shorter than the full UniProt entry for the same accession.",
+  "label": {
+    "column": "binding",
+    "label_kind": "binary",
+    "description": "Binary: 1 if the pair is an observed complex, 0 otherwise.",
+    "see_also": "benchmark_card.json#/definitions"
   }
 }
