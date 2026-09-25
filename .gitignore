@@ -69,3 +69,10 @@ embeddings_models_output.json
 embeddings_models_output_mean_pooled.json
 !embeddings_models_output.example.json
 !embeddings_models_output_mean_pooled.example.json
+
+# Single-task experiment artifacts from scripts/slurm/setup_single_task_run.sh:
+# a per-task sequence subset, its manifest, and its own results tree.
+data/processed/*_sequences.csv
+embeddings_*.json
+!embeddings_models_output*.example.json
+results_*/
