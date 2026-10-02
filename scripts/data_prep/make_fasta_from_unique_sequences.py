@@ -36,7 +36,7 @@ def create_parser() -> argparse.ArgumentParser:
     """Build the canonical sequence-to-FASTA command-line parser."""
     parser = argparse.ArgumentParser(
         description=(
-            "Create a FASTA file from data/processed/protein_sequences_unique.csv "
+            "Create a FASTA file from data/processed/protein_pool.csv "
             "using sequence_id as the FASTA header."
         )
     )

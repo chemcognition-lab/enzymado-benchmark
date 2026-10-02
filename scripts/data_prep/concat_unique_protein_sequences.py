@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build the canonical unique-sequence index consumed by embedding pipelines."""
+"""Build the protein pool: the unique-sequence index consumed by embedding pipelines.
+
+Sequence ids are disambiguated across the whole set of datasets, so rebuilding after
+datasets change can rename ids. The embedding stores are keyed by these ids: to drop
+sequences, filter the existing protein_pool.csv instead of rebuilding it.
+"""
 
 import argparse
 import collections
@@ -17,7 +22,7 @@ DEFAULT_INPUT_DIRS = (
     Path("data/processed/properties"),
     Path("data/processed/real_case"),
 )
-DEFAULT_OUTPUT = Path("data/processed/protein_sequences_unique_no_fluorescence.csv")
+DEFAULT_OUTPUT = Path("data/processed/protein_pool.csv")
 KNOWN_DATASET_CODES = {
     "properties/active_sites/swissprot_active_site.csv": "as",
     "properties/binding_site/swissprot_binding_site.csv": "bs",
@@ -72,7 +77,7 @@ def resolve_dataset_code(csv_path: Path) -> str:
 
 def should_include_csv(csv_path: Path) -> bool:
     name = csv_path.name
-    if name.startswith("protein_sequences_unique"):
+    if name.startswith(("protein_pool", "protein_sequences_unique")):
         return False
     if "_splits" in csv_path.stem:
         return False

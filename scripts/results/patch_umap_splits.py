@@ -16,7 +16,7 @@ import pandas as pd
 BASE_DIR = Path("data/processed/properties")
 EMB_DIR = Path("data/embeddings_mean_pooled/protein_sequences_unique")
 UMAP_DIR = Path("results/figures/umaps")
-SEQ_CSV = Path("data/processed/protein_sequences_unique.csv")
+SEQ_CSV = Path("data/processed/protein_pool.csv")
 
 PROPERTIES = [
     "active_sites",

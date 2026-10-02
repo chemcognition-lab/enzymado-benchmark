@@ -200,8 +200,8 @@ fi
 # shellcheck disable=SC1091
 source "${REPO}/${VENV_PATH}/bin/activate"
 
-CSV_PATH="${REPO}/data/processed/protein_sequences_unique.csv"
-FASTA_PATH="${REPO}/data/fastas/protein_sequences_unique.fasta"
+CSV_PATH="${REPO}/data/processed/protein_pool.csv"
+FASTA_PATH="${REPO}/data/fastas/protein_pool.fasta"
 
 if [[ "${PER_PROTEIN}" == "1" ]]; then
     OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings_mean_pooled/protein_sequences_unique"

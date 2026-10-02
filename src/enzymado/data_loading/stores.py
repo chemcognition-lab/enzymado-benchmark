@@ -28,10 +28,9 @@ from .labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
 from .task_csv import TaskCSVLoader, clean_text, normalize_sequence
 
 PROJECT_ROOT = enzymado.paths_and_constants.Paths.project_root
-_PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
-_LEGACY_SEQ_INDEX = (
-    PROJECT_ROOT / "data/processed/protein_sequences_unique_no_fluorescence.csv"
-)
+_PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_pool.csv"
+# Older checkouts named the index protein_sequences_unique.csv.
+_LEGACY_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
 
 
 def log(msg: str) -> None:

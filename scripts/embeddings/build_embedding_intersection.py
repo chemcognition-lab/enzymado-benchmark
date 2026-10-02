@@ -42,7 +42,7 @@ def inspect_embedding_file(
 
 
 def _read_index(path: Path) -> dict[str, str]:
-    """Read a protein_sequences_unique.csv index as ``{sequence_id: sequence}``."""
+    """Read a protein_pool.csv index as ``{sequence_id: sequence}``."""
     csv.field_size_limit(sys.maxsize)
     mapping: dict[str, str] = {}
     with path.open("r", newline="", encoding="utf-8") as handle:
@@ -95,7 +95,7 @@ def create_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Freshly built protein_sequences_unique.csv listing the sequences the "
+            "Freshly built protein_pool.csv listing the sequences the "
             "current datasets still use. When given, allowlist ids whose sequence no "
             "dataset uses any more are dropped. Ids are NOT compared directly: a "
             "rebuilt index may elect a different representative id for a sequence "
@@ -106,7 +106,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reference-index",
         type=Path,
-        default=REPO_ROOT / "data" / "processed" / "protein_sequences_unique.csv",
+        default=REPO_ROOT / "data" / "processed" / "protein_pool.csv",
         help=(
             "Index that training resolves sequences through, used to map each "
             "allowlist id back to its sequence. Must be the index the embedding "
