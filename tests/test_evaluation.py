@@ -50,6 +50,14 @@ class TestMetrics(TestCase):
         mask = np.array([True, True, False])
         self.assertAlmostEqual(regression_mae(y, p, mask), 0.5)
 
+    def test_kendall_tau_scores_full_ties_as_no_skill(self) -> None:
+        y = np.array([0.1, 0.4, 0.2, 0.9])
+        kendall = metrics_registry.regression_kendall_tau
+        self.assertEqual(kendall(y, np.full(4, 0.3)), 0.0)
+        self.assertEqual(kendall(np.full(4, 0.3), y), 0.0)
+        self.assertAlmostEqual(kendall(y, y), 1.0)
+        self.assertTrue(np.isnan(kendall(y[:1], y[:1])))
+
     def test_classification_f1_binary(self) -> None:
         """F1 from the production count path, against a hand-computed value."""
         y = np.array([1, 0, 1, 0, 1, 1, 0, 0], dtype=np.float32)

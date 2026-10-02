@@ -106,9 +106,17 @@ def regression_kendall_tau(
     pred: Array,
     target_mask: Array | None = None,
 ) -> float:
+    """Kendall tau-b, scored 0 when predictions or labels are all tied.
+
+    A full tie carries no ordering, so it is scored as no skill instead of
+    undefined; a bootstrap replicate of a near-constant model stays ratable.
+    Model selection rejects constant predictions before calling this.
+    """
     y, p = _flatten_known(y_true, pred, target_mask)
-    if y.size < 2 or np.unique(y).size < 2 or np.unique(p).size < 2:
+    if y.size < 2:
         return float("nan")
+    if np.unique(y).size < 2 or np.unique(p).size < 2:
+        return 0.0
     tau = scipy.stats.kendalltau(y, p).statistic
     return float("nan") if tau is None or not np.isfinite(tau) else float(tau)
 
