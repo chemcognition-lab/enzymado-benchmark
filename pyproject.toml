@@ -44,6 +44,7 @@ train = [
     "joblib",
     "xgboost",
     "rdkit",
+    "descriptastorus",
     "requests",
     "biopython",
     "torch==2.7.0",

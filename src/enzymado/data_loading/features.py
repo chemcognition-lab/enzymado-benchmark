@@ -8,6 +8,8 @@ from typing import Callable
 import numpy as np
 import torch
 
+from enzymado.paths_and_constants import Paths
+
 from .task_csv import clean_text, normalize_sequence
 
 
@@ -208,35 +210,31 @@ class ProteinResidueEmbeddingBuilder:
         )
 
 
+LIGAND_FEATURES_PATH = Paths.data_processed_dir / "ligand_features/descriptastorus.npz"
+_LIGAND_CACHE: dict[str, np.ndarray] | None = None
+
+
 def _default_rdkit_featurize(smiles: str) -> np.ndarray:
-    """Build a compact ligand descriptor vector with RDKit."""
+    """Look up the 200 descriptastorus RDKit2DNormalized descriptors of a SMILES.
+
+    Written by scripts/data_prep/build_ligand_features.py.
+    """
+    global _LIGAND_CACHE
+    if _LIGAND_CACHE is None:
+        if not LIGAND_FEATURES_PATH.exists():
+            raise ValueError(
+                f"Ligand feature cache {LIGAND_FEATURES_PATH} is missing; run "
+                "scripts/data_prep/build_ligand_features.py."
+            )
+        with np.load(LIGAND_FEATURES_PATH) as data:
+            _LIGAND_CACHE = dict(zip(data["smiles"].tolist(), data["features"]))
     try:
-        from rdkit import Chem
-        from rdkit.Chem import Crippen, Descriptors, Lipinski, rdMolDescriptors
-    except ModuleNotFoundError as exc:
-        raise ImportError(
-            "RDKit is required for ligand features unless a custom featurize_smiles "
-            "callable is provided."
-        ) from exc
-
-    molecule = Chem.MolFromSmiles(smiles)
-    if molecule is None:
-        raise ValueError(f"Unable to parse SMILES '{smiles}'.")
-
-    features = np.array(
-        [
-            Descriptors.MolWt(molecule),  # type: ignore[attr-defined]
-            Crippen.MolLogP(molecule),  # type: ignore[attr-defined]
-            rdMolDescriptors.CalcTPSA(molecule),
-            Lipinski.NumHDonors(molecule),  # type: ignore[attr-defined]
-            Lipinski.NumHAcceptors(molecule),  # type: ignore[attr-defined]
-            Lipinski.NumRotatableBonds(molecule),  # type: ignore[attr-defined]
-            molecule.GetRingInfo().NumRings(),
-            molecule.GetNumHeavyAtoms(),
-        ],
-        dtype=np.float32,
-    )
-    return features
+        return _LIGAND_CACHE[smiles]
+    except KeyError:
+        raise ValueError(
+            f"SMILES '{smiles}' is not in {LIGAND_FEATURES_PATH.name}; rebuild it with "
+            "scripts/data_prep/build_ligand_features.py."
+        ) from None
 
 
 @dataclass

@@ -89,6 +89,11 @@ There are five training routes:
    - a flat concatenated EC XGBoost classifier with per-column masking for unknown descendants.
 3. `protein_ligand_global`
    Mean-pool protein embeddings, concatenate ligand features, then train on 2D arrays.
+   Ligand features are the 200 descriptastorus `RDKit2DNormalized` descriptors of the
+   substrate SMILES, read from `data/processed/ligand_features/descriptastorus.npz`.
+   Build that cache once with `scripts/data_prep/build_ligand_features.py`; training
+   stops if a SMILES is missing from it. These are 2D descriptors, so stereoisomers
+   (for example L- and D-alanine) share one vector.
 4. `mutation_delta_global`
    Build mutant minus wildtype pooled embeddings, then train on 2D arrays.
 5. `protein_residue` + `residue_binary_vector`
@@ -111,6 +116,11 @@ Undefined Kendall from constant predictions makes an epoch ineligible; AUPRC wit
 constant probabilities remains defined when both classes are present. A run with
 no eligible trained epoch fails explicitly. Old checkpoints remain loadable for
 inference, but resumption requires a matching v3 protocol and provenance contract.
+
+Evaluation differs from selection on one point. A reported Kendall tau, including
+each bootstrap replicate, is 0 when all predictions or all labels are tied: a full
+tie orders nothing, so it scores as no skill instead of undefined. This matters for
+XGBoost, which stops on `rmse` and can end up almost constant on a small task.
 
 The v3 runbook under `docs/` carries the reporting fields, migration rules and
 isolated launch/evaluation commands; it is kept locally and not published. These
