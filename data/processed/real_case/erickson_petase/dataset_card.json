@@ -15,7 +15,7 @@
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-17",
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "erickson_random_80_10_10_standardized": {
         "train": 456,
@@ -82,10 +82,12 @@
       "mean": 262.63,
       "median": 270.0,
       "p95": 290,
-      "count_greater_than_1024": 0
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
     },
     "categorical_high_variance_columns": [
       "dataset_id"
     ]
-  }
+  },
+  "dataset_id": "erickson"
 }

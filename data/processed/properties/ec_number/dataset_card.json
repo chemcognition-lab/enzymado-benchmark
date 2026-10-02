@@ -20,16 +20,6 @@
     }
   },
   "statistics": {
-    "ratio_enzyme_proteins": null,
-    "nans_dups": {
-      "nan_counts_per_column": {
-        "uniprot_id": 0,
-        "protein_sequence": 0,
-        "ec_number": 0,
-        "split": 0
-      },
-      "duplicate_rows_full": 0
-    },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
       "cluster_parameters": {
@@ -45,49 +35,7 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/ec_number_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "label_distribution": {
-      "overall": {
-        "total_valid_labels": 237526,
-        "format": "categorical_high_variance",
-        "unique_classes": 7256
-      },
-      "train": {
-        "swissprot_ec_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 190021,
-          "format": "categorical_high_variance",
-          "unique_classes": 7021
-        },
-        "swissprot_ec_random_80_10_10_splits": {
-          "total_valid_labels": 190021,
-          "format": "categorical_high_variance",
-          "unique_classes": 6735
-        }
-      },
-      "validation": {
-        "swissprot_ec_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 23753,
-          "format": "categorical_high_variance",
-          "unique_classes": 257
-        },
-        "swissprot_ec_random_80_10_10_splits": {
-          "total_valid_labels": 23752,
-          "format": "categorical_high_variance",
-          "unique_classes": 2946
-        }
-      },
-      "test": {
-        "swissprot_ec_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 23752,
-          "format": "categorical_high_variance",
-          "unique_classes": 150
-        },
-        "swissprot_ec_random_80_10_10_splits": {
-          "total_valid_labels": 23753,
-          "format": "categorical_high_variance",
-          "unique_classes": 2938
-        }
-      }
-    },
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "swissprot_ec_random_80_10_10_standardized": {
         "train": 190021,
@@ -100,324 +48,140 @@
         "val": 23753
       }
     },
-    "generated": "2026-09-17",
     "label_distribution_by_method": {
       "swissprot_ec_random_80_10_10_standardized": {
         "overall": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 237526,
-          "unique_classes": 7256,
-          "most_frequent": [
-            {
-              "value": "7.1.1.-",
-              "count": 3620
-            },
-            {
-              "value": "3.1.-.-",
-              "count": 3269
-            },
-            {
-              "value": "2.7.7.6",
-              "count": 3214
-            },
-            {
-              "value": "2.7.11.1",
-              "count": 2364
-            },
-            {
-              "value": "2.1.1.-",
-              "count": 2081
-            },
-            {
-              "value": "7.1.2.2",
-              "count": 1760
-            },
-            {
-              "value": "3.6.4.-",
-              "count": 1515
-            },
-            {
-              "value": "1.-.-.-",
-              "count": 1481
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 76,
+            "level_3": 274,
+            "level_4": 5728
+          },
+          "flat_vector_width": 6085,
+          "ec_numbers_per_protein": {
+            "mean": 1.094,
+            "max": 12
+          }
         },
         "train": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 190021,
-          "unique_classes": 6735,
-          "most_frequent": [
-            {
-              "value": "7.1.1.-",
-              "count": 2948
-            },
-            {
-              "value": "3.1.-.-",
-              "count": 2643
-            },
-            {
-              "value": "2.7.7.6",
-              "count": 2559
-            },
-            {
-              "value": "2.7.11.1",
-              "count": 1876
-            },
-            {
-              "value": "2.1.1.-",
-              "count": 1634
-            },
-            {
-              "value": "7.1.2.2",
-              "count": 1409
-            },
-            {
-              "value": "3.6.4.-",
-              "count": 1199
-            },
-            {
-              "value": "1.-.-.-",
-              "count": 1176
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 76,
+            "level_3": 271,
+            "level_4": 5401
+          },
+          "flat_vector_width": 5755,
+          "ec_numbers_per_protein": {
+            "mean": 1.094,
+            "max": 11
+          }
         },
         "val": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 23752,
-          "unique_classes": 2946,
-          "most_frequent": [
-            {
-              "value": "7.1.1.-",
-              "count": 333
-            },
-            {
-              "value": "2.7.7.6",
-              "count": 331
-            },
-            {
-              "value": "3.1.-.-",
-              "count": 314
-            },
-            {
-              "value": "2.7.11.1",
-              "count": 240
-            },
-            {
-              "value": "2.1.1.-",
-              "count": 229
-            },
-            {
-              "value": "7.1.2.2",
-              "count": 188
-            },
-            {
-              "value": "3.6.4.-",
-              "count": 148
-            },
-            {
-              "value": "2.3.2.27",
-              "count": 144
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 71,
+            "level_3": 235,
+            "level_4": 2636
+          },
+          "flat_vector_width": 2949,
+          "ec_numbers_per_protein": {
+            "mean": 1.09,
+            "max": 11
+          }
         },
         "test": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 23753,
-          "unique_classes": 2938,
-          "most_frequent": [
-            {
-              "value": "7.1.1.-",
-              "count": 339
-            },
-            {
-              "value": "2.7.7.6",
-              "count": 324
-            },
-            {
-              "value": "3.1.-.-",
-              "count": 312
-            },
-            {
-              "value": "2.7.11.1",
-              "count": 248
-            },
-            {
-              "value": "2.1.1.-",
-              "count": 218
-            },
-            {
-              "value": "3.6.4.-",
-              "count": 168
-            },
-            {
-              "value": "1.-.-.-",
-              "count": 168
-            },
-            {
-              "value": "7.1.2.2",
-              "count": 163
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 71,
+            "level_3": 233,
+            "level_4": 2610
+          },
+          "flat_vector_width": 2921,
+          "ec_numbers_per_protein": {
+            "mean": 1.099,
+            "max": 12
+          }
         }
       },
       "swissprot_ec_similarity_mmseqs2_80_10_10_standardized": {
         "overall": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 237526,
-          "unique_classes": 7256,
-          "most_frequent": [
-            {
-              "value": "7.1.1.-",
-              "count": 3620
-            },
-            {
-              "value": "3.1.-.-",
-              "count": 3269
-            },
-            {
-              "value": "2.7.7.6",
-              "count": 3214
-            },
-            {
-              "value": "2.7.11.1",
-              "count": 2364
-            },
-            {
-              "value": "2.1.1.-",
-              "count": 2081
-            },
-            {
-              "value": "7.1.2.2",
-              "count": 1760
-            },
-            {
-              "value": "3.6.4.-",
-              "count": 1515
-            },
-            {
-              "value": "1.-.-.-",
-              "count": 1481
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 76,
+            "level_3": 274,
+            "level_4": 5728
+          },
+          "flat_vector_width": 6085,
+          "ec_numbers_per_protein": {
+            "mean": 1.094,
+            "max": 12
+          }
         },
         "train": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 190021,
-          "unique_classes": 7021,
-          "most_frequent": [
-            {
-              "value": "3.1.-.-",
-              "count": 3269
-            },
-            {
-              "value": "7.1.1.-",
-              "count": 3199
-            },
-            {
-              "value": "2.7.7.6",
-              "count": 2730
-            },
-            {
-              "value": "2.7.11.1",
-              "count": 2364
-            },
-            {
-              "value": "2.1.1.-",
-              "count": 2069
-            },
-            {
-              "value": "3.6.4.-",
-              "count": 1515
-            },
-            {
-              "value": "1.-.-.-",
-              "count": 1481
-            },
-            {
-              "value": "3.6.4.13",
-              "count": 1364
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 76,
+            "level_3": 274,
+            "level_4": 5582
+          },
+          "flat_vector_width": 5939,
+          "ec_numbers_per_protein": {
+            "mean": 1.104,
+            "max": 12
+          }
         },
         "val": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 23753,
-          "unique_classes": 257,
-          "most_frequent": [
-            {
-              "value": "7.1.2.2",
-              "count": 818
-            },
-            {
-              "value": "4.2.1.11",
-              "count": 727
-            },
-            {
-              "value": "6.5.1.2",
-              "count": 709
-            },
-            {
-              "value": "2.7.7.8",
-              "count": 665
-            },
-            {
-              "value": "6.3.4.2",
-              "count": 555
-            },
-            {
-              "value": "2.7.8.13",
-              "count": 554
-            },
-            {
-              "value": "6.1.1.3",
-              "count": 525
-            },
-            {
-              "value": "4.3.2.1",
-              "count": 524
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 30,
+            "level_3": 50,
+            "level_4": 202
+          },
+          "flat_vector_width": 289,
+          "ec_numbers_per_protein": {
+            "mean": 1.045,
+            "max": 10
+          }
         },
         "test": {
-          "kind": "categorical",
+          "kind": "hierarchical_multilabel",
           "total_valid_labels": 23752,
-          "unique_classes": 150,
-          "most_frequent": [
-            {
-              "value": "7.1.2.2",
-              "count": 725
-            },
-            {
-              "value": "3.6.5.3",
-              "count": 696
-            },
-            {
-              "value": "7.4.2.8",
-              "count": 678
-            },
-            {
-              "value": "2.1.2.1",
-              "count": 674
-            },
-            {
-              "value": "6.1.1.11",
-              "count": 672
-            },
-            {
-              "value": "1.5.1.5; 3.5.4.9",
-              "count": 661
-            },
-            {
-              "value": "6.1.1.4",
-              "count": 636
-            },
-            {
-              "value": "2.8.1.13",
-              "count": 628
-            }
-          ]
+          "unique_classes_by_level": {
+            "level_1": 7,
+            "level_2": 27,
+            "level_3": 43,
+            "level_4": 130
+          },
+          "flat_vector_width": 207,
+          "ec_numbers_per_protein": {
+            "mean": 1.058,
+            "max": 5
+          }
         }
       }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "ec_number": 0,
+        "split": 0
+      },
+      "duplicate_rows_full": 0
     },
     "rows": 237526,
     "distinct_proteins": 237474,
@@ -427,7 +191,8 @@
       "mean": 428.85,
       "median": 359.0,
       "p95": 919,
-      "count_greater_than_1024": 8616
+      "count_greater_than_1024": 8616,
+      "contains_non_standard_aas": 1012
     },
     "categorical_high_variance_columns": [
       "uniprot_id"

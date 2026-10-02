@@ -20,20 +20,6 @@
     }
   },
   "statistics": {
-    "ratio_enzyme_proteins": null,
-    "nans_dups": {
-      "nan_counts_per_column": {
-        "uniprot_id": 0,
-        "protein_sequence": 0,
-        "smiles": 0,
-        "temperature": 1831,
-        "ph": 1430,
-        "km": 0,
-        "split": 0,
-        "km_standardized": 0
-      },
-      "duplicate_rows_full": 0
-    },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
       "cluster_parameters": {
@@ -49,70 +35,7 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/km_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "label_distribution": {
-      "overall": {
-        "total_valid_labels": 41174,
-        "mean": -0.731,
-        "std": 1.273,
-        "min": -8.0,
-        "max": 4.0,
-        "median": -0.7388
-      },
-      "train": {
-        "catpred_km_random_80_10_10_splits": {
-          "total_valid_labels": 32939,
-          "mean": -0.7087,
-          "std": 1.2607,
-          "min": -7.699,
-          "max": 4.0,
-          "median": -0.7212
-        },
-        "catpred_km_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 32939,
-          "mean": -0.7066,
-          "std": 1.2632,
-          "min": -8.0,
-          "max": 4.0,
-          "median": -0.7212
-        }
-      },
-      "validation": {
-        "catpred_km_random_80_10_10_splits": {
-          "total_valid_labels": 4117,
-          "mean": -0.8057,
-          "std": 1.331,
-          "min": -5.0969,
-          "max": 4.0,
-          "median": -0.7696
-        },
-        "catpred_km_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 4118,
-          "mean": -0.6341,
-          "std": 1.277,
-          "min": -6.301,
-          "max": 3.679,
-          "median": -0.6021
-        }
-      },
-      "test": {
-        "catpred_km_random_80_10_10_splits": {
-          "total_valid_labels": 4118,
-          "mean": -0.8344,
-          "std": 1.3036,
-          "min": -8.0,
-          "max": 3.4771,
-          "median": -0.8239
-        },
-        "catpred_km_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 4117,
-          "mean": -1.0224,
-          "std": 1.3084,
-          "min": -6.301,
-          "max": 4.0,
-          "median": -1.0132
-        }
-      }
-    },
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "catpred_km_random_80_10_10_standardized": {
         "train": 32939,
@@ -125,7 +48,6 @@
         "test": 4117
       }
     },
-    "generated": "2026-09-17",
     "label_distribution_by_method": {
       "catpred_km_random_80_10_10_standardized": {
         "overall": {
@@ -204,6 +126,19 @@
         }
       }
     },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "temperature": 1831,
+        "ph": 1430,
+        "km": 0,
+        "split": 0,
+        "km_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
     "rows": 41174,
     "distinct_proteins": 12355,
     "sequence_length_summary": {
@@ -212,7 +147,8 @@
       "mean": 437.55,
       "median": 389.0,
       "p95": 822,
-      "count_greater_than_1024": 996
+      "count_greater_than_1024": 996,
+      "contains_non_standard_aas": 229
     },
     "categorical_high_variance_columns": []
   },

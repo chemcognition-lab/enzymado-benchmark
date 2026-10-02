@@ -15,7 +15,7 @@
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-17",
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "cleeveland_random_80_10_10_standardized": {
         "train": 316,
@@ -84,10 +84,12 @@
       "mean": 702.98,
       "median": 667,
       "p95": 1068,
-      "count_greater_than_1024": 35
+      "count_greater_than_1024": 35,
+      "contains_non_standard_aas": 0
     },
     "categorical_high_variance_columns": [
       "dataset_id"
     ]
-  }
+  },
+  "dataset_id": "cleeveland"
 }

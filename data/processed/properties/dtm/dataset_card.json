@@ -20,20 +20,6 @@
     }
   },
   "statistics": {
-    "ratio_enzyme_proteins": null,
-    "nans_dups": {
-      "nan_counts_per_column": {
-        "dataset_id": 0,
-        "uniprot_id": 0,
-        "wildtype_sequence": 0,
-        "mutation": 0,
-        "protein_sequence": 0,
-        "dtm": 0,
-        "split": 0,
-        "dtm_standardized": 0
-      },
-      "duplicate_rows_full": 0
-    },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
       "cluster_parameters": {
@@ -49,70 +35,7 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/dtm_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "label_distribution": {
-      "overall": {
-        "total_valid_labels": 3338,
-        "mean": -2.7866,
-        "std": 7.1079,
-        "min": -60.79,
-        "max": 72.0,
-        "median": -1.4
-      },
-      "train": {
-        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 2326,
-          "mean": -2.3951,
-          "std": 7.0786,
-          "min": -60.79,
-          "max": 27.9,
-          "median": -1.1
-        },
-        "fireprotdb_dtm_random_80_10_10_splits": {
-          "total_valid_labels": 2670,
-          "mean": -2.9142,
-          "std": 7.3791,
-          "min": -60.79,
-          "max": 72.0,
-          "median": -1.5
-        }
-      },
-      "validation": {
-        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 679,
-          "mean": -4.1026,
-          "std": 5.9695,
-          "min": -41.8,
-          "max": 11.6,
-          "median": -2.6
-        },
-        "fireprotdb_dtm_random_80_10_10_splits": {
-          "total_valid_labels": 334,
-          "mean": -2.3618,
-          "std": 5.7964,
-          "min": -31.5,
-          "max": 20.0,
-          "median": -1.4
-        }
-      },
-      "test": {
-        "fireprotdb_dtm_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 333,
-          "mean": -2.8377,
-          "std": 8.9178,
-          "min": -26.9,
-          "max": 72.0,
-          "median": -2.0
-        },
-        "fireprotdb_dtm_random_80_10_10_splits": {
-          "total_valid_labels": 334,
-          "mean": -2.1911,
-          "std": 5.9659,
-          "min": -47.55,
-          "max": 23.6,
-          "median": -1.1
-        }
-      }
-    },
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "fireprotdb_dtm_random_80_10_10_standardized": {
         "train": 2670,
@@ -125,7 +48,6 @@
         "test": 333
       }
     },
-    "generated": "2026-09-17",
     "label_distribution_by_method": {
       "fireprotdb_dtm_random_80_10_10_standardized": {
         "overall": {
@@ -204,6 +126,19 @@
         }
       }
     },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "uniprot_id": 0,
+        "wildtype_sequence": 0,
+        "mutation": 0,
+        "protein_sequence": 0,
+        "dtm": 0,
+        "split": 0,
+        "dtm_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
     "rows": 3338,
     "distinct_proteins": 2312,
     "sequence_length_summary": {
@@ -212,7 +147,8 @@
       "mean": 270.74,
       "median": 231.0,
       "p95": 537,
-      "count_greater_than_1024": 3
+      "count_greater_than_1024": 3,
+      "contains_non_standard_aas": 0
     },
     "categorical_high_variance_columns": [
       "dataset_id"

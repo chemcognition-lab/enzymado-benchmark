@@ -29,6 +29,17 @@ DEFINITIONS = {
         "only memorise them, and they can leak the split if the same identifier "
         "reappears across it."
     ),
+    "label_summary": (
+        "Every card summarises its label in the terms that label is measured "
+        "in, chosen by the task's label kind rather than by whether the column "
+        "happens to parse as a number. A regression target reports moments; a "
+        "binary target reports its positive prevalence, because the median of a "
+        "0/1 column states nothing; a per-residue target reports annotated "
+        "positions against total residues, because its cells hold position "
+        "lists and counting distinct ones counts annotation patterns, roughly "
+        "one per protein; and the hierarchical EC target reports classes per "
+        "level plus the width of the flattened vector."
+    ),
     "unique_classes": (
         "For a categorical column, the number of distinct non-empty values "
         "after whitespace normalisation, counted over the whole published file "
@@ -236,7 +247,8 @@ SOURCES = {
         ),
         "label": (
             "Specific activity in the assay units of the tournament release, "
-            "standardized on the training split."
+            "standardized on the training split. One row per variant: repeated "
+            "measurements are averaged."
         ),
     },
     "align_amylase_expression": {
@@ -247,7 +259,8 @@ SOURCES = {
         ),
         "label": (
             "Expression level in the assay units of the tournament release, "
-            "standardized on the training split."
+            "standardized on the training split. One row per variant: repeated "
+            "measurements are averaged."
         ),
     },
     "align_amylase_stability": {
@@ -258,7 +271,8 @@ SOURCES = {
         ),
         "label": (
             "Thermostability in the assay units of the tournament release, "
-            "standardized on the training split."
+            "standardized on the training split. One row per variant: repeated "
+            "measurements are averaged."
         ),
     },
     "align_glucosidase_activity": {
@@ -270,7 +284,8 @@ SOURCES = {
         ),
         "label": (
             "Activity in the assay units of the tournament release, "
-            "standardized on the training split."
+            "standardized on the training split. One row per variant: repeated "
+            "measurements are averaged."
         ),
     },
     "align_glucosidase_expression": {
@@ -279,7 +294,8 @@ SOURCES = {
         "description": "Soluble expression for the glucosidase variant library.",
         "label": (
             "Expression level in the assay units of the tournament release, "
-            "standardized on the training split."
+            "standardized on the training split. One row per variant: repeated "
+            "measurements are averaged."
         ),
     },
     "align_glucosidase_melting": {
@@ -291,7 +307,8 @@ SOURCES = {
         ),
         "label": (
             "Melting temperature in degrees Celsius, standardized on the "
-            "training split."
+            "training split. One row per variant: repeated "
+            "measurements are averaged."
         ),
     },
     "cleeveland_galox": {

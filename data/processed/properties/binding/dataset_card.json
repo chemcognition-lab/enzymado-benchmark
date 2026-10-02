@@ -20,19 +20,6 @@
     }
   },
   "statistics": {
-    "ratio_enzyme_proteins": null,
-    "nans_dups": {
-      "nan_counts_per_column": {
-        "uniprot_id": 0,
-        "protein_sequence": 0,
-        "ligand_id": 0,
-        "ligand_name": 0,
-        "smiles": 0,
-        "binding": 0,
-        "split": 0
-      },
-      "duplicate_rows_full": 0
-    },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
       "cluster_parameters": {
@@ -48,105 +35,7 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/binding_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "label_distribution": {
-      "overall": {
-        "total_valid_labels": 61115,
-        "classes": {
-          "1": {
-            "count": 36340,
-            "ratio": 0.5946
-          },
-          "0": {
-            "count": 24775,
-            "ratio": 0.4054
-          }
-        }
-      },
-      "train": {
-        "biolip_binding_random_80_10_10_splits": {
-          "total_valid_labels": 48893,
-          "classes": {
-            "1": {
-              "count": 27229,
-              "ratio": 0.5569
-            },
-            "0": {
-              "count": 21664,
-              "ratio": 0.4431
-            }
-          }
-        },
-        "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 48893,
-          "classes": {
-            "1": {
-              "count": 28355,
-              "ratio": 0.5799
-            },
-            "0": {
-              "count": 20538,
-              "ratio": 0.4201
-            }
-          }
-        }
-      },
-      "validation": {
-        "biolip_binding_random_80_10_10_splits": {
-          "total_valid_labels": 6111,
-          "classes": {
-            "1": {
-              "count": 4674,
-              "ratio": 0.7649
-            },
-            "0": {
-              "count": 1437,
-              "ratio": 0.2351
-            }
-          }
-        },
-        "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 6111,
-          "classes": {
-            "1": {
-              "count": 4172,
-              "ratio": 0.6827
-            },
-            "0": {
-              "count": 1939,
-              "ratio": 0.3173
-            }
-          }
-        }
-      },
-      "test": {
-        "biolip_binding_random_80_10_10_splits": {
-          "total_valid_labels": 6111,
-          "classes": {
-            "1": {
-              "count": 4437,
-              "ratio": 0.7261
-            },
-            "0": {
-              "count": 1674,
-              "ratio": 0.2739
-            }
-          }
-        },
-        "biolip_binding_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 6111,
-          "classes": {
-            "1": {
-              "count": 3813,
-              "ratio": 0.624
-            },
-            "0": {
-              "count": 2298,
-              "ratio": 0.376
-            }
-          }
-        }
-      }
-    },
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "biolip_binding_random_80_10_10_standardized": {
         "train": 22846,
@@ -159,84 +48,79 @@
         "test": 2856
       }
     },
-    "generated": "2026-09-17",
     "label_distribution_by_method": {
       "biolip_binding_random_80_10_10_standardized": {
         "overall": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 28558,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 14279,
+          "negative": 14279,
+          "positive_prevalence": 0.5
         },
         "train": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 22846,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 11423,
+          "negative": 11423,
+          "positive_prevalence": 0.5
         },
         "val": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 2856,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 1428,
+          "negative": 1428,
+          "positive_prevalence": 0.5
         },
         "test": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 2856,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 1428,
+          "negative": 1428,
+          "positive_prevalence": 0.5
         }
       },
       "biolip_binding_similarity_mmseqs2_80_10_10_standardized": {
         "overall": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 28558,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 14279,
+          "negative": 14279,
+          "positive_prevalence": 0.5
         },
         "train": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 22846,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 11423,
+          "negative": 11423,
+          "positive_prevalence": 0.5
         },
         "val": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 2856,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 1428,
+          "negative": 1428,
+          "positive_prevalence": 0.5
         },
         "test": {
-          "kind": "numeric",
+          "kind": "binary",
           "total_valid_labels": 2856,
-          "mean": 0.5,
-          "std": 0.5,
-          "min": 0.0,
-          "max": 1.0,
-          "median": 0.5
+          "positive": 1428,
+          "negative": 1428,
+          "positive_prevalence": 0.5
         }
       }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "ligand_id": 0,
+        "ligand_name": 0,
+        "smiles": 0,
+        "binding": 0,
+        "split": 0
+      },
+      "duplicate_rows_full": 0
     },
     "rows": 28558,
     "distinct_proteins": 11332,
@@ -246,7 +130,8 @@
       "mean": 403.06,
       "median": 348.0,
       "p95": 794,
-      "count_greater_than_1024": 648
+      "count_greater_than_1024": 648,
+      "contains_non_standard_aas": 0
     },
     "categorical_high_variance_columns": []
   },

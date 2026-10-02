@@ -26,6 +26,7 @@ import csv
 import datetime
 import json
 import pathlib
+import re
 import statistics
 import sys
 
@@ -37,6 +38,9 @@ import card_metadata  # noqa: E402
 from enzymado.data_loading import data_registry  # noqa: E402
 
 GLOSSARY_POINTER = "benchmark_card.json#/definitions"
+
+# Kept as is between runs: computing it needs mmseqs, so it runs separately.
+PRESERVED_STATISTICS = ("entire_protein_pool_cluster_with_mmseqs2",)
 
 
 def read_rows(path):
@@ -54,33 +58,104 @@ def numeric(values):
     return out
 
 
-def label_distribution(rows, column, split_column):
-    """Summarise the label overall and per split, without assuming it is numeric."""
-    def summarise(subset):
-        raw = [r.get(column) for r in subset]
-        values = numeric(raw)
-        if values and len(values) >= len(raw) * 0.9:
-            return {
-                "kind": "numeric",
-                "total_valid_labels": len(values),
-                "mean": round(statistics.fmean(values), 4),
-                "std": round(statistics.pstdev(values), 4) if len(values) > 1 else 0.0,
-                "min": round(min(values), 4),
-                "max": round(max(values), 4),
-                "median": round(statistics.median(values), 4),
-            }
-        counts: dict[str, int] = {}
-        for value in raw:
-            key = (value or "").strip()
-            if key:
-                counts[key] = counts.get(key, 0) + 1
-        top = sorted(counts.items(), key=lambda kv: -kv[1])[:8]
-        return {
-            "kind": "categorical",
-            "total_valid_labels": sum(counts.values()),
-            "unique_classes": len(counts),
-            "most_frequent": [{"value": k, "count": v} for k, v in top],
-        }
+def _numeric_summary(subset, column):
+    values = numeric(r.get(column) for r in subset)
+    if not values:
+        return {"kind": "numeric", "total_valid_labels": 0}
+    return {
+        "kind": "numeric",
+        "total_valid_labels": len(values),
+        "mean": round(statistics.fmean(values), 4),
+        "std": round(statistics.pstdev(values), 4) if len(values) > 1 else 0.0,
+        "min": round(min(values), 4),
+        "max": round(max(values), 4),
+        "median": round(statistics.median(values), 4),
+    }
+
+
+def _binary_summary(subset, column):
+    """Positive count and prevalence for a 0/1 label."""
+    values = [(r.get(column) or "").strip() for r in subset]
+    values = [v for v in values if v]
+    positive = sum(1 for v in values if v in {"1", "1.0", "True", "true"})
+    return {
+        "kind": "binary",
+        "total_valid_labels": len(values),
+        "positive": positive,
+        "negative": len(values) - positive,
+        "positive_prevalence": round(positive / len(values), 6) if values else None,
+    }
+
+
+def _residue_summary(subset, config):
+    """Annotated positions and their density along the sequence."""
+    positions = 0
+    residues = 0
+    annotated_proteins = 0
+    per_protein = []
+    for row in subset:
+        raw = (row.get(config.target_column) or "").strip()
+        found = [p for p in re.split(r"[\[\],;\s]+", raw) if p.strip()]
+        sequence = (row.get(config.sequence_column) or "").strip()
+        residues += len(sequence)
+        positions += len(found)
+        if found:
+            annotated_proteins += 1
+            per_protein.append(len(found))
+    return {
+        "kind": "residue_positions",
+        "total_valid_labels": len(subset),
+        "proteins_with_at_least_one_annotation": annotated_proteins,
+        "annotated_positions": positions,
+        "residues_total": residues,
+        "positive_prevalence": round(positions / residues, 6) if residues else None,
+        "annotations_per_protein": {
+            "mean": round(statistics.fmean(per_protein), 3) if per_protein else 0.0,
+            "median": statistics.median(per_protein) if per_protein else 0,
+            "max": max(per_protein) if per_protein else 0,
+        },
+    }
+
+
+def _ec_summary(subset, config):
+    """EC classes per level and width of the flat label vector."""
+    separator = getattr(config, "ec_separator", ";") or ";"
+    levels = [set() for _ in range(4)]
+    per_protein = []
+    for row in subset:
+        raw = (row.get(config.target_column) or "").strip()
+        codes = [c.strip() for c in raw.replace(separator, ",").split(",") if c.strip()]
+        per_protein.append(len(codes))
+        for code in codes:
+            parts = code.split(".")
+            for depth in range(min(4, len(parts))):
+                if parts[depth] and parts[depth] != "-":
+                    levels[depth].add(".".join(parts[: depth + 1]))
+    return {
+        "kind": "hierarchical_multilabel",
+        "total_valid_labels": len(subset),
+        "unique_classes_by_level": {
+            f"level_{i + 1}": len(s) for i, s in enumerate(levels)
+        },
+        "flat_vector_width": sum(len(s) for s in levels),
+        "ec_numbers_per_protein": {
+            "mean": round(statistics.fmean(per_protein), 3) if per_protein else 0.0,
+            "max": max(per_protein) if per_protein else 0,
+        },
+    }
+
+
+def label_distribution(rows, config, split_column):
+    """Summarise the label according to its kind (numeric, binary, residue or EC)."""
+    kind = str(config.label_kind)
+    if kind == "residue_binary_vector":
+        summarise = lambda subset: _residue_summary(subset, config)
+    elif kind == "multilabel_ec":
+        summarise = lambda subset: _ec_summary(subset, config)
+    elif kind == "binary":
+        summarise = lambda subset: _binary_summary(subset, config.target_column)
+    else:
+        summarise = lambda subset: _numeric_summary(subset, config.target_column)
 
     out = {"overall": summarise(rows)}
     for split in ("train", "val", "test"):
@@ -120,7 +195,7 @@ def recompute(config):
             counts[key] = counts.get(key, 0) + 1
         stats["split_sizes_by_method"][path.stem] = counts
         stats["label_distribution_by_method"][path.stem] = label_distribution(
-            rows, config.target_column, config.split_column)
+            rows, config, config.split_column)
 
     fields = list(reference[0]) if reference else []
     stats["nans_dups"] = {
@@ -136,6 +211,11 @@ def recompute(config):
         {(r.get(config.sequence_column) or "").strip() for r in reference} - {""})
     stats["sequence_length_summary"] = sequence_summary(
         reference, config.sequence_column)
+    standard = set("ACDEFGHIKLMNPQRSTVWY")
+    stats["sequence_length_summary"]["contains_non_standard_aas"] = sum(
+        1 for row in reference
+        if set((row.get(config.sequence_column) or "").strip().upper()) - standard
+    )
     # A column whose values are nearly all distinct carries identity, not category.
     stats["categorical_high_variance_columns"] = [
         name for name in fields
@@ -168,6 +248,9 @@ def main() -> None:
         existing = (json.loads(path.read_text(encoding="utf-8"))
                     if path.exists() else {})
 
+        # The dataset id is the file name without the split suffix, e.g. catpred_kcat.
+        stem = sorted(config.dataset_paths.values())[0].stem
+        existing["dataset_id"] = re.split(r"_(random|similarity)_", stem)[0]
         existing["property_name"] = name
         existing["task_scope"] = config.task_scope
         existing["definitions"] = GLOSSARY_POINTER
@@ -184,7 +267,10 @@ def main() -> None:
             "description": meta["label"],
             "see_also": GLOSSARY_POINTER,
         }
-        statistics_block = existing.get("statistics", {})
+        # Rebuild the block instead of merging, so fields we stop writing disappear.
+        previous = existing.get("statistics", {})
+        statistics_block = {key: previous[key] for key in PRESERVED_STATISTICS
+                            if key in previous}
         statistics_block.update(recompute(config))
         existing["statistics"] = statistics_block
 

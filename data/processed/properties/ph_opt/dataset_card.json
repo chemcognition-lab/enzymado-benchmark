@@ -20,19 +20,6 @@
     }
   },
   "statistics": {
-    "ratio_enzyme_proteins": null,
-    "nans_dups": {
-      "nan_counts_per_column": {
-        "uniprot_id": 0,
-        "protein_sequence": 0,
-        "phopt_median": 0,
-        "n_measurements": 0,
-        "phopt_std": 9539,
-        "split": 0,
-        "phopt_median_standardized": 0
-      },
-      "duplicate_rows_full": 0
-    },
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
       "cluster_parameters": {
@@ -48,70 +35,7 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/ph_opt_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "label_distribution": {
-      "overall": {
-        "total_valid_labels": 11464,
-        "mean": 7.193,
-        "std": 1.1898,
-        "min": 1.5,
-        "max": 12.0,
-        "median": 7.45
-      },
-      "train": {
-        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 9171,
-          "mean": 7.2397,
-          "std": 1.1346,
-          "min": 1.5,
-          "max": 12.0,
-          "median": 7.5
-        },
-        "brenda_phopt_random_80_10_10_splits": {
-          "total_valid_labels": 9171,
-          "mean": 7.1934,
-          "std": 1.1924,
-          "min": 1.5,
-          "max": 12.0,
-          "median": 7.45
-        }
-      },
-      "validation": {
-        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 1147,
-          "mean": 6.935,
-          "std": 1.2815,
-          "min": 2.0,
-          "max": 11.5,
-          "median": 7.3
-        },
-        "brenda_phopt_random_80_10_10_splits": {
-          "total_valid_labels": 1146,
-          "mean": 7.2269,
-          "std": 1.1612,
-          "min": 3.0,
-          "max": 11.0,
-          "median": 7.5
-        }
-      },
-      "test": {
-        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": {
-          "total_valid_labels": 1146,
-          "mean": 7.0774,
-          "std": 1.4562,
-          "min": 2.4,
-          "max": 12.0,
-          "median": 7.4
-        },
-        "brenda_phopt_random_80_10_10_splits": {
-          "total_valid_labels": 1147,
-          "mean": 7.1558,
-          "std": 1.197,
-          "min": 1.7,
-          "max": 12.0,
-          "median": 7.4
-        }
-      }
-    },
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "brenda_phopt_random_80_10_10_standardized": {
         "train": 9171,
@@ -124,7 +48,6 @@
         "val": 1147
       }
     },
-    "generated": "2026-09-17",
     "label_distribution_by_method": {
       "brenda_phopt_random_80_10_10_standardized": {
         "overall": {
@@ -203,6 +126,18 @@
         }
       }
     },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "uniprot_id": 0,
+        "protein_sequence": 0,
+        "phopt_median": 0,
+        "n_measurements": 0,
+        "phopt_std": 9539,
+        "split": 0,
+        "phopt_median_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
     "rows": 11464,
     "distinct_proteins": 11110,
     "sequence_length_summary": {
@@ -211,7 +146,8 @@
       "mean": 469.81,
       "median": 408.0,
       "p95": 921,
-      "count_greater_than_1024": 411
+      "count_greater_than_1024": 411,
+      "contains_non_standard_aas": 56
     },
     "categorical_high_variance_columns": [
       "uniprot_id"

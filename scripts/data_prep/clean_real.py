@@ -61,7 +61,7 @@ CLEVELAND_PROCESSED_COLUMNS = [
 ALIGN_PROCESSED_COLUMNS = [
     Constants.dataset_id,
     Constants.protein_sequence,
-    "source_split",
+    "n_measurements",
 ]
 ALIGN_FAMILIES = (
     "alpha-amylase",
@@ -373,20 +373,46 @@ def load_align_rows(
     if not raw_rows:
         raise ValueError(f"No ALIGN rows were loaded from {family_dir}.")
 
-    deduped_rows: list[dict[str, str]] = []
-    seen_rows: set[tuple[tuple[str, str], ...]] = set()
-    for row in raw_rows:
-        key = tuple(sorted(row.items()))
-        if key in seen_rows:
-            continue
-        seen_rows.add(key)
-        deduped_rows.append(row)
-
     measurement_columns = [
         fieldname
         for fieldname in all_fieldnames
         if fieldname not in {"mutant", "mutated_sequence", "dataset"}
     ]
+
+    def measurement_key(row: dict[str, str]) -> tuple:
+        """Sequence plus every measurement as a number, so 0.600 equals 0.6."""
+        values = tuple(
+            float(row[c]) if clean_text(row.get(c)) else None
+            for c in measurement_columns
+        )
+        return normalize_sequence(row.get("mutated_sequence")), values
+
+    # Step 1: the tournament's train file already holds its test rows; drop the copies.
+    train_keys = {
+        measurement_key(row) for row in raw_rows if row["source_split"] == "train"
+    }
+    kept_rows = [
+        row
+        for row in raw_rows
+        if row["source_split"] == "train" or measurement_key(row) not in train_keys
+    ]
+    dropped_test = len(raw_rows) - len(kept_rows)
+
+    # Step 2: one row per distinct measurement, whatever the file, round or formatting.
+    deduped_rows: list[dict[str, str]] = []
+    seen_keys: set[tuple] = set()
+    for row in kept_rows:
+        key = measurement_key(row)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped_rows.append(row)
+
+    print(
+        f"{family}: {len(raw_rows)} raw rows, {dropped_test} tournament test rows "
+        f"already in train, {len(kept_rows) - len(deduped_rows)} duplicate "
+        f"measurements, {len(deduped_rows)} kept"
+    )
     return all_fieldnames, deduped_rows, measurement_columns
 
 
@@ -415,8 +441,9 @@ def build_align_rows(
     )
 
     interim_rows: list[dict[str, str]] = []
-    processed_rows_by_task: dict[str, list[dict[str, str]]] = {
-        measurement_column: [] for measurement_column in measurement_columns
+    # Step 3: repeated measurements of a variant are averaged into one row.
+    values_by_task: dict[str, dict[str, list[float]]] = {
+        measurement_column: {} for measurement_column in measurement_columns
     }
 
     for row_index, row in enumerate(deduped_rows, start=1):
@@ -441,32 +468,35 @@ def build_align_rows(
 
         for measurement_column in measurement_columns:
             raw_value = clean_text(row.get(measurement_column))
-            if not raw_value:
-                continue
-            task_name = normalize_align_column_name(measurement_column)
-            task_row = {
-                Constants.dataset_id: dataset_id,
-                Constants.protein_sequence: protein_sequence,
-                "source_split": clean_text(row.get("source_split")),
-            }
-            if "dataset" in all_fieldnames:
-                task_row["source_dataset"] = clean_text(row.get("dataset"))
-            task_row[task_name] = str(float(raw_value))
-            processed_rows_by_task[measurement_column].append(task_row)
+            if raw_value:
+                values_by_task[measurement_column].setdefault(
+                    protein_sequence, []
+                ).append(float(raw_value))
 
     processed_outputs: list[tuple[str, str, list[str], list[dict[str, str]]]] = []
     for measurement_column in measurement_columns:
         task_name = normalize_align_column_name(measurement_column)
-        processed_fieldnames = list(ALIGN_PROCESSED_COLUMNS)
-        if "dataset" in all_fieldnames:
-            processed_fieldnames.append("source_dataset")
-        processed_fieldnames.append(task_name)
+        by_sequence = values_by_task[measurement_column]
+        processed_rows = [
+            {
+                Constants.dataset_id: build_align_dataset_id(family, index),
+                Constants.protein_sequence: sequence,
+                "n_measurements": str(len(values)),
+                task_name: str(sum(values) / len(values)),
+            }
+            for index, (sequence, values) in enumerate(by_sequence.items(), start=1)
+        ]
+        repeated = sum(1 for values in by_sequence.values() if len(values) > 1)
+        print(
+            f"  {task_name}: {sum(map(len, by_sequence.values()))} measurements, "
+            f"{len(processed_rows)} variants, {repeated} averaged over repeats"
+        )
         processed_outputs.append(
             (
                 measurement_column,
                 task_name,
-                processed_fieldnames,
-                processed_rows_by_task[measurement_column],
+                list(ALIGN_PROCESSED_COLUMNS) + [task_name],
+                processed_rows,
             )
         )
 
@@ -567,8 +597,9 @@ def build_align_section_record(
                         task_name,
                     ],
                     "deduplicate_by": [
-                        Constants.dataset_id,
+                        Constants.protein_sequence,
                     ],
+                    "aggregate_repeats": "mean over distinct measurements",
                 },
                 "provenance": {
                     "source_name": "ALiGN",

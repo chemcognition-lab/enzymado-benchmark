@@ -11,55 +11,55 @@
   "label": {
     "column": "specific_activity_standardized",
     "label_kind": "scalar_regression",
-    "description": "Specific activity in the assay units of the tournament release, standardized on the training split.",
+    "description": "Specific activity in the assay units of the tournament release, standardized on the training split. One row per variant: repeated measurements are averaged.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-17",
+    "generated": "2026-09-30",
     "split_sizes_by_method": {
       "alpha_amylase__specific_activity_random_80_10_10_standardized": {
-        "test": 964,
-        "val": 964,
-        "train": 7627
+        "train": 7230,
+        "val": 901,
+        "test": 900
       }
     },
     "label_distribution_by_method": {
       "alpha_amylase__specific_activity_random_80_10_10_standardized": {
         "overall": {
           "kind": "numeric",
-          "total_valid_labels": 9555,
-          "mean": 0.0005,
-          "std": 0.9997,
-          "min": -0.9835,
-          "max": 21.25,
-          "median": 0.067
+          "total_valid_labels": 9031,
+          "mean": -0.0012,
+          "std": 0.9977,
+          "min": -1.0624,
+          "max": 24.1123,
+          "median": 0.1271
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 7627,
-          "mean": -0.0,
+          "total_valid_labels": 7230,
+          "mean": 0.0,
           "std": 1.0,
-          "min": -0.9835,
-          "max": 21.25,
-          "median": 0.067
+          "min": -1.0624,
+          "max": 24.1123,
+          "median": 0.1271
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 964,
-          "mean": -0.0055,
-          "std": 0.9745,
-          "min": -0.9835,
-          "max": 14.543,
-          "median": 0.067
+          "total_valid_labels": 901,
+          "mean": -0.0104,
+          "std": 0.9743,
+          "min": -1.0624,
+          "max": 10.0309,
+          "median": 0.1271
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 964,
-          "mean": 0.01,
-          "std": 1.0219,
-          "min": -0.9835,
-          "max": 11.9641,
-          "median": 0.067
+          "total_valid_labels": 900,
+          "mean": -0.0014,
+          "std": 1.002,
+          "min": -1.0624,
+          "max": 16.0475,
+          "median": 0.1271
         }
       }
     },
@@ -67,15 +67,14 @@
       "nan_counts_per_column": {
         "dataset_id": 0,
         "protein_sequence": 0,
-        "source_split": 0,
-        "source_dataset": 0,
+        "n_measurements": 0,
         "specific_activity": 0,
         "split": 0,
         "specific_activity_standardized": 0
       },
       "duplicate_rows_full": 0
     },
-    "rows": 9555,
+    "rows": 9031,
     "distinct_proteins": 9031,
     "sequence_length_summary": {
       "min": 425,
@@ -83,10 +82,12 @@
       "mean": 425.0,
       "median": 425,
       "p95": 425,
-      "count_greater_than_1024": 0
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
     },
     "categorical_high_variance_columns": [
       "dataset_id"
     ]
-  }
+  },
+  "dataset_id": "alpha_amylase__specific_activity"
 }
