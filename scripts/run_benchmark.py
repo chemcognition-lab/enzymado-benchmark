@@ -236,7 +236,6 @@ def _build_attention_overrides(
     *,
     lr: float | None,
     gradient_clip_norm: float | None,
-    pre_layer_norm: bool,
     batch_diagnostics: bool,
     diagnostic_loss_threshold: float,
     diagnostic_z_threshold: float,
@@ -254,8 +253,6 @@ def _build_attention_overrides(
                 "attention_gradient_clip_norm must be positive when provided."
             )
         overrides["gradient_clip_norm"] = float(gradient_clip_norm)
-    if pre_layer_norm:
-        overrides["pre_attention_layer_norm"] = True
     if batch_diagnostics:
         overrides.update(
             {
@@ -483,7 +480,6 @@ def main(
     deterministic: bool = False,  # noqa: FBT001, FBT002
     attention_lr: float | None = None,
     attention_gradient_clip_norm: float | None = None,
-    attention_pre_layer_norm: bool = False,  # noqa: FBT001, FBT002
     attention_batch_diagnostics: bool = False,  # noqa: FBT001, FBT002
     diagnostic_loss_threshold: float = 100.0,
     diagnostic_z_threshold: float = 20.0,
@@ -495,7 +491,6 @@ def main(
     attention_overrides = _build_attention_overrides(
         lr=attention_lr,
         gradient_clip_norm=attention_gradient_clip_norm,
-        pre_layer_norm=attention_pre_layer_norm,
         batch_diagnostics=attention_batch_diagnostics,
         diagnostic_loss_threshold=diagnostic_loss_threshold,
         diagnostic_z_threshold=diagnostic_z_threshold,
@@ -707,11 +702,6 @@ def _add_attention_args(parser: argparse.ArgumentParser) -> None:
         help="Optional max gradient norm for attention models only.",
     )
     parser.add_argument(
-        "--attention_pre_layer_norm",
-        action="store_true",
-        help="Enable the experimental LayerNorm immediately before pooled attention.",
-    )
-    parser.add_argument(
         "--attention_batch_diagnostics",
         action="store_true",
         help="Stream per-batch attention diagnostics into each run directory.",
@@ -765,7 +755,6 @@ def _run_cli() -> None:
         deterministic=args.deterministic,
         attention_lr=args.attention_lr,
         attention_gradient_clip_norm=args.attention_gradient_clip_norm,
-        attention_pre_layer_norm=args.attention_pre_layer_norm,
         attention_batch_diagnostics=args.attention_batch_diagnostics,
         diagnostic_loss_threshold=args.diagnostic_loss_threshold,
         diagnostic_z_threshold=args.diagnostic_z_threshold,

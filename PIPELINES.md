@@ -183,6 +183,16 @@ cells: 8 tasks x 1 split x 3 rating-eligible metrics (`mae`, `rmse`,
 - Every registered property has a training path for the repository's model families:
   `MLP`, linear/SGD, and `XGBoost`.
 - For attention models, the linear baseline name is `attention_linear_*`.
+- Attention uses two blocks. Global tasks use `ResidualAttentionAggregation`:
+  LayerNorm, attention queried by the mean of the normalized residues, plus the
+  mean itself as a residual, so it returns one vector per protein. Residue tasks
+  use `AttentionResidueMixer`: the same LayerNorm and residual, but every residue
+  is a query and nothing is pooled.
+- Global attention heads train like their mean-pool counterparts: same optimizer,
+  learning rate, weight decay, dropout and early stopping, the pooled vector
+  standardized with train-set mean-pool statistics, and gradients accumulated to
+  the mean-pool batch (16 x 16 = 256 for the MLP and EC heads, the whole epoch
+  for the full-batch linear head). `tests/test_attention_pooling.py` locks this.
 - `ec_number` supports XGBoost through a flat concatenated EC target vector.
 - `active_sites` and `binding_site` do use a dedicated structured model map.
 - `fluorescence` was dropped from the benchmark card because it does not contain

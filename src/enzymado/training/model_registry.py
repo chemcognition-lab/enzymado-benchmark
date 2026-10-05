@@ -416,6 +416,16 @@ def train_model_loader(
 
 
 # Attention-model registries grouped by model family
+#
+# Pooled (global) attention entries train exactly like their mean-pool
+# counterparts apart from the attention block. The attention route loads 16
+# proteins per loader batch (long residue tensors), so gradients are accumulated
+# to reach the same effective batch: 16 x 16 = 256 for the MLP and EC heads, and
+# the whole epoch (0) for the full-batch linear head.
+_ATTENTION_LOADER_BATCH = 16
+_MEAN_POOL_BATCH = 256
+_ACCUMULATE_TO_MEAN_POOL_BATCH = _MEAN_POOL_BATCH // _ATTENTION_LOADER_BATCH
+_ACCUMULATE_WHOLE_EPOCH = 0
 
 
 def _make_attention_entry(
@@ -440,6 +450,7 @@ def _attention_linear_classifier_entry() -> enzymado.types.ModelInfo:
             "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "gradient_accumulation_steps": _ACCUMULATE_WHOLE_EPOCH,
         },
     )
 
@@ -454,6 +465,7 @@ def _attention_linear_regressor_entry() -> enzymado.types.ModelInfo:
             "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "gradient_accumulation_steps": _ACCUMULATE_WHOLE_EPOCH,
         },
     )
 
@@ -463,11 +475,13 @@ def _attention_ec_linear_entry() -> enzymado.types.ModelInfo:
         AttentionECMultiHeadClassifierTorch,
         {
             "hidden_dims": (),
-            "lr": 0.001,
+            # Same learning rate as the mean-pool EC linear head.
+            "lr": 0.01,
             "epochs": 200,
             "optimizer_name": "adamw",
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
 
@@ -498,6 +512,7 @@ def _attention_mlp_classifier_entry() -> enzymado.types.ModelInfo:
             "dropout": 0.1,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
 
@@ -514,6 +529,7 @@ def _attention_mlp_regressor_entry() -> enzymado.types.ModelInfo:
             "dropout": 0.1,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
 
@@ -531,6 +547,7 @@ def _attention_ec_mlp_entry() -> enzymado.types.ModelInfo:
             "batch_size": 256,
             "early_stopping_patience": 20,
             "early_stopping_min_delta": 1e-4,
+            "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
 

@@ -65,13 +65,13 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
             num_attention_heads=self.num_attention_heads,
             attention_dropout_rate=self.attention_dropout_rate,
             dropout=self.dropout,
-            pre_attention_layer_norm=self.pre_attention_layer_norm,
         ).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(
             self, checkpoint_path, dataloader=dataloader
         )
         self._configure_batch_diagnostics(checkpoint_path, start_epoch)
         self._maybe_fit_pooled_scalers(dataloader, batch_kind)
+        self._fit_pooled_standardizer(dataloader, batch_kind)
         optimizer = make_optimizer(
             self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay
         )
@@ -82,9 +82,34 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
             with attention_autocast(self.device):
                 return self.model(normalized_seq_t, mask_t, normalized_extra_t).float()
 
+        # 1 steps once per loader batch (the published behaviour). k > 1 sums k
+        # loader batches into one step and 0 sums the whole epoch, matching the
+        # full-batch linear head of the mean-pool route. Each micro-batch loss is
+        # weighted by its size, so a step equals the step of one batch holding
+        # every sample of its group, even when the last micro-batch is short.
+        accumulation = int(getattr(self, "gradient_accumulation_steps", 1))
+
         def train_epoch():
             self.model.train()
             diagnostic_epoch = self._next_diagnostic_epoch()
+            group_batches = 0
+            group_samples = 0
+            last = None
+            optimizer.zero_grad()
+
+            def step(batch_index, batch, loss, max_abs_z):
+                grad_norm = self._prepare_gradients()
+                self._record_batch_diagnostic(
+                    epoch=diagnostic_epoch,
+                    batch_index=batch_index,
+                    batch=batch,
+                    loss=float(loss.detach().item()),
+                    max_abs_z=max_abs_z,
+                    grad_norm=grad_norm,
+                )
+                optimizer.step()
+                optimizer.zero_grad()
+
             for batch_index, batch in enumerate(dataloader, start=1):
                 seq_t, mask_t, extra_t = batch_to_attention_tensors(
                     batch, batch_kind, self.device
@@ -101,19 +126,23 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
                     if self.record_batch_diagnostics
                     else 0.0
                 )
-                optimizer.zero_grad()
                 loss = criterion(forward_logits(seq_t, mask_t, extra_t), y_t)
-                enzymado.models.training_protocol.backward_checked(loss)
-                grad_norm = self._prepare_gradients()
-                self._record_batch_diagnostic(
-                    epoch=diagnostic_epoch,
-                    batch_index=batch_index,
-                    batch=batch,
-                    loss=float(loss.detach().item()),
-                    max_abs_z=max_abs_z,
-                    grad_norm=grad_norm,
-                )
-                optimizer.step()
+                if accumulation == 1:
+                    enzymado.models.training_protocol.backward_checked(loss)
+                    step(batch_index, batch, loss, max_abs_z)
+                    continue
+                n_samples = int(y_t.shape[0])
+                enzymado.models.training_protocol.backward_checked(loss * n_samples)
+                group_batches += 1
+                group_samples += n_samples
+                last = (batch_index, batch, loss, max_abs_z)
+                if group_batches == accumulation:
+                    self._scale_gradients(1.0 / group_samples)
+                    step(*last)
+                    group_batches = group_samples = 0
+            if group_batches:
+                self._scale_gradients(1.0 / group_samples)
+                step(*last)
 
         def val_loss():
             self.model.eval()

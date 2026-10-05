@@ -34,7 +34,6 @@ def test_parser_defaults_are_stable() -> None:
         "seed": 42,
         "attention_lr": None,
         "attention_gradient_clip_norm": None,
-        "attention_pre_layer_norm": False,
         "attention_batch_diagnostics": False,
         "diagnostic_loss_threshold": 100.0,
         "diagnostic_z_threshold": 20.0,

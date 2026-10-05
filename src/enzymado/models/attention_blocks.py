@@ -58,24 +58,19 @@ class MeanAggregation(nn.Module):
         return (x * valid_mask).sum(dim=1) / valid_mask.sum(dim=1).clamp(min=1.0)
 
 
-class AttentionAggregation(nn.Module):
-    """Aggregate residue embeddings with a learned cross-attention query."""
+class ResidualAttentionAggregation(nn.Module):
+    """Attention pooling for global tasks: the mean plus a pre-norm attention update.
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int = 1,
-        dropout_rate: float = 0.0,
-        pre_layer_norm: bool = False,
-    ):
+    Same LayerNorm and residual as ``AttentionResidueMixer``; the one difference is
+    that the mean of the normalized residues is the only query, so the block
+    returns one vector per protein instead of one per residue. Because of the
+    residual, a silent attention branch leaves exactly the mean-pooled embedding.
+    """
+
+    def __init__(self, embed_dim: int, num_heads: int = 1, dropout_rate: float = 0.0):
         super().__init__()
         self.input_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout_rate = dropout_rate
-        self.pre_layer_norm = bool(pre_layer_norm)
-        self.input_layer_norm = (
-            nn.LayerNorm(embed_dim) if self.pre_layer_norm else nn.Identity()
-        )
+        self.layer_norm = nn.LayerNorm(embed_dim)
         self.cross_attn_layer = nn.MultiheadAttention(
             embed_dim=embed_dim,
             num_heads=num_heads,
@@ -89,16 +84,17 @@ class AttentionAggregation(nn.Module):
         x: Float[Tensor, "batch seq dim"],
         key_padding_mask: Bool[Tensor, "batch seq"] | None = None,
     ) -> tuple[Float[Tensor, "batch dim"], None, None]:
-        attn_input = self.input_layer_norm(x)
-        avg_emb = self.mean_agg(attn_input, key_padding_mask).unsqueeze(1)
-        global_emb, _ = self.cross_attn_layer(
-            query=avg_emb,
-            key=attn_input,
-            value=attn_input,
+        normed = self.layer_norm(x)
+        query = self.mean_agg(normed, key_padding_mask).unsqueeze(1)
+        attended, _ = self.cross_attn_layer(
+            query=query,
+            key=normed,
+            value=normed,
             key_padding_mask=key_padding_mask,
             need_weights=False,
         )
-        return global_emb.squeeze(1), None, None
+        pooled = self.mean_agg(x, key_padding_mask) + attended.squeeze(1)
+        return pooled, None, None
 
 
 def batch_to_attention_tensors(batch, batch_kind: str, device: torch.device):
@@ -145,15 +141,18 @@ class AttentionPredictor(nn.Module):
         num_attention_heads: int = 1,
         attention_dropout_rate: float = 0.0,
         dropout: float = 0.0,
-        pre_attention_layer_norm: bool = False,
     ):
         super().__init__()
-        self.pooler = AttentionAggregation(
+        self.pooler = ResidualAttentionAggregation(
             input_dim,
             num_heads=num_attention_heads,
             dropout_rate=attention_dropout_rate,
-            pre_layer_norm=pre_attention_layer_norm,
         )
+        # Fixed per-feature statistics of the train-set mean-pooled vector, set by
+        # the wrapper before training, so the head sees inputs on the same scale
+        # as the mean-pool route.
+        self.register_buffer("pooled_mean", torch.zeros(input_dim))
+        self.register_buffer("pooled_scale", torch.ones(input_dim))
         self.extra_dim = extra_dim
         self.head = nn_blocks.MLPModel(
             input_dim + extra_dim, hidden_dims, output_dim, dropout=dropout
@@ -167,6 +166,7 @@ class AttentionPredictor(nn.Module):
     ):
         key_padding_mask = ~mask if mask is not None else None
         pooled, weights, logits = self.pooler(seq_emb, key_padding_mask)
+        pooled = (pooled - self.pooled_mean) / self.pooled_scale
         if extra_features is not None:
             pooled = torch.cat([pooled, extra_features], dim=1)
         return pooled, weights, logits
@@ -193,15 +193,18 @@ class AttentionMultiHeadPredictor(nn.Module):
         num_attention_heads: int = 1,
         attention_dropout_rate: float = 0.0,
         dropout: float = 0.0,
-        pre_attention_layer_norm: bool = False,
     ):
         super().__init__()
-        self.pooler = AttentionAggregation(
+        self.pooler = ResidualAttentionAggregation(
             input_dim,
             num_heads=num_attention_heads,
             dropout_rate=attention_dropout_rate,
-            pre_layer_norm=pre_attention_layer_norm,
         )
+        # Fixed per-feature statistics of the train-set mean-pooled vector, set by
+        # the wrapper before training, so the head sees inputs on the same scale
+        # as the mean-pool route.
+        self.register_buffer("pooled_mean", torch.zeros(input_dim))
+        self.register_buffer("pooled_scale", torch.ones(input_dim))
         self.extra_dim = extra_dim
         self.backbone = nn_blocks.SharedMLPBackbone(
             input_dim + extra_dim, hidden_dims, dropout=dropout
@@ -222,6 +225,7 @@ class AttentionMultiHeadPredictor(nn.Module):
     ):
         key_padding_mask = ~mask if mask is not None else None
         pooled, weights, logits = self.pooler(seq_emb, key_padding_mask)
+        pooled = (pooled - self.pooled_mean) / self.pooled_scale
         if extra_features is not None:
             pooled = torch.cat([pooled, extra_features], dim=1)
         features = self.backbone(pooled)
@@ -311,7 +315,7 @@ class AttentionResiduePredictor(nn.Module):
 
 __all__ = [
     "MeanAggregation",
-    "AttentionAggregation",
+    "ResidualAttentionAggregation",
     "attention_autocast",
     "batch_to_attention_tensors",
     "AttentionPredictor",

@@ -71,6 +71,10 @@ class AttentionResidueBinaryClassifierImplementation(_BaseAttentionWrapper):
                 "AttentionResidueBinaryClassifierTorch does not support "
                 f"batch_kind='{batch_kind}'"
             )
+        if getattr(self, "gradient_accumulation_steps", 1) != 1:
+            raise ValueError(
+                "gradient accumulation is only implemented for pooled global tasks."
+            )
         first_batch = next(iter(dataloader))
         x_t, _, _, _ = self._batch_to_input(first_batch, self.device)
         input_dim = int(x_t.shape[2])

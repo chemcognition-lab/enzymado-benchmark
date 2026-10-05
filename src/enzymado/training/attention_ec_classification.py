@@ -57,12 +57,12 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
         gradient_clip_norm: float | None = None,
-        pre_attention_layer_norm: bool = False,
         record_batch_diagnostics: bool = False,
         diagnostic_loss_threshold: float | None = 100.0,
         diagnostic_z_threshold: float | None = 20.0,
         diagnostic_grad_norm_threshold: float | None = 1000.0,
         device: str | torch.device | None = None,
+        gradient_accumulation_steps: int = 1,
     ):
         super().__init__(
             hidden_dims=hidden_dims,
@@ -76,12 +76,12 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
             early_stopping_patience=early_stopping_patience,
             early_stopping_min_delta=early_stopping_min_delta,
             gradient_clip_norm=gradient_clip_norm,
-            pre_attention_layer_norm=pre_attention_layer_norm,
             record_batch_diagnostics=record_batch_diagnostics,
             diagnostic_loss_threshold=diagnostic_loss_threshold,
             diagnostic_z_threshold=diagnostic_z_threshold,
             diagnostic_grad_norm_threshold=diagnostic_grad_norm_threshold,
             device=device,
+            gradient_accumulation_steps=gradient_accumulation_steps,
         )
         self.batch_size = batch_size
         self.output_dims_ = None
@@ -107,13 +107,13 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
             num_attention_heads=self.num_attention_heads,
             attention_dropout_rate=self.attention_dropout_rate,
             dropout=self.dropout,
-            pre_attention_layer_norm=self.pre_attention_layer_norm,
         ).to(self.device)
         start_epoch = maybe_resume_torch_wrapper(
             self, checkpoint_path, dataloader=dataloader
         )
         self._configure_batch_diagnostics(checkpoint_path, start_epoch)
         self._maybe_fit_pooled_scalers(dataloader, batch_kind)
+        self._fit_pooled_standardizer(dataloader, batch_kind)
         optimizer = make_optimizer(
             self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay
         )
@@ -124,9 +124,33 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
             with attention_autocast(self.device):
                 return self.model(normalized_seq_t, mask_t, normalized_extra_t)
 
+        # 1 steps once per loader batch (the published behaviour); k > 1 sums k
+        # loader batches into one step and 0 the whole epoch. The EC loss is a
+        # masked mean per level, so the mean of micro-batch losses equals the
+        # full-batch loss when micro-batches carry the same number of valid labels
+        # per level, and is a close approximation otherwise.
+        accumulation = int(getattr(self, "gradient_accumulation_steps", 1))
+
         def train_epoch():
             self.model.train()
             diagnostic_epoch = self._next_diagnostic_epoch()
+            pending = 0
+            last = None
+            optimizer.zero_grad()
+
+            def step(batch_index, batch, loss, max_abs_z):
+                grad_norm = self._prepare_gradients()
+                self._record_batch_diagnostic(
+                    epoch=diagnostic_epoch,
+                    batch_index=batch_index,
+                    batch=batch,
+                    loss=float(loss.detach().item()),
+                    max_abs_z=max_abs_z,
+                    grad_norm=grad_norm,
+                )
+                optimizer.step()
+                optimizer.zero_grad()
+
             for batch_index, batch in enumerate(dataloader, start=1):
                 seq_t, mask_t, extra_t = batch_to_attention_tensors(
                     batch, batch_kind, self.device
@@ -150,24 +174,26 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
                     if self.record_batch_diagnostics
                     else 0.0
                 )
-                optimizer.zero_grad()
                 logits_by_level = forward_logits(seq_t, mask_t, extra_t)
                 loss = compute_ec_batch_loss(
                     logits_by_level, y_t, target_mask_t, criterion
                 )
                 if loss is None:
                     continue
+                if accumulation == 1:
+                    enzymado.models.training_protocol.backward_checked(loss)
+                    step(batch_index, batch, loss, max_abs_z)
+                    continue
                 enzymado.models.training_protocol.backward_checked(loss)
-                grad_norm = self._prepare_gradients()
-                self._record_batch_diagnostic(
-                    epoch=diagnostic_epoch,
-                    batch_index=batch_index,
-                    batch=batch,
-                    loss=float(loss.detach().item()),
-                    max_abs_z=max_abs_z,
-                    grad_norm=grad_norm,
-                )
-                optimizer.step()
+                pending += 1
+                last = (batch_index, batch, loss, max_abs_z)
+                if pending == accumulation:
+                    self._scale_gradients(1.0 / pending)
+                    step(*last)
+                    pending = 0
+            if pending:
+                self._scale_gradients(1.0 / pending)
+                step(*last)
 
         def val_loss():
             self.model.eval()

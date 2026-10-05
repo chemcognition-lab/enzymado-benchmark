@@ -49,7 +49,6 @@ mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${T
 : "${EXPERIMENT_NAME:=}"
 : "${ATTENTION_LR:=}"
 : "${ATTENTION_GRADIENT_CLIP_NORM:=}"
-: "${ATTENTION_PRE_LAYER_NORM:=0}"
 : "${ATTENTION_BATCH_DIAGNOSTICS:=0}"
 : "${DIAGNOSTIC_LOSS_THRESHOLD:=100}"
 : "${DIAGNOSTIC_Z_THRESHOLD:=20}"
@@ -163,7 +162,6 @@ fi
 if [[ -n "${ATTENTION_GRADIENT_CLIP_NORM}" ]]; then
     echo "Attention gradient clip norm: ${ATTENTION_GRADIENT_CLIP_NORM}"
 fi
-echo "Attention pre-LayerNorm: ${ATTENTION_PRE_LAYER_NORM}"
 echo "Attention batch diagnostics: ${ATTENTION_BATCH_DIAGNOSTICS}"
 if [[ -n "${MODEL_PREFIX}" ]]; then
     echo "Model prefix: ${MODEL_PREFIX}"
@@ -203,10 +201,6 @@ fi
 
 if [[ -n "${ATTENTION_GRADIENT_CLIP_NORM}" ]]; then
     TRAIN_ARGS+=(--attention_gradient_clip_norm "${ATTENTION_GRADIENT_CLIP_NORM}")
-fi
-
-if [[ "${ATTENTION_PRE_LAYER_NORM}" == "1" || "${ATTENTION_PRE_LAYER_NORM}" == "true" || "${ATTENTION_PRE_LAYER_NORM}" == "TRUE" ]]; then
-    TRAIN_ARGS+=(--attention_pre_layer_norm)
 fi
 
 if [[ "${ATTENTION_BATCH_DIAGNOSTICS}" == "1" || "${ATTENTION_BATCH_DIAGNOSTICS}" == "true" || "${ATTENTION_BATCH_DIAGNOSTICS}" == "TRUE" ]]; then
@@ -275,4 +269,5 @@ if [[ "${ATTACH_PROBABILITIES}" == "1" || "${ATTACH_PROBABILITIES}" == "true" ||
     TRAIN_ARGS+=(--attach_probabilities)
 fi
 
+echo "enzymado imported from: $(python -c "import sys; sys.path.insert(0, '${REPO}/src'); import enzymado; print(enzymado.__file__)")"
 python -u "${REPO}/scripts/run_benchmark.py" "${TRAIN_ARGS[@]}"

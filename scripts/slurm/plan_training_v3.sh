@@ -27,7 +27,7 @@ plan_job() {
         "SKIP_LABEL_KINDS=${skip}" "MODEL_PREFIX=" "EMB_NAME="
         "SEED=42" "OVERWRITE_RESULTS=0" "EXPERIMENT_NAME="
         "ATTENTION_LR=" "ATTENTION_GRADIENT_CLIP_NORM="
-        "ATTENTION_PRE_LAYER_NORM=0" "ATTENTION_BATCH_DIAGNOSTICS=0"
+        "ATTENTION_BATCH_DIAGNOSTICS=0"
         "COMMON_IDS_PATH=${REPO}/results/embedding_intersection/common_ids.txt"
         "ATTACH_PROBABILITIES=${ATTACH_PROBABILITIES}"
         sbatch "--account=${AIP_ACCOUNT}" "--array=${ARRAY_SPEC}"

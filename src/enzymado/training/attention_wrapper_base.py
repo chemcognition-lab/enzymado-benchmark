@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 
 from enzymado.models.attention_blocks import (
+    MeanAggregation,
     batch_to_attention_tensors,
 )
 from enzymado.models.common import (
@@ -62,13 +63,17 @@ class _BaseAttentionWrapper:
         early_stopping_patience: int | None = None,
         early_stopping_min_delta: float = 0.0,
         gradient_clip_norm: float | None = None,
-        pre_attention_layer_norm: bool = False,
         record_batch_diagnostics: bool = False,
         diagnostic_loss_threshold: float | None = 100.0,
         diagnostic_z_threshold: float | None = 20.0,
         diagnostic_grad_norm_threshold: float | None = 1000.0,
         device: str | torch.device | None = None,
+        gradient_accumulation_steps: int = 1,
     ):
+        if int(gradient_accumulation_steps) < 0:
+            raise ValueError(
+                "gradient_accumulation_steps must be >= 0 (0 = whole epoch)."
+            )
         self.hidden_dims = tuple(hidden_dims)
         self.lr = lr
         self.epochs = epochs
@@ -82,7 +87,7 @@ class _BaseAttentionWrapper:
         if gradient_clip_norm is not None and gradient_clip_norm <= 0:
             raise ValueError("gradient_clip_norm must be positive when provided.")
         self.gradient_clip_norm = gradient_clip_norm
-        self.pre_attention_layer_norm = bool(pre_attention_layer_norm)
+        self.gradient_accumulation_steps = int(gradient_accumulation_steps)
         self.record_batch_diagnostics = bool(record_batch_diagnostics)
         self.diagnostic_loss_threshold = diagnostic_loss_threshold
         self.diagnostic_z_threshold = diagnostic_z_threshold
@@ -353,6 +358,47 @@ class _BaseAttentionWrapper:
         if extra_t is None or self.extra_mean_ is None or self.extra_scale_ is None:
             return extra_t
         return (extra_t.float() - self.extra_mean_) / self.extra_scale_
+
+    def _scale_gradients(self, factor: float) -> None:
+        """Rescale accumulated gradients in place before an optimizer step."""
+        for param in self.model.parameters():
+            if param.grad is not None:
+                param.grad.mul_(factor)
+
+    def _fit_pooled_standardizer(self, dataloader, batch_kind: str) -> None:
+        """Set the model's pooled-vector statistics from the train split.
+
+        Uses the mean-pooled normalized sequence per protein, which is a per-
+        feature affine map of the raw mean-pooled embedding, so standardizing it
+        reproduces exactly the input scale of the published mean-pool route.
+        Skipped when the model already carries fitted statistics (resume).
+        """
+        model = self.model
+        if bool(getattr(self, "pooled_standardizer_fitted_", False)):
+            return
+        mean_agg = MeanAggregation()
+        total = None
+        total_sq = None
+        count = 0
+        with torch.no_grad():
+            for batch in dataloader:
+                seq_t, mask_t, _ = batch_to_attention_tensors(
+                    batch, batch_kind, self.device
+                )
+                pooled = mean_agg(self._normalize_sequence(seq_t), ~mask_t).double()
+                total = pooled.sum(0) if total is None else total + pooled.sum(0)
+                sq = pooled.pow(2).sum(0)
+                total_sq = sq if total_sq is None else total_sq + sq
+                count += int(pooled.shape[0])
+        if not count:
+            raise ValueError("Cannot fit the pooled standardizer on an empty split.")
+        mean = total / count
+        var = (total_sq / count - mean.pow(2)).clamp(min=0.0)
+        scale = var.sqrt()
+        scale[scale <= 1e-6] = 1.0
+        model.pooled_mean.copy_(mean.float())
+        model.pooled_scale.copy_(scale.float())
+        self.pooled_standardizer_fitted_ = True
 
     def _maybe_fit_pooled_scalers(self, dataloader, batch_kind: str) -> None:
         """Fit sequence (+ extra) scalers once, skipping when already known.

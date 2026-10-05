@@ -395,9 +395,11 @@ def test_attention_route_matches_frozen_canary(tmp_path: Path) -> None:
     history = list(csv.DictReader((run_dir / "training_log.csv").open()))
     assert history[-1]["best_epoch"] == "1"
     assert history[-1]["improved_over_initialization"] == "False"
+    # Re-frozen for the residual attention block with pooled standardization;
+    # the cross-attention block without residual gave [0.55078125, 0.66015625].
     np.testing.assert_allclose(
         payload.predictions,
-        [0.55078125, 0.66015625],
+        [0.486328125, 0.99609375],
         rtol=0.0,
         atol=1e-7,
     )
