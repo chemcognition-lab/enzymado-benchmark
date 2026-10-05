@@ -59,6 +59,8 @@ class PooledTaskData:
     sample_ids_val: tuple[str, ...]
     sample_ids_test: tuple[str, ...]
     cleanup: Callable[[], None]
+    # Ligand descriptor columns of x, left unscaled by the neural wrappers.
+    unscaled_columns: tuple[int, int] | None = None
 
 
 @dataclass
@@ -308,6 +310,12 @@ def _build_pooled_data(
     if len(val_bundle.dataset) > 0:
         x_va2, y_va2 = build_xy_pooled(val_bundle, config.batch_kind)
     x_te2, y_te2 = build_xy_pooled(test_bundle, config.batch_kind)
+    unscaled_columns = None
+    if config.batch_kind == "protein_ligand_global" and len(train_bundle.dataset):
+        # build_xy_pooled lays x out as [protein | ligand | context].
+        sample = train_bundle.dataset[0]
+        start = int(sample["protein_emb"].shape[-1])
+        unscaled_columns = (start, start + int(sample["ligand_feat"].shape[0]))
 
     return PooledTaskData(
         config=config,
@@ -333,6 +341,7 @@ def _build_pooled_data(
         sample_ids_val=_sample_ids(val_bundle.dataset.rows),
         sample_ids_test=_sample_ids(test_bundle.dataset.rows),
         cleanup=lambda: None,
+        unscaled_columns=unscaled_columns,
     )
 
 

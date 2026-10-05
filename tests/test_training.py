@@ -1114,7 +1114,7 @@ class StructuredTrainingTests(unittest.TestCase):
         self.assertIn("predictions", payload)
         self.assertIn("target_mask", payload)
 
-    def test_attention_ligand_extra_features_are_train_scaled(self) -> None:
+    def test_attention_ligand_extra_features_pass_through_unscaled(self) -> None:
         from torch.utils.data import DataLoader
 
         from enzymado.models.attention_blocks import batch_to_attention_tensors
@@ -1204,12 +1204,28 @@ class StructuredTrainingTests(unittest.TestCase):
             normalized_chunks.append(model._normalize_extra(extra_t).cpu().numpy())
         normalized = np.concatenate(normalized_chunks, axis=0)
 
-        np.testing.assert_allclose(
-            normalized.mean(axis=0), np.zeros(2, dtype=np.float32), atol=1e-6
+        # Ligand descriptors come pre-normalized, so the scaler leaves them as is.
+        np.testing.assert_allclose(normalized, np.stack(list(ligand_values.values())))
+
+    def test_pooled_scaler_leaves_unscaled_columns_untouched(self) -> None:
+        from enzymado.training.torch_standard_regression import (
+            LinearRegressorImplementation,
         )
-        np.testing.assert_allclose(
-            normalized.std(axis=0), np.ones(2, dtype=np.float32), atol=1e-6
+
+        x = np.array(
+            [[1.0, 0.5, 0.0], [3.0, 0.5, 2.0], [5.0, 0.5, 4.0]], dtype=np.float32
         )
+        x_val = np.array([[3.0, 0.9, 2.0]], dtype=np.float32)
+        model = LinearRegressorImplementation(epochs=1)
+        scaled, scaled_val = model._fit_and_apply_scaler(
+            x, None, x_val, unscaled_columns=(1, 2)
+        )
+
+        # Column 1 is constant in train; a test value off it stays bounded.
+        np.testing.assert_allclose(scaled[:, 1], x[:, 1])
+        np.testing.assert_allclose(scaled_val[:, 1], [0.9])
+        np.testing.assert_allclose(scaled[:, [0, 2]].mean(axis=0), [0.0, 0.0], atol=1e-6)
+        np.testing.assert_allclose(scaled[:, [0, 2]].std(axis=0), [1.0, 1.0], atol=1e-6)
 
     def test_attention_sequence_scaler_is_stable_and_neutralizes_constants(
         self,

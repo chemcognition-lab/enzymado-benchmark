@@ -44,6 +44,7 @@ def _fit_arrays(
     checkpoint_path: Path,
     target_mask_train: enzymado.types.OptionalArrayPayload = None,
     target_mask_val: enzymado.types.OptionalArrayPayload = None,
+    unscaled_columns: tuple[int, int] | None = None,
 ) -> object:
     """Fit one array-based model and return the trained estimator."""
     fit_kwargs: dict[str, object] = {
@@ -56,6 +57,8 @@ def _fit_arrays(
         fit_kwargs["target_mask"] = target_mask_train
     if use_validation and target_mask_val is not None:
         fit_kwargs["target_mask_val"] = target_mask_val
+    if unscaled_columns is not None:
+        fit_kwargs["unscaled_columns"] = unscaled_columns
     return model_registry.train_model(model_info, x_train, y_train, **fit_kwargs)
 
 
@@ -168,6 +171,7 @@ def train_global(
         checkpoint_path=checkpoint_path,
         target_mask_train=arrays.mask_train,
         target_mask_val=arrays.mask_val,
+        unscaled_columns=data.unscaled_columns,
     )
     data_loading.log(f"      Training done ({time.time() - t0:.1f}s).")
     return trained

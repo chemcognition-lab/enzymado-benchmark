@@ -51,8 +51,9 @@ class LinearRegressorImplementation(BaseStandardWrapper):
         y_val=None,
         mask_val=None,
         checkpoint_path=None,
+        unscaled_columns=None,
     ):
-        x, x_val = self._fit_and_apply_scaler(x, mask, x_val)
+        x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
         x_t, mask_t, input_dim = prepare_inputs(x, mask, self.device)
         y_t = (
             torch.from_numpy(np.asarray(y, dtype=np.float32))
@@ -225,8 +226,9 @@ class MLPRegressorImplementation(BaseStandardWrapper):
         y_val=None,
         mask_val=None,
         checkpoint_path=None,
+        unscaled_columns=None,
     ):
-        x, x_val = self._fit_and_apply_scaler(x, mask, x_val)
+        x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
         x_t, mask_t, input_dim = prepare_inputs(x, mask, self.device)
         y_t = (
             torch.from_numpy(np.asarray(y, dtype=np.float32))

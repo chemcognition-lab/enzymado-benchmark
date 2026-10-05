@@ -48,8 +48,9 @@ class LinearClassifierImplementation(BaseStandardWrapper):
         y_val=None,
         mask_val=None,
         checkpoint_path=None,
+        unscaled_columns=None,
     ):
-        x, x_val = self._fit_and_apply_scaler(x, mask, x_val)
+        x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
         x_t, mask_t, input_dim = prepare_inputs(x, mask, self.device)
         y = np.asarray(y)
         self.classes_ = np.unique(y)
@@ -270,8 +271,9 @@ class MLPClassifierImplementation(BaseStandardWrapper):
         y_val=None,
         mask_val=None,
         checkpoint_path=None,
+        unscaled_columns=None,
     ):
-        x, x_val = self._fit_and_apply_scaler(x, mask, x_val)
+        x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
         x_t, mask_t, input_dim = prepare_inputs(x, mask, self.device)
         y = np.asarray(y)
         self.classes_ = np.unique(y)

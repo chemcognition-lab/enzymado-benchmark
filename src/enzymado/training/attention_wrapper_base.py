@@ -258,12 +258,15 @@ class _BaseAttentionWrapper:
     def _fit_extra_scaler(self, dataloader, batch_kind: str) -> None:
         """Fit train-only standardization for ligand/extra features."""
         extras = []
+        ligand_dim = 0
         for batch in dataloader:
             _, _, extra_t = batch_to_attention_tensors(
                 batch, batch_kind, torch.device("cpu")
             )
             if extra_t is not None:
                 extras.append(extra_t.float().cpu().numpy())
+            if batch_kind == "protein_ligand_global":
+                ligand_dim = np.asarray(batch.ligand_feat).shape[1]
         if not extras:
             self.extra_mean_ = None
             self.extra_scale_ = None
@@ -272,7 +275,12 @@ class _BaseAttentionWrapper:
         mean = extra_np.mean(axis=0, keepdims=True)
         scale = extra_np.std(axis=0, keepdims=True)
         scale[scale == 0.0] = 1.0
-        self.extra_mean_ = torch.from_numpy(mean.astype(np.float32, copy=False)).to(
+        # Ligand descriptors (leading columns) already lie in [0, 1]. A column
+        # that is nearly constant in train would turn a test value into a huge
+        # z-score, so they pass through; numeric context is still scaled.
+        mean[:, :ligand_dim] = 0.0
+        scale[:, :ligand_dim] = 1.0
+        self.extra_mean_ =torch.from_numpy(mean.astype(np.float32, copy=False)).to(
             self.device
         )
         self.extra_scale_ = torch.from_numpy(scale.astype(np.float32, copy=False)).to(

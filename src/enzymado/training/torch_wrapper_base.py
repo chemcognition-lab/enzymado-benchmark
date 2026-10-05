@@ -55,8 +55,14 @@ class BaseStandardWrapper:
             out = masked_mean_pool(out, mask_t)
         return out
 
-    def _fit_and_apply_scaler(self, x, mask, x_val=None):
+    def _fit_and_apply_scaler(self, x, mask, x_val=None, unscaled_columns=None):
         self.x_mean_, self.x_scale_ = fit_feature_scaler(x, mask)
+        if unscaled_columns is not None:
+            # Ligand descriptors already lie in [0, 1]. A column that is nearly
+            # constant in train would turn a test value into a huge z-score.
+            start, stop = unscaled_columns
+            self.x_mean_[start:stop] = 0.0
+            self.x_scale_[start:stop] = 1.0
         x = apply_feature_scaler(x, self.x_mean_, self.x_scale_)
         if x_val is not None:
             x_val = apply_feature_scaler(x_val, self.x_mean_, self.x_scale_)

@@ -82,20 +82,14 @@ def test_build_align_rows_splits_each_task_into_its_own_output(tmp_path):
         task_name: (fieldnames, rows)
         for _, task_name, fieldnames, rows in processed_outputs
     }
+    # One row per variant: repeated measurements are averaged and counted.
     assert by_task["expression"] == (
-        [
-            "dataset_id",
-            "protein_sequence",
-            "source_split",
-            "source_dataset",
-            "expression",
-        ],
+        ["dataset_id", "protein_sequence", "n_measurements", "expression"],
         [
             {
                 "dataset_id": "align_alpha_amylase_000001",
                 "protein_sequence": "AAAA",
-                "source_split": "train",
-                "source_dataset": "alpha_source",
+                "n_measurements": "1",
                 "expression": "1.5",
             }
         ],
