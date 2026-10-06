@@ -69,6 +69,7 @@ class _BaseAttentionWrapper:
         diagnostic_grad_norm_threshold: float | None = 1000.0,
         device: str | torch.device | None = None,
         gradient_accumulation_steps: int = 1,
+        attention_block_lr: float | None = None,
     ):
         if int(gradient_accumulation_steps) < 0:
             raise ValueError(
@@ -88,6 +89,9 @@ class _BaseAttentionWrapper:
             raise ValueError("gradient_clip_norm must be positive when provided.")
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_accumulation_steps = int(gradient_accumulation_steps)
+        if attention_block_lr is not None and attention_block_lr <= 0:
+            raise ValueError("attention_block_lr must be positive when provided.")
+        self.attention_block_lr = attention_block_lr
         self.record_batch_diagnostics = bool(record_batch_diagnostics)
         self.diagnostic_loss_threshold = diagnostic_loss_threshold
         self.diagnostic_z_threshold = diagnostic_z_threshold
@@ -358,6 +362,21 @@ class _BaseAttentionWrapper:
         if extra_t is None or self.extra_mean_ is None or self.extra_scale_ is None:
             return extra_t
         return (extra_t.float() - self.extra_mean_) / self.extra_scale_
+
+    def _optimizer_parameters(self):
+        """Parameters for the optimizer, with the attention block at its own lr.
+
+        ``attention_block_lr`` lets a head keep its mean-pool learning rate while
+        the attention block, which has no mean-pool counterpart, trains at a rate
+        it tolerates. Without it every parameter uses ``lr``.
+        """
+        block_lr = getattr(self, "attention_block_lr", None)
+        if block_lr is None:
+            return self.model.parameters()
+        block = list(self.model.pooler.parameters())
+        block_ids = {id(param) for param in block}
+        rest = [p for p in self.model.parameters() if id(p) not in block_ids]
+        return [{"params": block, "lr": float(block_lr)}, {"params": rest}]
 
     def _scale_gradients(self, factor: float) -> None:
         """Rescale accumulated gradients in place before an optimizer step."""

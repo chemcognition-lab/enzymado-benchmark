@@ -426,6 +426,7 @@ _ATTENTION_LOADER_BATCH = 16
 _MEAN_POOL_BATCH = 256
 _ACCUMULATE_TO_MEAN_POOL_BATCH = _MEAN_POOL_BATCH // _ATTENTION_LOADER_BATCH
 _ACCUMULATE_WHOLE_EPOCH = 0
+_ATTENTION_BLOCK_LR = 1e-3
 
 
 def _make_attention_entry(
@@ -475,8 +476,11 @@ def _attention_ec_linear_entry() -> enzymado.types.ModelInfo:
         AttentionECMultiHeadClassifierTorch,
         {
             "hidden_dims": (),
-            # Same learning rate as the mean-pool EC linear head.
+            # The head keeps the mean-pool EC linear rate. The attention block
+            # diverges at 0.01 (validation loss in the thousands from epoch 1),
+            # so it trains at 1e-3 like every other attention block.
             "lr": 0.01,
+            "attention_block_lr": _ATTENTION_BLOCK_LR,
             "epochs": 200,
             "optimizer_name": "adamw",
             "early_stopping_patience": 20,

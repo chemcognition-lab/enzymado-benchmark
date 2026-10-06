@@ -27,6 +27,10 @@ PHASE="${PHASE:-train}"
 AFTER="${AFTER:-}"
 ONLY="${ONLY:-}"
 EXCLUDE="${EXCLUDE:-kn001}"
+# Resubmitting timed-out runs: they resume from their checkpoint as long as the
+# code is unchanged. TIME_OVERRIDE replaces the walltime, AFTER_OVERRIDE chains
+# the job (e.g. afternotok:<id>_<task> to resume only if a running task fails).
+TIME_OVERRIDE="${TIME_OVERRIDE:-}"
 RESIDUE="${REPO}/embeddings_models_output.json"
 LAUNCHER="${REPO}/scripts/slurm/run_training_attention_cluster.slurm"
 
@@ -43,6 +47,8 @@ submit() {
         [[ -n "${AFTER}" ]] && dependency=("--dependency=${AFTER}")
     fi
     [[ -n "${EXCLUDE}" ]] && exclude=("--exclude=${EXCLUDE}")
+    [[ -n "${TIME_OVERRIDE}" ]] && time="${TIME_OVERRIDE}"
+    [[ "${PHASE}" != attach && -n "${AFTER}" ]] && dependency=("--dependency=${AFTER}")
     local -a cmd=(
         env "OUTPUT_DIR=${OUT}" "EMBEDDINGS_JSON=${RESIDUE}"
         "ATTENTION_EMBEDDINGS_JSON=${RESIDUE}"

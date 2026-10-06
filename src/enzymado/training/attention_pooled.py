@@ -73,7 +73,10 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
         self._maybe_fit_pooled_scalers(dataloader, batch_kind)
         self._fit_pooled_standardizer(dataloader, batch_kind)
         optimizer = make_optimizer(
-            self.model.parameters(), self.optimizer_name, self.lr, self.weight_decay
+            self._optimizer_parameters(),
+            self.optimizer_name,
+            self.lr,
+            self.weight_decay,
         )
         restore_torch_training_state(self, optimizer)
         criterion = self._make_criterion()

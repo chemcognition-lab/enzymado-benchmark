@@ -357,3 +357,50 @@ def test_global_attention_trains_like_its_mean_pool_counterpart(
     else:
         loader_batch = 16  # train.py default for the attention route
         assert loader_batch * accumulation == mean_pool["batch_size"]
+
+
+def test_attention_block_can_train_at_its_own_learning_rate() -> None:
+    from enzymado.models.common import make_optimizer
+    from enzymado.training.attention_wrappers import (
+        AttentionECMultiHeadClassifierTorch,
+    )
+
+    wrapper = AttentionECMultiHeadClassifierTorch(
+        hidden_dims=(),
+        lr=0.01,
+        epochs=1,
+        optimizer_name="adamw",
+        device="cpu",
+        attention_block_lr=1e-3,
+    )
+    from enzymado.models.attention_blocks import AttentionMultiHeadPredictor
+
+    wrapper.model = AttentionMultiHeadPredictor(DIM, (), {"level_1": 3})
+    optimizer = make_optimizer(wrapper._optimizer_parameters(), "adamw", 0.01)
+    block, rest = optimizer.param_groups
+    pooler_ids = {id(p) for p in wrapper.model.pooler.parameters()}
+    assert {id(p) for p in block["params"]} == pooler_ids
+    assert block["lr"] == 1e-3
+    assert rest["lr"] == 0.01
+    assert not pooler_ids & {id(p) for p in rest["params"]}
+    assert len(block["params"]) + len(rest["params"]) == len(
+        list(wrapper.model.parameters())
+    )
+
+
+@pytest.mark.parametrize(
+    ("task_type", "label_kind"),
+    [
+        ("regression", "scalar_regression"),
+        ("classification", "binary"),
+        ("classification", "multilabel_ec"),
+    ],
+)
+def test_every_global_attention_block_trains_at_1e_3(task_type, label_kind) -> None:
+    """EC linear diverged with the whole model at lr 0.01; keep the block at 1e-3."""
+    import enzymado.training.model_registry as registry
+
+    for name, entry in registry.get_attention_model_map(task_type, label_kind).items():
+        params = _resolved_params(entry)
+        block_lr = params.get("attention_block_lr") or params["lr"]
+        assert block_lr == 1e-3, name
