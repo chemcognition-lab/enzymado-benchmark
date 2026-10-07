@@ -15,12 +15,12 @@
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-30",
+    "generated": "2026-10-06",
     "split_sizes_by_method": {
       "erickson_random_80_10_10_standardized": {
-        "train": 456,
-        "test": 53,
-        "val": 61
+        "train": 460,
+        "test": 52,
+        "val": 58
       }
     },
     "label_distribution_by_method": {
@@ -28,38 +28,38 @@
         "overall": {
           "kind": "numeric",
           "total_valid_labels": 570,
-          "mean": 0.0121,
-          "std": 1.0174,
-          "min": -0.4703,
-          "max": 7.3054,
-          "median": -0.4257
+          "mean": 0.0083,
+          "std": 1.0114,
+          "min": -0.4712,
+          "max": 7.2587,
+          "median": -0.4269
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 456,
-          "mean": -0.0,
+          "total_valid_labels": 460,
+          "mean": 0.0,
           "std": 1.0,
-          "min": -0.4703,
-          "max": 7.3054,
-          "median": -0.4292
+          "min": -0.4712,
+          "max": 7.2587,
+          "median": -0.4336
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 61,
-          "mean": -0.0369,
-          "std": 0.9233,
-          "min": -0.4703,
-          "max": 5.4507,
-          "median": -0.4225
+          "total_valid_labels": 58,
+          "mean": -0.009,
+          "std": 0.9197,
+          "min": -0.4712,
+          "max": 5.4149,
+          "median": -0.404
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 53,
-          "mean": 0.1726,
-          "std": 1.2315,
-          "min": -0.4703,
-          "max": 6.1977,
-          "median": -0.3899
+          "total_valid_labels": 52,
+          "mean": 0.1013,
+          "std": 1.1887,
+          "min": -0.4712,
+          "max": 6.1575,
+          "median": -0.4019
         }
       }
     },
