@@ -315,7 +315,15 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/erickson_petase/erickson_random_80_10_10_standardized.csv",
         },
         target_column="sum_aromatic_products_standardized",
-        numeric_feature_columns=("temperature",),
+        numeric_feature_columns=(
+            "temperature",
+            "ph",
+            "buffer_c",
+            "buffer_np",
+            "buffer_h",
+            "buffer_b",
+            "buffer_g",
+        ),
         index_columns=("dataset_id",),
     ),
 }

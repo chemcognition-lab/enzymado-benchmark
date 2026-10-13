@@ -330,7 +330,13 @@ SOURCES = {
         "doi": "10.1038/s41467-022-35237-x",
         "description": (
             "PET hydrolase activity for a panel of naturally occurring "
-            "scaffolds, measured as aromatic degradation products released."
+            "scaffolds, measured as aromatic degradation products released, "
+            "at five temperatures and six buffer and pH conditions. Temperature, "
+            "pH and a one-hot buffer code are model inputs."
+        ),
+        "provenance_note": (
+            "The source table labels its seventh row 30°C, C6 a second time; "
+            "it is the 40°C, C6 measurement and is relabelled when cleaning."
         ),
         "label": (
             "Sum of aromatic products in the assay units of the source, "

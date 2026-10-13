@@ -17,6 +17,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from enzymado.paths_and_constants import Constants, Paths  # noqa: E402
 
 ERICKSON_VALUE_COLUMN = "sum_aromatic_products"
+# Reaction conditions are a buffer code followed by the pH, e.g. "NP7.5".
+ERICKSON_BUFFERS = ("C", "NP", "H", "B", "G")
+ERICKSON_BUFFER_COLUMNS = [f"buffer_{code.lower()}" for code in ERICKSON_BUFFERS]
+# values.csv labels its seventh data row "30°C, C6" a second time. It sits
+# before the 40°C block, which has no C6 row, and its values fall between 30°C
+# and 50°C, so it is the 40°C C6 measurement.
+ERICKSON_ROW_FIXES = {6: (("30°C", "C6"), ("40°C", "C6"))}
 ERICKSON_INTERIM_COLUMNS = [
     Constants.dataset_id,
     "enzyme_id",
@@ -24,6 +31,8 @@ ERICKSON_INTERIM_COLUMNS = [
     "rxn_temperature_raw",
     "temperature",
     "rxn_condition",
+    "ph",
+    "buffer",
     "measurement_name",
     "measurement_unit",
     ERICKSON_VALUE_COLUMN,
@@ -32,6 +41,8 @@ ERICKSON_PROCESSED_COLUMNS = [
     Constants.dataset_id,
     Constants.protein_sequence,
     "temperature",
+    "ph",
+    *ERICKSON_BUFFER_COLUMNS,
     ERICKSON_VALUE_COLUMN,
 ]
 
@@ -120,6 +131,13 @@ def parse_temperature(raw_value: str) -> float:
     return float(cleaned)
 
 
+def parse_erickson_condition(raw_value: str) -> tuple[str, float]:
+    match = re.fullmatch(r"([A-Z]+)(\d+(?:\.\d+)?)", clean_text(raw_value))
+    if match is None or match.group(1) not in ERICKSON_BUFFERS:
+        raise ValueError(f"Unrecognized Erickson reaction condition '{raw_value}'.")
+    return match.group(1), float(match.group(2))
+
+
 def parse_measurement_label(raw_label: str) -> tuple[str, str]:
     cleaned = clean_text(raw_label)
     match = re.match(r"^(.*?)(?:\s*\((.*?)\))?$", cleaned)
@@ -185,7 +203,7 @@ def build_erickson_rows(
     interim_rows: list[dict[str, str]] = []
     processed_rows: list[dict[str, str]] = []
 
-    for raw_row in rows[2:]:
+    for row_index, raw_row in enumerate(rows[2:]):
         if not any(clean_text(cell) for cell in raw_row):
             continue
 
@@ -193,8 +211,17 @@ def build_erickson_rows(
         condition = clean_text(raw_row[1])
         if not temperature_raw or not condition:
             continue
+        if row_index in ERICKSON_ROW_FIXES:
+            expected, corrected = ERICKSON_ROW_FIXES[row_index]
+            if (temperature_raw, condition) != expected:
+                raise ValueError(
+                    f"values.csv data row {row_index} is {temperature_raw}, "
+                    f"{condition}; expected {expected[0]}, {expected[1]} to fix."
+                )
+            temperature_raw, condition = corrected
 
         temperature = parse_temperature(temperature_raw)
+        buffer, ph = parse_erickson_condition(condition)
 
         for enzyme_id, measurement_label, raw_value in zip(
             enzyme_ids,
@@ -227,6 +254,8 @@ def build_erickson_rows(
                     "rxn_temperature_raw": temperature_raw,
                     "temperature": str(temperature),
                     "rxn_condition": condition,
+                    "ph": str(ph),
+                    "buffer": buffer,
                     "measurement_name": measurement_name,
                     "measurement_unit": measurement_unit,
                     ERICKSON_VALUE_COLUMN: value,
@@ -237,10 +266,20 @@ def build_erickson_rows(
                     Constants.dataset_id: dataset_id,
                     Constants.protein_sequence: protein_sequence,
                     "temperature": str(temperature),
+                    "ph": str(ph),
+                    **{
+                        column: "1.0" if code == buffer else "0.0"
+                        for code, column in zip(
+                            ERICKSON_BUFFERS, ERICKSON_BUFFER_COLUMNS, strict=True
+                        )
+                    },
                     ERICKSON_VALUE_COLUMN: value,
                 }
             )
 
+    dataset_ids = [row[Constants.dataset_id] for row in processed_rows]
+    if len(set(dataset_ids)) != len(dataset_ids):
+        raise ValueError("Erickson rows do not have unique dataset ids.")
     return interim_rows, processed_rows
 
 
