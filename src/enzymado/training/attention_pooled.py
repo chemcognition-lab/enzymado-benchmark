@@ -86,8 +86,8 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
                 return self.model(normalized_seq_t, mask_t, normalized_extra_t).float()
 
         # 1 steps once per loader batch (the published behaviour). k > 1 sums k
-        # loader batches into one step and 0 sums the whole epoch, matching the
-        # full-batch linear head of the mean-pool route. Each micro-batch loss is
+        # loader batches into one step and 0 sums the whole epoch (one full-batch
+        # step, as the pre-v4 linear head trained). Each micro-batch loss is
         # weighted by its size, so a step equals the step of one batch holding
         # every sample of its group, even when the last micro-batch is short.
         accumulation = int(getattr(self, "gradient_accumulation_steps", 1))

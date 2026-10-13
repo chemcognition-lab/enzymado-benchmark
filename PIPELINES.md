@@ -191,8 +191,11 @@ cells: 8 tasks x 1 split x 3 rating-eligible metrics (`mae`, `rmse`,
 - Global attention heads train like their mean-pool counterparts: same optimizer,
   learning rate, weight decay, dropout and early stopping, the pooled vector
   standardized with train-set mean-pool statistics, and gradients accumulated to
-  the mean-pool batch (16 x 16 = 256 for the MLP and EC heads, the whole epoch
-  for the full-batch linear head). `tests/test_attention_pooling.py` locks this.
+  the mean-pool batch (16 x 16 = 256 for every head).
+  `tests/test_attention_pooling.py` locks this.
+- The scalar linear head is the MLP wrapper with no hidden layer, trained in
+  minibatches of 256 like the MLP. Before v4 it trained on the whole split with
+  one optimizer step per epoch and stopped at 200 steps, before converging.
 - `ec_number` supports XGBoost through a flat concatenated EC target vector.
 - `active_sites` and `binding_site` do use a dedicated structured model map.
 - `fluorescence` was dropped from the benchmark card because it does not contain

@@ -179,7 +179,7 @@ def _max_parameter_gap(a, b) -> float:
         (8, 2, 4),  # full groups
         (6, 2, 5),  # one short final group
         (7, 2, 4),  # a short last micro-batch inside a short final group
-        (7, 3, 0),  # whole epoch, unequal micro-batches (full-batch linear head)
+        (7, 3, 0),  # whole epoch, unequal micro-batches
     ],
 )
 def test_accumulated_step_matches_one_full_batch_step(tmp_path, n, micro, accumulation):
@@ -333,7 +333,6 @@ def test_global_attention_trains_like_its_mean_pool_counterpart(
     attention = _resolved_params(
         registry.get_attention_model_map(task_type, label_kind)[f"attention_{name}"]
     )
-    linear = name.startswith("linear")
     for key in (
         "lr",
         "epochs",
@@ -342,21 +341,15 @@ def test_global_attention_trains_like_its_mean_pool_counterpart(
         "early_stopping_min_delta",
     ):
         assert attention[key] == mean_pool[key], key
-    # The mean-pool linear head has no hidden layer, dropout or weight decay.
     for key, default in (("weight_decay", 0.0), ("dropout", 0.0)):
         assert attention.get(key, default) == mean_pool.get(key, default), key
     assert tuple(attention["hidden_dims"]) == tuple(
         mean_pool.get("hidden_dims", ())
     )
 
+    loader_batch = 16  # train.py default for the attention route
     accumulation = attention["gradient_accumulation_steps"]
-    full_batch_linear = linear and label_kind != "multilabel_ec"
-    if full_batch_linear:
-        assert "batch_size" not in mean_pool  # trained on the whole split per step
-        assert accumulation == 0
-    else:
-        loader_batch = 16  # train.py default for the attention route
-        assert loader_batch * accumulation == mean_pool["batch_size"]
+    assert loader_batch * accumulation == mean_pool["batch_size"]
 
 
 def test_attention_block_can_train_at_its_own_learning_rate() -> None:

@@ -32,8 +32,6 @@ from .attention_wrappers import (
     AttentionResidueBinaryClassifierTorch,
 )
 from .torch_standard_wrappers import (
-    LinearClassifierTorch,
-    LinearRegressorTorch,
     MLPClassifierTorch,
     MLPRegressorTorch,
 )
@@ -77,28 +75,35 @@ def _make_model_entry(
 # Linear / SGD family
 
 
+# The scalar linear head is the MLP wrapper without a hidden layer, trained in
+# minibatches like the MLP. The earlier full-batch head took one optimizer step
+# per epoch and stopped at 200 steps, before it had converged. Weight decay
+# matches the MLP: across 0 to 1 the mean validation score moved by under 0.002.
+_LINEAR_WEIGHT_DECAY = 0.1
+_SCALAR_LINEAR_PARAMS: dict[str, object] = {
+    "hidden_dims": (),
+    "lr": 1e-3,
+    "epochs": 200,
+    "optimizer_name": "adamw",
+    "weight_decay": _LINEAR_WEIGHT_DECAY,
+    "dropout": 0.0,
+    "early_stopping_patience": 20,
+    "early_stopping_min_delta": 1e-4,
+}
+
+
 def _standard_linear_classifier_entry() -> enzymado.types.ModelInfo:
     return _make_model_entry(
-        LinearClassifierTorch,
-        {
-            "lr": 0.001,
-            "epochs": 200,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        MLPClassifierTorch,
+        {**_SCALAR_LINEAR_PARAMS, "batch_size": 256},
         residue_aware=True,
     )
 
 
 def _standard_linear_regressor_entry() -> enzymado.types.ModelInfo:
     return _make_model_entry(
-        LinearRegressorTorch,
-        {
-            "lr": 0.001,
-            "epochs": 200,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        MLPRegressorTorch,
+        {**_SCALAR_LINEAR_PARAMS, "batch_size": 256},
         residue_aware=True,
     )
 
@@ -420,12 +425,10 @@ def train_model_loader(
 # Pooled (global) attention entries train exactly like their mean-pool
 # counterparts apart from the attention block. The attention route loads 16
 # proteins per loader batch (long residue tensors), so gradients are accumulated
-# to reach the same effective batch: 16 x 16 = 256 for the MLP and EC heads, and
-# the whole epoch (0) for the full-batch linear head.
+# to reach the same effective batch: 16 x 16 = 256 for every head.
 _ATTENTION_LOADER_BATCH = 16
 _MEAN_POOL_BATCH = 256
 _ACCUMULATE_TO_MEAN_POOL_BATCH = _MEAN_POOL_BATCH // _ATTENTION_LOADER_BATCH
-_ACCUMULATE_WHOLE_EPOCH = 0
 _ATTENTION_BLOCK_LR = 1e-3
 
 
@@ -445,13 +448,8 @@ def _attention_linear_classifier_entry() -> enzymado.types.ModelInfo:
     return _make_attention_entry(
         AttentionBinaryClassifierTorch,
         {
-            "hidden_dims": (),
-            "lr": 0.001,
-            "epochs": 200,
-            "optimizer_name": "adamw",
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-            "gradient_accumulation_steps": _ACCUMULATE_WHOLE_EPOCH,
+            **_SCALAR_LINEAR_PARAMS,
+            "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
 
@@ -460,13 +458,8 @@ def _attention_linear_regressor_entry() -> enzymado.types.ModelInfo:
     return _make_attention_entry(
         AttentionRegressorTorch,
         {
-            "hidden_dims": (),
-            "lr": 0.001,
-            "epochs": 200,
-            "optimizer_name": "adamw",
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-            "gradient_accumulation_steps": _ACCUMULATE_WHOLE_EPOCH,
+            **_SCALAR_LINEAR_PARAMS,
+            "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
 
