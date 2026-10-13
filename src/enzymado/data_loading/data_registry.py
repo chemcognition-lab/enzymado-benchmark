@@ -300,7 +300,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.RANDOM: _DATA
             / "real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv",
         },
-        target_column="specific_activity_standardized",
+        target_column="log10_specific_activity_standardized",
         ligand_column="smiles",
         numeric_feature_columns=("substrate_concentration",),
         index_columns=("dataset_id",),
@@ -314,7 +314,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.RANDOM: _DATA
             / "real_case/erickson_petase/erickson_random_80_10_10_standardized.csv",
         },
-        target_column="sum_aromatic_products_standardized",
+        target_column="log10_sum_aromatic_products_plus_one_standardized",
         numeric_feature_columns=(
             "temperature",
             "ph",

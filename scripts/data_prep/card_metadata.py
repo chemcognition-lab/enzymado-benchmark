@@ -321,8 +321,9 @@ SOURCES = {
             "makes this the only real-case suite with a ligand axis."
         ),
         "label": (
-            "Specific activity in the assay units of the source, standardized on "
-            "the training split."
+            "log10 of the specific activity in the assay units of the source, "
+            "standardized on the training split. The activity spans four orders "
+            "of magnitude."
         ),
     },
     "erickson_petase": {
@@ -339,8 +340,9 @@ SOURCES = {
             "it is the 40°C, C6 measurement and is relabelled when cleaning."
         ),
         "label": (
-            "Sum of aromatic products in the assay units of the source, "
-            "standardized on the training split."
+            "log10(x + 1) of the sum of aromatic products in the assay units of "
+            "the source, standardized on the training split. A fifth of the "
+            "values are 0."
         ),
     },
 }

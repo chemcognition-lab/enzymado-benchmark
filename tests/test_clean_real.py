@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -269,6 +270,9 @@ def test_erickson_rows_carry_ph_and_buffer_and_fix_the_relabelled_row(tmp_path):
     fixed = by_id["101_40_c_c6"]
     assert (fixed["temperature"], fixed["ph"], fixed["sum_aromatic_products"]) == (
         "40.0", "6.0", "2.0",
+    )
+    assert float(fixed["log10_sum_aromatic_products_plus_one"]) == pytest.approx(
+        math.log10(3.0)
     )
     hepes = by_id["101_30_c_h7_5"]
     assert hepes["ph"] == "7.5" and hepes["buffer_h"] == "1.0"

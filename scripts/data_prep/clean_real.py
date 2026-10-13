@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -17,6 +18,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from enzymado.paths_and_constants import Constants, Paths  # noqa: E402
 
 ERICKSON_VALUE_COLUMN = "sum_aromatic_products"
+# The products span 0 to ~2,700 mg/L with a fifth of the wells at 0, so the
+# target is log10(x + 1); the smallest nonzero value is about 1.
+ERICKSON_TARGET_COLUMN = "log10_sum_aromatic_products_plus_one"
 # Reaction conditions are a buffer code followed by the pH, e.g. "NP7.5".
 ERICKSON_BUFFERS = ("C", "NP", "H", "B", "G")
 ERICKSON_BUFFER_COLUMNS = [f"buffer_{code.lower()}" for code in ERICKSON_BUFFERS]
@@ -44,9 +48,13 @@ ERICKSON_PROCESSED_COLUMNS = [
     "ph",
     *ERICKSON_BUFFER_COLUMNS,
     ERICKSON_VALUE_COLUMN,
+    ERICKSON_TARGET_COLUMN,
 ]
 
 CLEVELAND_VALUE_COLUMN = "specific_activity"
+# Specific activity spans four orders of magnitude (0.01 to 705), so the target
+# is its log10.
+CLEVELAND_TARGET_COLUMN = "log10_specific_activity"
 CLEVELAND_INTERIM_COLUMNS = [
     Constants.dataset_id,
     "protein_name",
@@ -68,6 +76,7 @@ CLEVELAND_PROCESSED_COLUMNS = [
     Constants.smiles,
     "substrate_concentration",
     CLEVELAND_VALUE_COLUMN,
+    CLEVELAND_TARGET_COLUMN,
 ]
 ALIGN_PROCESSED_COLUMNS = [
     Constants.dataset_id,
@@ -274,6 +283,7 @@ def build_erickson_rows(
                         )
                     },
                     ERICKSON_VALUE_COLUMN: value,
+                    ERICKSON_TARGET_COLUMN: str(math.log10(float(value) + 1.0)),
                 }
             )
 
@@ -376,6 +386,7 @@ def build_cleeveland_rows(
                     Constants.smiles: smiles,
                     "substrate_concentration": substrate_concentration,
                     CLEVELAND_VALUE_COLUMN: value,
+                    CLEVELAND_TARGET_COLUMN: str(math.log10(float(value))),
                 }
             )
 

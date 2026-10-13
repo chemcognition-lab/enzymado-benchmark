@@ -63,11 +63,11 @@ REAL_CASE_DATASETS = (
     ),
     (
         Path("data/processed/real_case/cleeveland_galox/cleeveland.csv"),
-        "specific_activity",
+        "log10_specific_activity",
     ),
     (
         Path("data/processed/real_case/erickson_petase/erickson.csv"),
-        "sum_aromatic_products",
+        "log10_sum_aromatic_products_plus_one",
     ),
 )
 
