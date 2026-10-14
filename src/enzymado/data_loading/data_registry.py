@@ -223,7 +223,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_amylase_activity"
             / "alpha_amylase__specific_activity_random_80_10_10_standardized.csv",
         },
-        target_column="specific_activity_standardized",
+        target_column="log10_specific_activity_standardized",
         index_columns=("dataset_id",),
     ),
     "align_amylase_expression": TaskConfig(
@@ -249,7 +249,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_amylase_stability"
             / "alpha_amylase__thermostability_random_80_10_10_standardized.csv",
         },
-        target_column="thermostability_standardized",
+        target_column="log10_thermostability_standardized",
         index_columns=("dataset_id",),
     ),
     "align_glucosidase_activity": TaskConfig(
@@ -262,7 +262,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_glucosidase_activity"
             / "b_glucosidase__activity_random_80_10_10_standardized.csv",
         },
-        target_column="activity_standardized",
+        target_column="log10_activity_standardized",
         index_columns=("dataset_id",),
     ),
     "align_glucosidase_expression": TaskConfig(
@@ -275,7 +275,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_glucosidase_expression"
             / "b_glucosidase__expression_random_80_10_10_standardized.csv",
         },
-        target_column="expression_standardized",
+        target_column="log10_expression_standardized",
         index_columns=("dataset_id",),
     ),
     "align_glucosidase_melting": TaskConfig(

@@ -121,6 +121,26 @@ ALIGN_TASK_OUTPUTS = {
 }
 
 
+# Targets that span two or more orders of magnitude are modelled on a log10
+# scale, like GalOx and PETase. Melting point and amylase expression stay linear.
+ALIGN_LOG_TARGETS = {
+    ("alpha-amylase", "specific_activity"),
+    ("alpha-amylase", "thermostability"),
+    ("b-glucosidase", "activity"),
+    ("b-glucosidase", "expression"),
+}
+
+
+def log10_offset(values: list[float]) -> float:
+    """Return 0, or the smallest positive value to one significant figure if any is 0."""
+    if any(value < 0.0 for value in values):
+        raise ValueError("A log10 target cannot contain negative values.")
+    if all(value > 0.0 for value in values):
+        return 0.0
+    smallest = min(value for value in values if value > 0.0)
+    return float(f"{smallest:.0e}")
+
+
 def clean_text(value: str | None) -> str:
     if value is None:
         return ""
@@ -536,6 +556,14 @@ def build_align_rows(
             }
             for index, (sequence, values) in enumerate(by_sequence.items(), start=1)
         ]
+        fieldnames = list(ALIGN_PROCESSED_COLUMNS) + [task_name]
+        if (family, task_name) in ALIGN_LOG_TARGETS:
+            target = f"log10_{task_name}"
+            offset = log10_offset([float(row[task_name]) for row in processed_rows])
+            for row in processed_rows:
+                row[target] = str(math.log10(float(row[task_name]) + offset))
+            fieldnames.append(target)
+            print(f"  {task_name}: target {target} with offset {offset:g}")
         repeated = sum(1 for values in by_sequence.values() if len(values) > 1)
         print(
             f"  {task_name}: {sum(map(len, by_sequence.values()))} measurements, "
@@ -545,7 +573,7 @@ def build_align_rows(
             (
                 measurement_column,
                 task_name,
-                list(ALIGN_PROCESSED_COLUMNS) + [task_name],
+                fieldnames,
                 processed_rows,
             )
         )

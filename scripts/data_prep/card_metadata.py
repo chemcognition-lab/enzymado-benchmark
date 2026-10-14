@@ -246,9 +246,10 @@ SOURCES = {
             "so this probes resolution well below the level of enzyme family."
         ),
         "label": (
-            "Specific activity in the assay units of the tournament release, "
-            "standardized on the training split. One row per variant: repeated "
-            "measurements are averaged."
+            "log10(x + 0.001) of the specific activity in the assay units of the "
+            "tournament release, standardized on the training split; 0.001 is the "
+            "smallest nonzero value. One row per variant: repeated measurements "
+            "are averaged before the log."
         ),
     },
     "align_amylase_expression": {
@@ -270,9 +271,9 @@ SOURCES = {
             "Thermostability for the same amylase variant library."
         ),
         "label": (
-            "Thermostability in the assay units of the tournament release, "
-            "standardized on the training split. One row per variant: repeated "
-            "measurements are averaged."
+            "log10 of the thermostability in the assay units of the tournament "
+            "release, standardized on the training split. One row per variant: "
+            "repeated measurements are averaged before the log."
         ),
     },
     "align_glucosidase_activity": {
@@ -283,9 +284,10 @@ SOURCES = {
             "tournament round."
         ),
         "label": (
-            "Activity in the assay units of the tournament release, "
-            "standardized on the training split. One row per variant: repeated "
-            "measurements are averaged."
+            "log10(x + 0.006) of the activity in the assay units of the "
+            "tournament release, standardized on the training split; 0.006 is the "
+            "smallest nonzero value to one significant figure. One row per "
+            "variant: repeated measurements are averaged before the log."
         ),
     },
     "align_glucosidase_expression": {
@@ -293,9 +295,9 @@ SOURCES = {
         "doi": "10.1002/prot.70008",
         "description": "Soluble expression for the glucosidase variant library.",
         "label": (
-            "Expression level in the assay units of the tournament release, "
-            "standardized on the training split. One row per variant: repeated "
-            "measurements are averaged."
+            "log10 of the expression level in the assay units of the tournament "
+            "release, standardized on the training split. One row per variant: "
+            "repeated measurements are averaged before the log."
         ),
     },
     "align_glucosidase_melting": {

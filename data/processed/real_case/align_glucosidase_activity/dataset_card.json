@@ -9,13 +9,13 @@
     "url": "https://doi.org/10.1002/prot.70008"
   },
   "label": {
-    "column": "activity_standardized",
+    "column": "log10_activity_standardized",
     "label_kind": "scalar_regression",
-    "description": "Activity in the assay units of the tournament release, standardized on the training split. One row per variant: repeated measurements are averaged.",
+    "description": "log10(x + 0.006) of the activity in the assay units of the tournament release, standardized on the training split; 0.006 is the smallest nonzero value to one significant figure. One row per variant: repeated measurements are averaged before the log.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-30",
+    "generated": "2026-10-14",
     "split_sizes_by_method": {
       "b_glucosidase__activity_random_80_10_10_standardized": {
         "train": 284,
@@ -28,38 +28,38 @@
         "overall": {
           "kind": "numeric",
           "total_valid_labels": 354,
-          "mean": -0.0206,
-          "std": 0.8991,
-          "min": -0.2213,
-          "max": 13.7558,
-          "median": -0.1752
+          "mean": -0.0027,
+          "std": 0.9983,
+          "min": -1.77,
+          "max": 1.8961,
+          "median": 0.3971
         },
         "train": {
           "kind": "numeric",
           "total_valid_labels": 284,
           "mean": -0.0,
           "std": 1.0,
-          "min": -0.2213,
-          "max": 13.7558,
-          "median": -0.1752
+          "min": -1.77,
+          "max": 1.8961,
+          "median": 0.3971
         },
         "val": {
           "kind": "numeric",
           "total_valid_labels": 34,
-          "mean": -0.1032,
-          "std": 0.1385,
-          "min": -0.2213,
-          "max": 0.264,
-          "median": -0.162
+          "mean": -0.0017,
+          "std": 0.9987,
+          "min": -1.77,
+          "max": 1.0147,
+          "median": 0.4469
         },
         "test": {
           "kind": "numeric",
           "total_valid_labels": 36,
-          "mean": -0.1049,
-          "std": 0.1603,
-          "min": -0.2213,
-          "max": 0.5199,
-          "median": -0.1809
+          "mean": -0.0247,
+          "std": 0.9846,
+          "min": -1.77,
+          "max": 1.1257,
+          "median": 0.3445
         }
       }
     },
@@ -69,8 +69,9 @@
         "protein_sequence": 0,
         "n_measurements": 0,
         "activity": 0,
+        "log10_activity": 0,
         "split": 0,
-        "activity_standardized": 0
+        "log10_activity_standardized": 0
       },
       "duplicate_rows_full": 0
     },

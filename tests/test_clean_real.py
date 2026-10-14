@@ -7,6 +7,7 @@ import pytest
 
 from scripts.data_prep.clean_real import (
     ERICKSON_BUFFER_COLUMNS,
+    log10_offset,
     build_align_rows,
     build_argument_parser,
     build_erickson_rows,
@@ -291,3 +292,10 @@ def test_erickson_row_fix_refuses_an_unexpected_label(tmp_path):
 
     with pytest.raises(ValueError, match="expected 30°C, C6"):
         build_erickson_rows(sequences, values)
+
+
+def test_log10_offset_is_the_smallest_positive_value_only_when_zeros_exist():
+    assert log10_offset([0.5, 2.0, 30.0]) == 0.0
+    assert log10_offset([0.0, 0.006487, 7053.0]) == 0.006
+    with pytest.raises(ValueError, match="negative"):
+        log10_offset([-1.0, 2.0])

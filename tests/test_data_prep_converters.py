@@ -126,7 +126,7 @@ def test_real_case_dataset_paths_and_targets_are_stable() -> None:
                 "data/processed/real_case/align_amylase_activity/"
                 "alpha_amylase__specific_activity.csv"
             ),
-            "specific_activity",
+            "log10_specific_activity",
         ),
         (
             Path(
@@ -140,21 +140,21 @@ def test_real_case_dataset_paths_and_targets_are_stable() -> None:
                 "data/processed/real_case/align_amylase_stability/"
                 "alpha_amylase__thermostability.csv"
             ),
-            "thermostability",
+            "log10_thermostability",
         ),
         (
             Path(
                 "data/processed/real_case/align_glucosidase_activity/"
                 "b_glucosidase__activity.csv"
             ),
-            "activity",
+            "log10_activity",
         ),
         (
             Path(
                 "data/processed/real_case/align_glucosidase_expression/"
                 "b_glucosidase__expression.csv"
             ),
-            "expression",
+            "log10_expression",
         ),
         (
             Path(
