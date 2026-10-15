@@ -438,7 +438,19 @@ def auprc_from_scores(
     totals = np.zeros((1, 2 * RANKING_BINS), dtype=np.int64)
     offsets = (labels_flat == 1).astype(np.int64) * RANKING_BINS + levels
     np.add.at(totals, (np.zeros(offsets.size, dtype=np.int64), offsets), 1)
-    return float(_histogram_auprc(totals.astype(np.float64))[0])
+    return auprc_from_histogram(totals[0])
+
+
+def auprc_from_histogram(totals: Array) -> float:
+    """AUPRC of one score histogram: RANKING_BINS negative then positive counts."""
+    totals = np.asarray(totals, dtype=np.float64).reshape(1, -1)
+    if totals.shape[1] != 2 * RANKING_BINS:
+        raise ValueError(
+            f"Expected {2 * RANKING_BINS} histogram bins, got {totals.shape[1]}."
+        )
+    if totals[0, :RANKING_BINS].sum() == 0 or totals[0, RANKING_BINS:].sum() == 0:
+        raise ValueError("AUPRC selection requires both validation classes.")
+    return float(_histogram_auprc(totals)[0])
 
 
 def _score_specs() -> tuple[enzymado.types.MetricSpec, ...]:

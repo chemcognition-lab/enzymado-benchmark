@@ -15,10 +15,10 @@ from enzymado.models.attention_blocks import (
     batch_to_attention_tensors,
 )
 from enzymado.models.common import (
+    StreamingAUPRC,
     compute_ec_batch_loss,
     make_optimizer,
     maybe_resume_torch_wrapper,
-    mean_losses,
     restore_torch_training_state,
 )
 import enzymado.models.training_protocol
@@ -41,7 +41,13 @@ _BATCH_DIAGNOSTIC_FIELDS = (
 
 
 class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
-    """Attention-pooled multi-head classifier for EC prediction."""
+    """Attention-pooled multi-head classifier for EC prediction.
+
+    Checkpoints are selected on validation AUPRC pooled over the four EC levels,
+    like the mean-pool EC head.
+    """
+
+    validation_metric = "auprc"
 
     def __init__(
         self,
@@ -202,7 +208,7 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
 
         def val_loss():
             self.model.eval()
-            losses = []
+            auprc = StreamingAUPRC(self.device)
             with torch.no_grad():
                 for batch in val_dataloader:
                     seq_t, mask_t, extra_t = batch_to_attention_tensors(
@@ -222,13 +228,15 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
                     }
                     seq_t = self._normalize_sequence(seq_t)
                     extra_t = self._normalize_extra(extra_t)
-                    logits_by_level = forward_logits(seq_t, mask_t, extra_t)
-                    loss = compute_ec_batch_loss(
-                        logits_by_level, y_t, target_mask_t, criterion
-                    )
-                    if loss is not None:
-                        losses.append(float(loss.item()))
-            return mean_losses(losses)
+                    for level_name, logits in forward_logits(
+                        seq_t, mask_t, extra_t
+                    ).items():
+                        auprc.update(
+                            torch.sigmoid(logits.float()),
+                            y_t[level_name],
+                            target_mask_t[level_name],
+                        )
+            return -auprc.value()
 
         return self._run_early_stopping(
             train_epoch,

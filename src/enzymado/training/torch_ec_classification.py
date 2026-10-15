@@ -29,7 +29,13 @@ type ECMinibatch = tuple[
 
 
 class ECMultiHeadClassifierImplementation:
-    """Shared-backbone classifier for hierarchical EC targets on pooled inputs."""
+    """Shared-backbone classifier for hierarchical EC targets on pooled inputs.
+
+    Checkpoints are selected on validation AUPRC pooled over the four EC levels,
+    the leaderboard estimator, accumulated batch by batch in a fixed histogram.
+    """
+
+    validation_metric = "auprc"
 
     def __init__(
         self,
@@ -53,6 +59,7 @@ class ECMultiHeadClassifierImplementation:
         self.batch_size = batch_size
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
+        self.validation_metric_ = self.validation_metric
         self.device = (
             torch.device(device) if device else enzymado.models.common.DEVICE
         )
@@ -146,16 +153,12 @@ class ECMultiHeadClassifierImplementation:
             enzymado.models.training_protocol.backward_checked(loss)
             optimizer.step()
 
-    def _validation_loss(
-        self,
-        payload: ECValidationPayload,
-        criterion: nn.BCEWithLogitsLoss,
-    ) -> float:
-        """Return mean masked BCE across validation minibatches."""
+    def _validation_objective(self, payload: ECValidationPayload) -> float:
+        """Return negative validation AUPRC pooled over every EC level."""
         if self.model is None:
             raise RuntimeError("EC classifier model has not been initialized.")
         self.model.eval()
-        losses: list[float] = []
+        auprc = enzymado.models.common.StreamingAUPRC(self.device)
         x_val, y_val, target_mask_val = payload
         with torch.no_grad():
             for x_t, y_t, target_mask_t in self._iter_minibatches(
@@ -163,16 +166,13 @@ class ECMultiHeadClassifierImplementation:
                 y_val,
                 target_mask_val,
             ):
-                logits_by_level = self._forward(x_t)
-                loss = enzymado.models.common.compute_ec_batch_loss(
-                    logits_by_level,
-                    y_t,
-                    target_mask_t,
-                    criterion,
-                )
-                if loss is not None:
-                    losses.append(float(loss.item()))
-        return enzymado.models.common.mean_losses(losses)
+                for level_name, logits in self._forward(x_t).items():
+                    auprc.update(
+                        torch.sigmoid(logits.float()),
+                        y_t[level_name],
+                        target_mask_t[level_name],
+                    )
+        return -auprc.value()
 
     def fit(
         self,
@@ -265,7 +265,7 @@ class ECMultiHeadClassifierImplementation:
         if val_payload is not None:
 
             def val_loss() -> float:
-                return self._validation_loss(val_payload, criterion)
+                return self._validation_objective(val_payload)
 
             validation_loss = val_loss
 

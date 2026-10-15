@@ -35,94 +35,94 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/km_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-09-30",
+    "generated": "2026-10-14",
     "split_sizes_by_method": {
       "catpred_km_random_80_10_10_standardized": {
-        "train": 32939,
-        "test": 4118,
-        "val": 4117
+        "train": 32107,
+        "test": 3984,
+        "val": 3997
       },
       "catpred_km_similarity_mmseqs2_80_10_10_standardized": {
-        "train": 32939,
-        "val": 4118,
-        "test": 4117
+        "train": 31953,
+        "val": 4063,
+        "test": 4072
       }
     },
     "label_distribution_by_method": {
       "catpred_km_random_80_10_10_standardized": {
         "overall": {
           "kind": "numeric",
-          "total_valid_labels": 41174,
-          "mean": 0.0002,
-          "std": 0.9972,
-          "min": -5.6939,
-          "max": 3.7061,
-          "median": -0.0059
+          "total_valid_labels": 40088,
+          "mean": -0.0005,
+          "std": 0.9978,
+          "min": -5.6881,
+          "max": 3.7047,
+          "median": -0.0072
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 32939,
+          "total_valid_labels": 32107,
           "mean": -0.0,
           "std": 1.0,
-          "min": -5.6939,
-          "max": 3.7061,
-          "median": -0.0031
+          "min": -5.6881,
+          "max": 3.7047,
+          "median": -0.0035
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 4117,
-          "mean": 0.0345,
-          "std": 0.9942,
-          "min": -3.7535,
-          "max": 3.1586,
-          "median": 0.0178
+          "total_valid_labels": 3997,
+          "mean": 0.0316,
+          "std": 0.9979,
+          "min": -3.7491,
+          "max": 3.1576,
+          "median": 0.0093
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 4118,
-          "mean": -0.0326,
-          "std": 0.9763,
-          "min": -3.4198,
-          "max": 3.2848,
-          "median": -0.0379
+          "total_valid_labels": 3984,
+          "mean": -0.0366,
+          "std": 0.9781,
+          "min": -3.4157,
+          "max": 3.2837,
+          "median": -0.0397
         }
       },
       "catpred_km_similarity_mmseqs2_80_10_10_standardized": {
         "overall": {
           "kind": "numeric",
-          "total_valid_labels": 41174,
-          "mean": -0.0193,
-          "std": 1.0078,
-          "min": -5.7739,
-          "max": 3.7261,
-          "median": -0.0254
+          "total_valid_labels": 40088,
+          "mean": -0.0198,
+          "std": 1.0076,
+          "min": -5.7632,
+          "max": 3.7218,
+          "median": -0.0266
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 32939,
-          "mean": -0.0,
+          "total_valid_labels": 31953,
+          "mean": 0.0,
           "std": 1.0,
-          "min": -5.7739,
-          "max": 3.7261,
-          "median": -0.0116
+          "min": -5.7632,
+          "max": 3.7218,
+          "median": -0.0099
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 4118,
-          "mean": 0.0574,
-          "std": 1.0108,
-          "min": -4.4289,
-          "max": 3.4719,
-          "median": 0.0828
+          "total_valid_labels": 4063,
+          "mean": 0.0543,
+          "std": 1.0101,
+          "min": -4.4203,
+          "max": 3.4681,
+          "median": 0.0843
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 4117,
-          "mean": -0.25,
-          "std": 1.0357,
-          "min": -4.4289,
-          "max": 3.7261,
-          "median": -0.2427
+          "total_valid_labels": 4072,
+          "mean": -0.249,
+          "std": 1.0334,
+          "min": -4.4203,
+          "max": 3.7218,
+          "median": -0.2409
         }
       }
     },
@@ -131,24 +131,24 @@
         "uniprot_id": 0,
         "protein_sequence": 0,
         "smiles": 0,
-        "temperature": 1831,
-        "ph": 1430,
+        "temperature": 1747,
+        "ph": 1391,
         "km": 0,
         "split": 0,
         "km_standardized": 0
       },
       "duplicate_rows_full": 0
     },
-    "rows": 41174,
-    "distinct_proteins": 12355,
+    "rows": 40088,
+    "distinct_proteins": 12004,
     "sequence_length_summary": {
-      "min": 5,
+      "min": 10,
       "max": 2590,
-      "mean": 437.55,
-      "median": 389.0,
-      "p95": 822,
-      "count_greater_than_1024": 996,
-      "contains_non_standard_aas": 229
+      "mean": 443.06,
+      "median": 392.0,
+      "p95": 824,
+      "count_greater_than_1024": 980,
+      "contains_non_standard_aas": 97
     },
     "categorical_high_variance_columns": []
   },

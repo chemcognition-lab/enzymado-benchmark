@@ -35,15 +35,15 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/solubility_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-09-30",
+    "generated": "2026-10-14",
     "split_sizes_by_method": {
       "proteinea_solubility_random_80_10_10_standardized": {
         "test": 367,
         "train": 2932,
-        "val": 366
+        "val": 365
       },
       "proteinea_solubility_similarity_mmseqs2_80_10_10_standardized": {
-        "train": 2932,
+        "train": 2931,
         "test": 367,
         "val": 366
       }
@@ -52,10 +52,10 @@
       "proteinea_solubility_random_80_10_10_standardized": {
         "overall": {
           "kind": "binary",
-          "total_valid_labels": 3665,
-          "positive": 2056,
+          "total_valid_labels": 3664,
+          "positive": 2055,
           "negative": 1609,
-          "positive_prevalence": 0.560982
+          "positive_prevalence": 0.560862
         },
         "train": {
           "kind": "binary",
@@ -66,10 +66,10 @@
         },
         "val": {
           "kind": "binary",
-          "total_valid_labels": 366,
-          "positive": 189,
+          "total_valid_labels": 365,
+          "positive": 188,
           "negative": 177,
-          "positive_prevalence": 0.516393
+          "positive_prevalence": 0.515068
         },
         "test": {
           "kind": "binary",
@@ -82,17 +82,17 @@
       "proteinea_solubility_similarity_mmseqs2_80_10_10_standardized": {
         "overall": {
           "kind": "binary",
-          "total_valid_labels": 3665,
-          "positive": 2056,
+          "total_valid_labels": 3664,
+          "positive": 2055,
           "negative": 1609,
-          "positive_prevalence": 0.560982
+          "positive_prevalence": 0.560862
         },
         "train": {
           "kind": "binary",
-          "total_valid_labels": 2932,
-          "positive": 1720,
+          "total_valid_labels": 2931,
+          "positive": 1719,
           "negative": 1212,
-          "positive_prevalence": 0.58663
+          "positive_prevalence": 0.586489
         },
         "val": {
           "kind": "binary",
@@ -121,13 +121,13 @@
       },
       "duplicate_rows_full": 0
     },
-    "rows": 3665,
-    "distinct_proteins": 3665,
+    "rows": 3664,
+    "distinct_proteins": 3664,
     "sequence_length_summary": {
       "min": 61,
       "max": 1645,
-      "mean": 358.85,
-      "median": 329,
+      "mean": 358.87,
+      "median": 329.5,
       "p95": 713,
       "count_greater_than_1024": 32,
       "contains_non_standard_aas": 0

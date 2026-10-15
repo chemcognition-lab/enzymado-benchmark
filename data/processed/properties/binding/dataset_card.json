@@ -35,77 +35,77 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/binding_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-09-30",
+    "generated": "2026-10-14",
     "split_sizes_by_method": {
       "biolip_binding_random_80_10_10_standardized": {
-        "train": 22846,
-        "test": 2856,
-        "val": 2856
+        "train": 22670,
+        "test": 2850,
+        "val": 2822
       },
       "biolip_binding_similarity_mmseqs2_80_10_10_standardized": {
-        "train": 22846,
-        "val": 2856,
-        "test": 2856
+        "train": 22670,
+        "val": 2840,
+        "test": 2832
       }
     },
     "label_distribution_by_method": {
       "biolip_binding_random_80_10_10_standardized": {
         "overall": {
           "kind": "binary",
-          "total_valid_labels": 28558,
-          "positive": 14279,
-          "negative": 14279,
+          "total_valid_labels": 28342,
+          "positive": 14171,
+          "negative": 14171,
           "positive_prevalence": 0.5
         },
         "train": {
           "kind": "binary",
-          "total_valid_labels": 22846,
-          "positive": 11423,
-          "negative": 11423,
+          "total_valid_labels": 22670,
+          "positive": 11335,
+          "negative": 11335,
           "positive_prevalence": 0.5
         },
         "val": {
           "kind": "binary",
-          "total_valid_labels": 2856,
-          "positive": 1428,
-          "negative": 1428,
+          "total_valid_labels": 2822,
+          "positive": 1411,
+          "negative": 1411,
           "positive_prevalence": 0.5
         },
         "test": {
           "kind": "binary",
-          "total_valid_labels": 2856,
-          "positive": 1428,
-          "negative": 1428,
+          "total_valid_labels": 2850,
+          "positive": 1425,
+          "negative": 1425,
           "positive_prevalence": 0.5
         }
       },
       "biolip_binding_similarity_mmseqs2_80_10_10_standardized": {
         "overall": {
           "kind": "binary",
-          "total_valid_labels": 28558,
-          "positive": 14279,
-          "negative": 14279,
+          "total_valid_labels": 28342,
+          "positive": 14171,
+          "negative": 14171,
           "positive_prevalence": 0.5
         },
         "train": {
           "kind": "binary",
-          "total_valid_labels": 22846,
-          "positive": 11423,
-          "negative": 11423,
+          "total_valid_labels": 22670,
+          "positive": 11335,
+          "negative": 11335,
           "positive_prevalence": 0.5
         },
         "val": {
           "kind": "binary",
-          "total_valid_labels": 2856,
-          "positive": 1428,
-          "negative": 1428,
+          "total_valid_labels": 2840,
+          "positive": 1420,
+          "negative": 1420,
           "positive_prevalence": 0.5
         },
         "test": {
           "kind": "binary",
-          "total_valid_labels": 2856,
-          "positive": 1428,
-          "negative": 1428,
+          "total_valid_labels": 2832,
+          "positive": 1416,
+          "negative": 1416,
           "positive_prevalence": 0.5
         }
       }
@@ -122,15 +122,15 @@
       },
       "duplicate_rows_full": 0
     },
-    "rows": 28558,
-    "distinct_proteins": 11332,
+    "rows": 28342,
+    "distinct_proteins": 11245,
     "sequence_length_summary": {
       "min": 31,
       "max": 4426,
-      "mean": 403.06,
+      "mean": 403.29,
       "median": 348.0,
       "p95": 794,
-      "count_greater_than_1024": 648,
+      "count_greater_than_1024": 642,
       "contains_non_standard_aas": 0
     },
     "categorical_high_variance_columns": []

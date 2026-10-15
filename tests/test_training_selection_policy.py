@@ -202,3 +202,52 @@ def test_validation_resume_matches_uninterrupted_selection(tmp_path):
         torch.testing.assert_close(
             resumed.model.state_dict()[key], value, rtol=0, atol=0
         )
+
+
+def test_streaming_auprc_matches_the_leaderboard_estimator_on_all_scores():
+    from enzymado.evaluation import metrics_registry
+
+    rng = np.random.default_rng(0)
+    scores = rng.random((300, 7))
+    labels = (rng.random((300, 7)) < 0.2).astype(np.float64)
+    label_mask = rng.random((300, 7)) < 0.9
+    row_mask = rng.random(300) < 0.8
+    streaming = common.StreamingAUPRC(torch.device("cpu"))
+    for start in range(0, 300, 64):
+        rows = slice(start, start + 64)
+        streaming.update(
+            torch.from_numpy(scores[rows]).float(),
+            torch.from_numpy(labels[rows]),
+            torch.from_numpy(label_mask[rows] & row_mask[rows, None]),
+        )
+    keep = label_mask & row_mask[:, None]
+    expected = metrics_registry.auprc_from_scores(
+        labels[keep], scores.astype(np.float32).astype(np.float64)[keep]
+    )
+    assert streaming.value() == expected
+
+
+def test_streaming_auprc_broadcasts_a_row_mask():
+    from enzymado.evaluation import metrics_registry
+
+    scores = torch.tensor([[0.9, 0.2], [0.8, 0.7], [0.1, 0.6]])
+    labels = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    streaming = common.StreamingAUPRC(torch.device("cpu"))
+    streaming.update(scores, labels, torch.tensor([True, True, False]))
+    expected = metrics_registry.auprc_from_scores(
+        labels[:2].numpy().ravel(), scores[:2].double().numpy().ravel()
+    )
+    assert streaming.value() == expected
+
+
+def test_ec_heads_select_on_validation_auprc():
+    from enzymado.models import training_protocol
+    from enzymado.training import attention_wrappers, torch_structured_wrappers
+
+    for wrapper in (
+        torch_structured_wrappers.ECMultiHeadClassifierTorch,
+        attention_wrappers.AttentionECMultiHeadClassifierTorch,
+    ):
+        protocol = training_protocol.selection_protocol(wrapper)
+        assert protocol["metric"] == "auprc"
+        assert protocol["objective"] == "negative_auprc"

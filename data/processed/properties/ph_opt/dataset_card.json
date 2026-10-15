@@ -35,94 +35,94 @@
       "cluster_diversity_plot": "results/figures/cluster_diversity/ph_opt_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-09-30",
+    "generated": "2026-10-14",
     "split_sizes_by_method": {
       "brenda_phopt_random_80_10_10_standardized": {
-        "train": 9171,
-        "val": 1146,
-        "test": 1147
+        "train": 8912,
+        "val": 1118,
+        "test": 1109
       },
       "brenda_phopt_similarity_mmseqs2_80_10_10_standardized": {
-        "train": 9171,
-        "test": 1146,
-        "val": 1147
+        "train": 8918,
+        "test": 1099,
+        "val": 1122
       }
     },
     "label_distribution_by_method": {
       "brenda_phopt_random_80_10_10_standardized": {
         "overall": {
           "kind": "numeric",
-          "total_valid_labels": 11464,
-          "mean": 0.0021,
-          "std": 1.0019,
-          "min": -4.7921,
-          "max": 4.0501,
-          "median": 0.2185
+          "total_valid_labels": 11139,
+          "mean": 0.0027,
+          "std": 1.0013,
+          "min": -4.8088,
+          "max": 4.0591,
+          "median": 0.2163
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 9171,
+          "total_valid_labels": 8912,
           "mean": -0.0,
           "std": 1.0,
-          "min": -4.7921,
-          "max": 4.0501,
-          "median": 0.2185
+          "min": -4.8088,
+          "max": 4.0591,
+          "median": 0.2163
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 1146,
-          "mean": 0.0406,
-          "std": 0.9708,
-          "min": -4.0342,
-          "max": 4.0501,
-          "median": 0.2606
+          "total_valid_labels": 1118,
+          "mean": 0.0439,
+          "std": 0.9665,
+          "min": -4.0487,
+          "max": 4.0591,
+          "median": 0.2586
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 1147,
-          "mean": -0.0197,
-          "std": 1.0454,
-          "min": -3.8658,
-          "max": 4.0501,
-          "median": 0.2185
+          "total_valid_labels": 1109,
+          "mean": -0.0168,
+          "std": 1.0441,
+          "min": -3.8798,
+          "max": 4.0591,
+          "median": 0.2586
         }
       },
       "brenda_phopt_similarity_mmseqs2_80_10_10_standardized": {
         "overall": {
           "kind": "numeric",
-          "total_valid_labels": 11464,
-          "mean": -0.0412,
-          "std": 1.0486,
-          "min": -5.0592,
-          "max": 4.1958,
-          "median": 0.1853
+          "total_valid_labels": 11139,
+          "mean": -0.0439,
+          "std": 1.0496,
+          "min": -5.0876,
+          "max": 4.2082,
+          "median": 0.18
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 9171,
+          "total_valid_labels": 8918,
           "mean": -0.0,
           "std": 1.0,
-          "min": -5.0592,
-          "max": 4.1958,
-          "median": 0.2294
+          "min": -5.0876,
+          "max": 4.2082,
+          "median": 0.2243
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 1147,
-          "mean": -0.2686,
-          "std": 1.1291,
-          "min": -4.6185,
-          "max": 3.7551,
-          "median": 0.0531
+          "total_valid_labels": 1122,
+          "mean": -0.283,
+          "std": 1.1266,
+          "min": -4.6449,
+          "max": 3.3229,
+          "median": 0.0472
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 1146,
-          "mean": -0.1431,
-          "std": 1.283,
-          "min": -4.2659,
-          "max": 4.1958,
-          "median": 0.1413
+          "total_valid_labels": 1099,
+          "mean": -0.1557,
+          "std": 1.2921,
+          "min": -4.2908,
+          "max": 4.2082,
+          "median": 0.1358
         }
       }
     },
@@ -132,22 +132,22 @@
         "protein_sequence": 0,
         "phopt_median": 0,
         "n_measurements": 0,
-        "phopt_std": 9539,
+        "phopt_std": 9249,
         "split": 0,
         "phopt_median_standardized": 0
       },
       "duplicate_rows_full": 0
     },
-    "rows": 11464,
-    "distinct_proteins": 11110,
+    "rows": 11139,
+    "distinct_proteins": 10794,
     "sequence_length_summary": {
-      "min": 5,
+      "min": 39,
       "max": 7096,
-      "mean": 469.81,
-      "median": 408.0,
-      "p95": 921,
-      "count_greater_than_1024": 411,
-      "contains_non_standard_aas": 56
+      "mean": 473.07,
+      "median": 411,
+      "p95": 924,
+      "count_greater_than_1024": 401,
+      "contains_non_standard_aas": 39
     },
     "categorical_high_variance_columns": [
       "uniprot_id"

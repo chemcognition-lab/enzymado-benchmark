@@ -680,6 +680,40 @@ def run_wrapper_training(
     )
 
 
+class StreamingAUPRC:
+    """Accumulate validation probabilities into the leaderboard's AUPRC histogram.
+
+    Memory stays at 2 * RANKING_BINS counters however large the validation set,
+    and the value equals metrics_registry.auprc_from_scores on all scores at once.
+    """
+
+    def __init__(self, device: torch.device) -> None:
+        self.totals = torch.zeros(
+            2 * metrics_registry.RANKING_BINS, dtype=torch.int64, device=device
+        )
+
+    def update(self, probabilities: Tensor, labels: Tensor, mask: Tensor) -> None:
+        mask = mask.bool()
+        if mask.ndim < labels.ndim:
+            mask = mask.reshape(mask.shape + (1,) * (labels.ndim - mask.ndim))
+        mask = mask.expand_as(labels)
+        scores = probabilities.double()[mask]
+        labels = labels[mask]
+        if not torch.isfinite(scores).all():
+            raise FloatingPointError("Non-finite validation probabilities.")
+        if ((scores < 0) | (scores > 1)).any():
+            raise ValueError("AUPRC probabilities must lie in [0, 1].")
+        if not ((labels == 0) | (labels == 1)).all():
+            raise ValueError("AUPRC selection requires binary labels.")
+        n_bins = metrics_registry.RANKING_BINS
+        levels = torch.clamp(torch.round(scores * (n_bins - 1)).long(), 0, n_bins - 1)
+        offsets = (labels == 1).long() * n_bins + levels
+        self.totals += torch.bincount(offsets, minlength=2 * n_bins)
+
+    def value(self) -> float:
+        return metrics_registry.auprc_from_histogram(self.totals.cpu().numpy())
+
+
 def compute_ec_batch_loss(logits_by_level, y_t, target_mask_t, criterion):
     """Masked multi-head BCE loss for hierarchical EC targets."""
     loss_terms = []

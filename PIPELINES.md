@@ -196,8 +196,20 @@ cells: 8 tasks x 1 split x 3 rating-eligible metrics (`mae`, `rmse`,
 - The scalar linear head is the MLP wrapper with no hidden layer, trained in
   minibatches of 256 like the MLP. Before v4 it trained on the whole split with
   one optimizer step per epoch and stopped at 200 steps, before converging.
+- Neural EC heads, with and without attention, select their checkpoint on
+  validation AUPRC pooled over the four EC levels: the leaderboard's histogram
+  estimator, accumulated batch by batch (`StreamingAUPRC`), so memory does not
+  grow with the 23k x 5.7k validation matrix. The residue tasks still select on
+  validation loss, and EC XGBoost stops on log loss.
 - `ec_number` supports XGBoost through a flat concatenated EC target vector.
 - `active_sites` and `binding_site` do use a dedicated structured model map.
+- UniProt Fragment entries are removed from the tasks whose label describes the
+  whole protein (`binding`, `ec_number`, `kcat`, `km`, `ph_opt`, `solubility`)
+  by `scripts/data_prep/remove_uniprot_fragments.py`, after the splits are made:
+  rows keep their split and regression targets are re-standardized on the
+  remaining train rows. The fragment list and its UniProt release are in
+  `data/processed/uniprot_fragments.{csv,json}`. Residue tasks keep fragments:
+  their labels are positions on the deposited sequence and all fall inside it.
 - `fluorescence` was dropped from the benchmark card because it does not contain
   enzymes. It is neither registered nor scored.
 
