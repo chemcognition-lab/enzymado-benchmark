@@ -14,6 +14,7 @@ import argparse
 from collections import defaultdict
 import csv
 import dataclasses
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -46,6 +47,7 @@ class Cell:
     metric: str
     weight: float
     scores: np.ndarray
+    sigma: np.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -269,6 +271,49 @@ def _exclusions(
     return found
 
 
+def _load_tie_margins(path: Path) -> dict[tuple[str, str, str, str, str], float]:
+    """Read the training-noise SD of every task, split, metric, head and pooling."""
+    margins: dict[tuple[str, str, str, str, str], float] = {}
+    with path.open(newline="") as handle:
+        for row in csv.DictReader(handle):
+            key = (
+                row["task"],
+                row["split"],
+                row["metric"],
+                row["model_family"],
+                row["pool_type"],
+            )
+            sigma = float(row["sigma"])
+            if not np.isfinite(sigma) or sigma < 0.0:
+                raise ValueError(f"Invalid sigma {sigma} for {key} in {path}.")
+            if key in margins:
+                raise ValueError(f"Duplicate tie margin {key} in {path}.")
+            margins[key] = sigma
+    return margins
+
+
+def _cell_sigma(
+    task: str,
+    split: str,
+    metric: str,
+    competitors: list[str],
+    margins: dict[tuple[str, str, str, str, str], float],
+) -> np.ndarray:
+    """Look up the training-noise SD of every competitor in one metric cell."""
+    sigma = np.empty(len(competitors), dtype=np.float64)
+    missing = set()
+    for index, name in enumerate(competitors):
+        _, family, pool = name.split("/")
+        key = (task, split, metric, family, pool)
+        if key not in margins:
+            missing.add(key)
+            continue
+        sigma[index] = margins[key]
+    if missing:
+        raise ValueError(f"No tie margin for {sorted(missing)}.")
+    return sigma
+
+
 def _build_cells(
     sources: tuple[Source, ...],
     task_types: dict[str, str],
@@ -277,6 +322,7 @@ def _build_cells(
     kendall_weight: float,
     rules: dict,
     prevalences: dict[tuple[str, str], float],
+    margins: dict[tuple[str, str, str, str, str], float] | None = None,
 ) -> tuple[list[str], list[Cell], list[Exclusion]]:
     """Load and validate a complete leaderboard design."""
     arrays: dict[tuple[str, str, str], dict[str, np.ndarray]] = defaultdict(dict)
@@ -310,6 +356,11 @@ def _build_cells(
                         f"extra={extra}."
                     )
                 scores = np.stack([arrays[key][name] for name in competitors])
+                sigma = (
+                    None
+                    if margins is None
+                    else _cell_sigma(task, split, metric, competitors, margins)
+                )
                 cells.append(
                     Cell(
                         task=task,
@@ -317,6 +368,7 @@ def _build_cells(
                         metric=metric,
                         weight=split_weight * metric_weight,
                         scores=scores,
+                        sigma=sigma,
                     )
                 )
     return competitors, cells, exclusions
@@ -333,15 +385,27 @@ def _battle_outcomes(
     pair_a: np.ndarray,
     pair_b: np.ndarray,
     n_battles: int,
+    tie_z: float = 1.96,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Aggregate all weighted metric battles within each bootstrap round."""
+    """Aggregate all weighted metric battles within each bootstrap round.
+
+    A cell that carries training-noise SDs scores a pair as a tie when the gap
+    is within tie_z * sqrt(sigma_a**2 + sigma_b**2): a retrained pair could
+    swap order by that much. With zero SDs this is the strict comparison.
+    """
     weighted_wins = np.zeros((n_battles, pair_a.size), dtype=np.float64)
     pair_weight = np.zeros(pair_a.size, dtype=np.float64)
     for cell in cells:
         scores_a = cell.scores[pair_a]
         scores_b = cell.scores[pair_b]
-        outcomes = (scores_a > scores_b).astype(np.float64)
-        outcomes += 0.5 * (scores_a == scores_b)
+        if cell.sigma is None:
+            outcomes = (scores_a > scores_b).astype(np.float64)
+            outcomes += 0.5 * (scores_a == scores_b)
+        else:
+            margin = tie_z * np.hypot(cell.sigma[pair_a], cell.sigma[pair_b])
+            gap = scores_a - scores_b
+            outcomes = (gap > margin[:, None]).astype(np.float64)
+            outcomes += 0.5 * (np.abs(gap) <= margin[:, None])
         weighted_wins += cell.weight * outcomes.T
         pair_weight += cell.weight
     return weighted_wins / pair_weight, pair_weight
@@ -459,6 +523,9 @@ def _compute_leaderboard(
     """Compute, summarize, and persist one global leaderboard."""
     print(f"Building {name} leaderboard")
     started = time.perf_counter()
+    margins = (
+        None if args.tie_margins is None else _load_tie_margins(args.tie_margins)
+    )
     competitors, cells, exclusions = _build_cells(
         sources,
         task_types,
@@ -467,6 +534,7 @@ def _compute_leaderboard(
         args.kendall_weight,
         rules,
         prevalences,
+        margins,
     )
     for exclusion in exclusions:
         print(
@@ -480,6 +548,7 @@ def _compute_leaderboard(
         pair_a,
         pair_b,
         args.n_battles,
+        args.tie_z,
     )
     point, samples = _fit_rounds(
         outcomes,
@@ -517,6 +586,16 @@ def _compute_leaderboard(
                 dataclasses.asdict(exclusion) for exclusion in exclusions
             ],
         },
+        "tie_margins": (
+            None
+            if args.tie_margins is None
+            else {
+                "path": str(args.tie_margins),
+                "sha256": hashlib.sha256(args.tie_margins.read_bytes()).hexdigest(),
+                "z": args.tie_z,
+                "rule": "tie when |gap| <= z * sqrt(sigma_a^2 + sigma_b^2)",
+            }
+        ),
         "rating_center": args.center_rating,
         "bootstrap_se_definition": "SD of ratings across bootstrap battle rounds",
         "sources": _source_payload(sources),
@@ -588,6 +667,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--random-weight", type=float, default=0.45)
     parser.add_argument("--similarity-weight", type=float, default=0.55)
     parser.add_argument("--center-rating", type=float, default=1500.0)
+    parser.add_argument(
+        "--tie-margins",
+        type=Path,
+        default=None,
+        help=(
+            "CSV of training-noise SDs (task, split, metric, model_family, "
+            "pool_type, sigma). Battles within the margin count as ties."
+        ),
+    )
+    parser.add_argument("--tie-z", type=float, default=1.96)
     return parser.parse_args()
 
 

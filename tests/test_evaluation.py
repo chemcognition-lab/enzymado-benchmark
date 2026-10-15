@@ -633,6 +633,42 @@ class TestDiscover(TestCase):
             self.assertEqual(exp.task_type(), "regression")
 
 
+class TestRatingTieMargins(TestCase):
+    def _cell(self, sigma) -> "ratings_script.Cell":
+        scores = np.array([[0.50, 0.50], [0.49, 0.40], [0.50, 0.30]])
+        return ratings_script.Cell(
+            task="t", split="random", metric="kendall_tau", weight=1.0,
+            scores=scores, sigma=sigma,
+        )
+
+    def test_zero_margins_match_the_strict_comparison(self) -> None:
+        pair_a, pair_b = ratings_script._pair_indices(3)
+        strict, _ = ratings_script._battle_outcomes(
+            [self._cell(None)], pair_a, pair_b, 2
+        )
+        zero, _ = ratings_script._battle_outcomes(
+            [self._cell(np.zeros(3))], pair_a, pair_b, 2
+        )
+        np.testing.assert_array_equal(strict, zero)
+
+    def test_gaps_within_the_noise_margin_are_ties(self) -> None:
+        pair_a, pair_b = ratings_script._pair_indices(3)
+        outcomes, _ = ratings_script._battle_outcomes(
+            [self._cell(np.full(3, 0.01))], pair_a, pair_b, 2, tie_z=1.96
+        )
+        # The margin is 1.96 * sqrt(2) * 0.01 = 0.0277: a 0.01 gap ties, 0.10 wins.
+        self.assertEqual(outcomes[0, 0], 0.5)
+        self.assertEqual(outcomes[1, 0], 1.0)
+
+    def test_every_competitor_needs_a_margin(self) -> None:
+        competitors = ["a/mlp/no_attention", "b/linear/attention"]
+        margins = {("t", "random", "kendall_tau", "mlp", "no_attention"): 0.01}
+        with self.assertRaisesRegex(ValueError, "linear"):
+            ratings_script._cell_sigma(
+                "t", "random", "kendall_tau", competitors, margins
+            )
+
+
 class TestGlobalRatings(TestCase):
     def test_expected_competitors_include_all_five_configurations(self) -> None:
         competitors = ratings_script._expected_competitors()
