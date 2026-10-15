@@ -9,13 +9,13 @@
     "url": "https://doi.org/10.1002/prot.70008"
   },
   "label": {
-    "column": "thermostability_standardized",
+    "column": "log10_thermostability_standardized",
     "label_kind": "scalar_regression",
-    "description": "Thermostability in the assay units of the tournament release, standardized on the training split. One row per variant: repeated measurements are averaged.",
+    "description": "log10 of the thermostability in the assay units of the tournament release, standardized on the training split. One row per variant: repeated measurements are averaged before the log.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-30",
+    "generated": "2026-10-14",
     "split_sizes_by_method": {
       "alpha_amylase__thermostability_random_80_10_10_standardized": {
         "train": 6990,
@@ -28,38 +28,38 @@
         "overall": {
           "kind": "numeric",
           "total_valid_labels": 8736,
-          "mean": -0.0022,
-          "std": 0.9932,
-          "min": -0.323,
-          "max": 12.7889,
-          "median": -0.0958
+          "mean": -0.0012,
+          "std": 0.9989,
+          "min": -2.5941,
+          "max": 3.152,
+          "median": 0.4868
         },
         "train": {
           "kind": "numeric",
           "total_valid_labels": 6990,
-          "mean": -0.0,
+          "mean": 0.0,
           "std": 1.0,
-          "min": -0.323,
-          "max": 12.7889,
-          "median": -0.0958
+          "min": -2.5941,
+          "max": 3.152,
+          "median": 0.4868
         },
         "val": {
           "kind": "numeric",
           "total_valid_labels": 875,
-          "mean": -0.0449,
-          "std": 0.7446,
-          "min": -0.3118,
-          "max": 10.2314,
-          "median": -0.0976
+          "mean": -0.0149,
+          "std": 0.9827,
+          "min": -1.3871,
+          "max": 3.0092,
+          "median": 0.4814
         },
         "test": {
           "kind": "numeric",
           "total_valid_labels": 871,
-          "mean": 0.0227,
-          "std": 1.1444,
-          "min": -0.3118,
-          "max": 12.1668,
-          "median": -0.0958
+          "mean": 0.0033,
+          "std": 1.0063,
+          "min": -1.3871,
+          "max": 3.12,
+          "median": 0.4868
         }
       }
     },
@@ -69,8 +69,9 @@
         "protein_sequence": 0,
         "n_measurements": 0,
         "thermostability": 0,
+        "log10_thermostability": 0,
         "split": 0,
-        "thermostability_standardized": 0
+        "log10_thermostability_standardized": 0
       },
       "duplicate_rows_full": 0
     },

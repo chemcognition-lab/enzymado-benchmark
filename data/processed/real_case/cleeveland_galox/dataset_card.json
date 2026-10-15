@@ -9,13 +9,13 @@
     "url": "https://doi.org/10.1186/s13068-021-01984-0"
   },
   "label": {
-    "column": "specific_activity_standardized",
+    "column": "log10_specific_activity_standardized",
     "label_kind": "scalar_regression",
-    "description": "Specific activity in the assay units of the source, standardized on the training split.",
+    "description": "log10 of the specific activity in the assay units of the source, standardized on the training split. The activity spans four orders of magnitude.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-09-30",
+    "generated": "2026-10-13",
     "split_sizes_by_method": {
       "cleeveland_random_80_10_10_standardized": {
         "train": 316,
@@ -28,38 +28,38 @@
         "overall": {
           "kind": "numeric",
           "total_valid_labels": 385,
-          "mean": -0.0004,
-          "std": 0.9822,
-          "min": -0.2739,
-          "max": 6.3867,
-          "median": -0.2642
+          "mean": 0.0143,
+          "std": 0.9978,
+          "min": -1.5648,
+          "max": 2.3183,
+          "median": 0.0474
         },
         "train": {
           "kind": "numeric",
           "total_valid_labels": 316,
-          "mean": 0.0,
+          "mean": -0.0,
           "std": 1.0,
-          "min": -0.2739,
-          "max": 6.3867,
-          "median": -0.2642
+          "min": -1.5648,
+          "max": 2.3183,
+          "median": 0.0474
         },
         "val": {
           "kind": "numeric",
           "total_valid_labels": 34,
-          "mean": 0.0162,
-          "std": 1.0294,
-          "min": -0.2739,
-          "max": 5.168,
-          "median": -0.264
+          "mean": 0.0417,
+          "std": 0.9837,
+          "min": -1.5648,
+          "max": 2.248,
+          "median": 0.0335
         },
         "test": {
           "kind": "numeric",
           "total_valid_labels": 35,
-          "mean": -0.02,
-          "std": 0.7442,
-          "min": -0.2739,
-          "max": 3.7697,
-          "median": -0.2645
+          "mean": 0.1164,
+          "std": 0.985,
+          "min": -1.5648,
+          "max": 2.1447,
+          "median": 0.0371
         }
       }
     },
@@ -71,8 +71,9 @@
         "smiles": 0,
         "substrate_concentration": 0,
         "specific_activity": 0,
+        "log10_specific_activity": 0,
         "split": 0,
-        "specific_activity_standardized": 0
+        "log10_specific_activity_standardized": 0
       },
       "duplicate_rows_full": 0
     },

@@ -2,25 +2,26 @@
   "property_name": "erickson_petase",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
-  "description": "PET hydrolase activity for a panel of naturally occurring scaffolds, measured as aromatic degradation products released.",
+  "description": "PET hydrolase activity for a panel of naturally occurring scaffolds, measured as aromatic degradation products released, at five temperatures and six buffer and pH conditions. Temperature, pH and a one-hot buffer code are model inputs.",
   "origin_of_data": {
     "source_name": "Thermotolerant PETase scaffolds from natural diversity",
     "doi": "10.1038/s41467-022-35237-x",
-    "url": "https://doi.org/10.1038/s41467-022-35237-x"
+    "url": "https://doi.org/10.1038/s41467-022-35237-x",
+    "note": "The source table labels its seventh row 30\u00b0C, C6 a second time; it is the 40\u00b0C, C6 measurement and is relabelled when cleaning."
   },
   "label": {
-    "column": "sum_aromatic_products_standardized",
+    "column": "log10_sum_aromatic_products_plus_one_standardized",
     "label_kind": "scalar_regression",
-    "description": "Sum of aromatic products in the assay units of the source, standardized on the training split.",
+    "description": "log10(x + 1) of the sum of aromatic products in the assay units of the source, standardized on the training split. A fifth of the values are 0.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-10-06",
+    "generated": "2026-10-13",
     "split_sizes_by_method": {
       "erickson_random_80_10_10_standardized": {
-        "train": 460,
-        "test": 52,
-        "val": 58
+        "train": 456,
+        "val": 57,
+        "test": 57
       }
     },
     "label_distribution_by_method": {
@@ -28,38 +29,38 @@
         "overall": {
           "kind": "numeric",
           "total_valid_labels": 570,
-          "mean": 0.0083,
-          "std": 1.0114,
-          "min": -0.4712,
-          "max": 7.2587,
-          "median": -0.4269
+          "mean": -0.0024,
+          "std": 0.997,
+          "min": -1.328,
+          "max": 2.1101,
+          "median": -0.1131
         },
         "train": {
           "kind": "numeric",
-          "total_valid_labels": 460,
+          "total_valid_labels": 456,
           "mean": 0.0,
           "std": 1.0,
-          "min": -0.4712,
-          "max": 7.2587,
-          "median": -0.4336
+          "min": -1.328,
+          "max": 2.1101,
+          "median": -0.1003
         },
         "val": {
           "kind": "numeric",
-          "total_valid_labels": 58,
-          "mean": -0.009,
-          "std": 0.9197,
-          "min": -0.4712,
-          "max": 5.4149,
-          "median": -0.404
+          "total_valid_labels": 57,
+          "mean": -0.0155,
+          "std": 1.0039,
+          "min": -1.328,
+          "max": 2.0593,
+          "median": -0.2444
         },
         "test": {
           "kind": "numeric",
-          "total_valid_labels": 52,
-          "mean": 0.1013,
-          "std": 1.1887,
-          "min": -0.4712,
-          "max": 6.1575,
-          "median": -0.4019
+          "total_valid_labels": 57,
+          "mean": -0.0083,
+          "std": 0.9655,
+          "min": -1.328,
+          "max": 1.8996,
+          "median": -0.1528
         }
       }
     },
@@ -68,11 +69,18 @@
         "dataset_id": 0,
         "protein_sequence": 0,
         "temperature": 0,
+        "ph": 0,
+        "buffer_c": 0,
+        "buffer_np": 0,
+        "buffer_h": 0,
+        "buffer_b": 0,
+        "buffer_g": 0,
         "sum_aromatic_products": 0,
+        "log10_sum_aromatic_products_plus_one": 0,
         "split": 0,
-        "sum_aromatic_products_standardized": 0
+        "log10_sum_aromatic_products_plus_one_standardized": 0
       },
-      "duplicate_rows_full": 3
+      "duplicate_rows_full": 0
     },
     "rows": 570,
     "distinct_proteins": 19,

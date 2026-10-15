@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -17,6 +18,16 @@ if str(PROJECT_ROOT) not in sys.path:
 from enzymado.paths_and_constants import Constants, Paths  # noqa: E402
 
 ERICKSON_VALUE_COLUMN = "sum_aromatic_products"
+# The products span 0 to ~2,700 mg/L with a fifth of the wells at 0, so the
+# target is log10(x + 1); the smallest nonzero value is about 1.
+ERICKSON_TARGET_COLUMN = "log10_sum_aromatic_products_plus_one"
+# Reaction conditions are a buffer code followed by the pH, e.g. "NP7.5".
+ERICKSON_BUFFERS = ("C", "NP", "H", "B", "G")
+ERICKSON_BUFFER_COLUMNS = [f"buffer_{code.lower()}" for code in ERICKSON_BUFFERS]
+# values.csv labels its seventh data row "30°C, C6" a second time. It sits
+# before the 40°C block, which has no C6 row, and its values fall between 30°C
+# and 50°C, so it is the 40°C C6 measurement.
+ERICKSON_ROW_FIXES = {6: (("30°C", "C6"), ("40°C", "C6"))}
 ERICKSON_INTERIM_COLUMNS = [
     Constants.dataset_id,
     "enzyme_id",
@@ -24,6 +35,8 @@ ERICKSON_INTERIM_COLUMNS = [
     "rxn_temperature_raw",
     "temperature",
     "rxn_condition",
+    "ph",
+    "buffer",
     "measurement_name",
     "measurement_unit",
     ERICKSON_VALUE_COLUMN,
@@ -32,10 +45,16 @@ ERICKSON_PROCESSED_COLUMNS = [
     Constants.dataset_id,
     Constants.protein_sequence,
     "temperature",
+    "ph",
+    *ERICKSON_BUFFER_COLUMNS,
     ERICKSON_VALUE_COLUMN,
+    ERICKSON_TARGET_COLUMN,
 ]
 
 CLEVELAND_VALUE_COLUMN = "specific_activity"
+# Specific activity spans four orders of magnitude (0.01 to 705), so the target
+# is its log10.
+CLEVELAND_TARGET_COLUMN = "log10_specific_activity"
 CLEVELAND_INTERIM_COLUMNS = [
     Constants.dataset_id,
     "protein_name",
@@ -57,6 +76,7 @@ CLEVELAND_PROCESSED_COLUMNS = [
     Constants.smiles,
     "substrate_concentration",
     CLEVELAND_VALUE_COLUMN,
+    CLEVELAND_TARGET_COLUMN,
 ]
 ALIGN_PROCESSED_COLUMNS = [
     Constants.dataset_id,
@@ -101,6 +121,26 @@ ALIGN_TASK_OUTPUTS = {
 }
 
 
+# Targets that span two or more orders of magnitude are modelled on a log10
+# scale, like GalOx and PETase. Melting point and amylase expression stay linear.
+ALIGN_LOG_TARGETS = {
+    ("alpha-amylase", "specific_activity"),
+    ("alpha-amylase", "thermostability"),
+    ("b-glucosidase", "activity"),
+    ("b-glucosidase", "expression"),
+}
+
+
+def log10_offset(values: list[float]) -> float:
+    """Return 0, or the smallest positive value to one significant figure if any is 0."""
+    if any(value < 0.0 for value in values):
+        raise ValueError("A log10 target cannot contain negative values.")
+    if all(value > 0.0 for value in values):
+        return 0.0
+    smallest = min(value for value in values if value > 0.0)
+    return float(f"{smallest:.0e}")
+
+
 def clean_text(value: str | None) -> str:
     if value is None:
         return ""
@@ -118,6 +158,13 @@ def slugify(value: str) -> str:
 def parse_temperature(raw_value: str) -> float:
     cleaned = clean_text(raw_value).replace("°C", "").replace("C", "")
     return float(cleaned)
+
+
+def parse_erickson_condition(raw_value: str) -> tuple[str, float]:
+    match = re.fullmatch(r"([A-Z]+)(\d+(?:\.\d+)?)", clean_text(raw_value))
+    if match is None or match.group(1) not in ERICKSON_BUFFERS:
+        raise ValueError(f"Unrecognized Erickson reaction condition '{raw_value}'.")
+    return match.group(1), float(match.group(2))
 
 
 def parse_measurement_label(raw_label: str) -> tuple[str, str]:
@@ -185,7 +232,7 @@ def build_erickson_rows(
     interim_rows: list[dict[str, str]] = []
     processed_rows: list[dict[str, str]] = []
 
-    for raw_row in rows[2:]:
+    for row_index, raw_row in enumerate(rows[2:]):
         if not any(clean_text(cell) for cell in raw_row):
             continue
 
@@ -193,8 +240,17 @@ def build_erickson_rows(
         condition = clean_text(raw_row[1])
         if not temperature_raw or not condition:
             continue
+        if row_index in ERICKSON_ROW_FIXES:
+            expected, corrected = ERICKSON_ROW_FIXES[row_index]
+            if (temperature_raw, condition) != expected:
+                raise ValueError(
+                    f"values.csv data row {row_index} is {temperature_raw}, "
+                    f"{condition}; expected {expected[0]}, {expected[1]} to fix."
+                )
+            temperature_raw, condition = corrected
 
         temperature = parse_temperature(temperature_raw)
+        buffer, ph = parse_erickson_condition(condition)
 
         for enzyme_id, measurement_label, raw_value in zip(
             enzyme_ids,
@@ -227,6 +283,8 @@ def build_erickson_rows(
                     "rxn_temperature_raw": temperature_raw,
                     "temperature": str(temperature),
                     "rxn_condition": condition,
+                    "ph": str(ph),
+                    "buffer": buffer,
                     "measurement_name": measurement_name,
                     "measurement_unit": measurement_unit,
                     ERICKSON_VALUE_COLUMN: value,
@@ -237,10 +295,21 @@ def build_erickson_rows(
                     Constants.dataset_id: dataset_id,
                     Constants.protein_sequence: protein_sequence,
                     "temperature": str(temperature),
+                    "ph": str(ph),
+                    **{
+                        column: "1.0" if code == buffer else "0.0"
+                        for code, column in zip(
+                            ERICKSON_BUFFERS, ERICKSON_BUFFER_COLUMNS, strict=True
+                        )
+                    },
                     ERICKSON_VALUE_COLUMN: value,
+                    ERICKSON_TARGET_COLUMN: str(math.log10(float(value) + 1.0)),
                 }
             )
 
+    dataset_ids = [row[Constants.dataset_id] for row in processed_rows]
+    if len(set(dataset_ids)) != len(dataset_ids):
+        raise ValueError("Erickson rows do not have unique dataset ids.")
     return interim_rows, processed_rows
 
 
@@ -337,6 +406,7 @@ def build_cleeveland_rows(
                     Constants.smiles: smiles,
                     "substrate_concentration": substrate_concentration,
                     CLEVELAND_VALUE_COLUMN: value,
+                    CLEVELAND_TARGET_COLUMN: str(math.log10(float(value))),
                 }
             )
 
@@ -486,6 +556,14 @@ def build_align_rows(
             }
             for index, (sequence, values) in enumerate(by_sequence.items(), start=1)
         ]
+        fieldnames = list(ALIGN_PROCESSED_COLUMNS) + [task_name]
+        if (family, task_name) in ALIGN_LOG_TARGETS:
+            target = f"log10_{task_name}"
+            offset = log10_offset([float(row[task_name]) for row in processed_rows])
+            for row in processed_rows:
+                row[target] = str(math.log10(float(row[task_name]) + offset))
+            fieldnames.append(target)
+            print(f"  {task_name}: target {target} with offset {offset:g}")
         repeated = sum(1 for values in by_sequence.values() if len(values) > 1)
         print(
             f"  {task_name}: {sum(map(len, by_sequence.values()))} measurements, "
@@ -495,7 +573,7 @@ def build_align_rows(
             (
                 measurement_column,
                 task_name,
-                list(ALIGN_PROCESSED_COLUMNS) + [task_name],
+                fieldnames,
                 processed_rows,
             )
         )

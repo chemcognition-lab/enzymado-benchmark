@@ -223,7 +223,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_amylase_activity"
             / "alpha_amylase__specific_activity_random_80_10_10_standardized.csv",
         },
-        target_column="specific_activity_standardized",
+        target_column="log10_specific_activity_standardized",
         index_columns=("dataset_id",),
     ),
     "align_amylase_expression": TaskConfig(
@@ -249,7 +249,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_amylase_stability"
             / "alpha_amylase__thermostability_random_80_10_10_standardized.csv",
         },
-        target_column="thermostability_standardized",
+        target_column="log10_thermostability_standardized",
         index_columns=("dataset_id",),
     ),
     "align_glucosidase_activity": TaskConfig(
@@ -262,7 +262,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_glucosidase_activity"
             / "b_glucosidase__activity_random_80_10_10_standardized.csv",
         },
-        target_column="activity_standardized",
+        target_column="log10_activity_standardized",
         index_columns=("dataset_id",),
     ),
     "align_glucosidase_expression": TaskConfig(
@@ -275,7 +275,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             / "real_case/align_glucosidase_expression"
             / "b_glucosidase__expression_random_80_10_10_standardized.csv",
         },
-        target_column="expression_standardized",
+        target_column="log10_expression_standardized",
         index_columns=("dataset_id",),
     ),
     "align_glucosidase_melting": TaskConfig(
@@ -300,7 +300,7 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.RANDOM: _DATA
             / "real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv",
         },
-        target_column="specific_activity_standardized",
+        target_column="log10_specific_activity_standardized",
         ligand_column="smiles",
         numeric_feature_columns=("substrate_concentration",),
         index_columns=("dataset_id",),
@@ -314,8 +314,16 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
             SplitType.RANDOM: _DATA
             / "real_case/erickson_petase/erickson_random_80_10_10_standardized.csv",
         },
-        target_column="sum_aromatic_products_standardized",
-        numeric_feature_columns=("temperature",),
+        target_column="log10_sum_aromatic_products_plus_one_standardized",
+        numeric_feature_columns=(
+            "temperature",
+            "ph",
+            "buffer_c",
+            "buffer_np",
+            "buffer_h",
+            "buffer_b",
+            "buffer_g",
+        ),
         index_columns=("dataset_id",),
     ),
 }

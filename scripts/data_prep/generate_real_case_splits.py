@@ -24,7 +24,7 @@ REAL_CASE_DATASETS = (
             "data/processed/real_case/align_amylase_activity/"
             "alpha_amylase__specific_activity.csv"
         ),
-        "specific_activity",
+        "log10_specific_activity",
     ),
     (
         Path(
@@ -38,21 +38,21 @@ REAL_CASE_DATASETS = (
             "data/processed/real_case/align_amylase_stability/"
             "alpha_amylase__thermostability.csv"
         ),
-        "thermostability",
+        "log10_thermostability",
     ),
     (
         Path(
             "data/processed/real_case/align_glucosidase_activity/"
             "b_glucosidase__activity.csv"
         ),
-        "activity",
+        "log10_activity",
     ),
     (
         Path(
             "data/processed/real_case/align_glucosidase_expression/"
             "b_glucosidase__expression.csv"
         ),
-        "expression",
+        "log10_expression",
     ),
     (
         Path(
@@ -63,11 +63,11 @@ REAL_CASE_DATASETS = (
     ),
     (
         Path("data/processed/real_case/cleeveland_galox/cleeveland.csv"),
-        "specific_activity",
+        "log10_specific_activity",
     ),
     (
         Path("data/processed/real_case/erickson_petase/erickson.csv"),
-        "sum_aromatic_products",
+        "log10_sum_aromatic_products_plus_one",
     ),
 )
 

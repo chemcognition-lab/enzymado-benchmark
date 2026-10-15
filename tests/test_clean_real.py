@@ -1,10 +1,16 @@
 import csv
 import json
+import math
 from pathlib import Path
 
+import pytest
+
 from scripts.data_prep.clean_real import (
+    ERICKSON_BUFFER_COLUMNS,
+    log10_offset,
     build_align_rows,
     build_argument_parser,
+    build_erickson_rows,
     resolve_align_processed_dir,
     resolve_align_task_processed_dir,
     sync_align_benchmark_card,
@@ -239,3 +245,57 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
         "data/processed/real_case/align_glucosidase_melting/b_glucosidase__melting_point.csv"
     )
     assert glucosidase_entry["schema"]["target_col"] == "melting_point"
+
+
+def _write_erickson_values(path: Path, rows: list[list[str]]) -> None:
+    header = [["Enzyme ID", "", "101"], ["Rxn Temperature (°C)", "Rxn pH", "Sum (mg/L)"]]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        csv.writer(handle).writerows(header + rows)
+
+
+def test_erickson_rows_carry_ph_and_buffer_and_fix_the_relabelled_row(tmp_path):
+    sequences = tmp_path / "sequences.csv"
+    write_csv(sequences, ["Enzyme ID", "Protein Sequence"], [
+        {"Enzyme ID": "101", "Protein Sequence": "MKV"},
+    ])
+    conditions = ["C6", "NP7", "NP7.5", "H7.5", "B8", "G9"]
+    rows = [["30°C", c, "1"] for c in conditions] + [["30°C", "C6", "2"]]
+    rows += [["40°C", c, "3"] for c in conditions[1:]]
+    values = tmp_path / "values.csv"
+    _write_erickson_values(values, rows)
+
+    _, processed = build_erickson_rows(sequences, values)
+
+    by_id = {row["dataset_id"]: row for row in processed}
+    assert len(by_id) == len(processed) == 12
+    fixed = by_id["101_40_c_c6"]
+    assert (fixed["temperature"], fixed["ph"], fixed["sum_aromatic_products"]) == (
+        "40.0", "6.0", "2.0",
+    )
+    assert float(fixed["log10_sum_aromatic_products_plus_one"]) == pytest.approx(
+        math.log10(3.0)
+    )
+    hepes = by_id["101_30_c_h7_5"]
+    assert hepes["ph"] == "7.5" and hepes["buffer_h"] == "1.0"
+    for row in processed:
+        assert sum(float(row[column]) for column in ERICKSON_BUFFER_COLUMNS) == 1.0
+
+
+def test_erickson_row_fix_refuses_an_unexpected_label(tmp_path):
+    sequences = tmp_path / "sequences.csv"
+    write_csv(sequences, ["Enzyme ID", "Protein Sequence"], [
+        {"Enzyme ID": "101", "Protein Sequence": "MKV"},
+    ])
+    rows = [["30°C", c, "1"] for c in ["C6", "NP7", "NP7.5", "H7.5", "B8", "G9", "NP7"]]
+    values = tmp_path / "values.csv"
+    _write_erickson_values(values, rows)
+
+    with pytest.raises(ValueError, match="expected 30°C, C6"):
+        build_erickson_rows(sequences, values)
+
+
+def test_log10_offset_is_the_smallest_positive_value_only_when_zeros_exist():
+    assert log10_offset([0.5, 2.0, 30.0]) == 0.0
+    assert log10_offset([0.0, 0.006487, 7053.0]) == 0.006
+    with pytest.raises(ValueError, match="negative"):
+        log10_offset([-1.0, 2.0])
