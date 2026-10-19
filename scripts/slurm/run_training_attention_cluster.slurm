@@ -6,7 +6,6 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=%x_%A_%a.out
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --mail-user=josechemistry.qb@gmail.com
 
 set -euo pipefail
 

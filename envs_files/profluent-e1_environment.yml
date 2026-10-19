@@ -236,4 +236,3 @@ dependencies:
       - typing-extensions==4.15.0
       - urllib3==2.6.3
       - wcwidth==0.6.0
-prefix: /home/ralmadamonter/miniconda3/envs/profluent-e1

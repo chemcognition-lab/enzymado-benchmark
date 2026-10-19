@@ -91,40 +91,15 @@ def _reference_embeddings() -> tuple[str, ...]:
     return ("noplm",)
 
 
-# Official task weights of the property leaderboard, ordered by how directly a task
-# tests knowledge of enzymes, in five tiers one equal step apart: what reaction an
-# enzyme catalyzes (EC number) and which residues catalyze it (active sites); how
-# fast it turns over (kcat) and where it binds (binding sites); substrate recognition
-# under turnover (KM) and the ionization of its catalytic groups (pH optimum);
-# folding stability, which is protein biophysics in general (ddG, dTm); and last
-# the tasks that say least about the enzyme itself: BioLiP binding, which the
-# ligand descriptors largely decide, and solubility, an expression property. The
-# real-case datasets keep equal weights.
-_TASK_WEIGHTS: dict[str, dict[str, float]] = {
-    "properties": {
-        "active_sites": 1.0,
-        "ec_number": 1.0,
-        "kcat": 0.8,
-        "binding_site": 0.8,
-        "km": 0.6,
-        "ph_opt": 0.6,
-        "ddg": 0.4,
-        "dtm": 0.4,
-        "binding": 0.2,
-        "solubility": 0.2,
-    },
-}
-
-
-def _task_weights(scope: str, tasks: list[str]) -> dict[str, float]:
-    """Return each task's leaderboard weight; a scope without a table weighs tasks equally."""
-    table = _TASK_WEIGHTS.get(scope)
+def _task_weights(rating: dict, scope: str, tasks: list[str]) -> dict[str, float]:
+    """Return each task's weight from the card; a scope without a table weighs tasks equally."""
+    table = rating.get("task_weights", {}).get(scope)
     if table is None:
         return {task: 1.0 for task in tasks}
     missing = sorted(set(tasks) - set(table))
     if missing:
         raise ValueError(f"No task weight for {missing} in the {scope} leaderboard.")
-    return {task: table[task] for task in tasks}
+    return {task: float(table[task]) for task in tasks}
 
 
 def _competitor_name(exp: discover.Experiment) -> str:
@@ -199,17 +174,17 @@ def _load_source(
 
 def _metric_weights(
     task_type: str,
-    kendall_weight: float,
+    weights: dict[str, float],
     excluded: frozenset[str] = frozenset(),
     label: str = "",
 ) -> dict[str, float]:
-    """Normalize the surviving metric weights to equal influence per task cell."""
-    raw = metrics_registry.rating_weights_for(task_type)
-    if "kendall_tau" in raw:
-        raw["kendall_tau"] = kendall_weight
+    """Normalize the card's metric weights to equal influence per task cell."""
+    unknown = sorted(set(weights) - set(metrics_registry.higher_is_better_for(task_type)))
+    if unknown:
+        raise ValueError(f"Unknown {task_type} metrics in the rating weights: {unknown}.")
     kept = {
-        name: weight
-        for name, weight in raw.items()
+        name: float(weight)
+        for name, weight in weights.items()
         if weight > 0.0 and name not in excluded
     }
     total = sum(kept.values())
@@ -364,7 +339,7 @@ def _build_cells(
     task_types: dict[str, str],
     split_weights: dict[str, float],
     n_battles: int,
-    kendall_weight: float,
+    metric_weights: dict[str, dict[str, float]],
     rules: dict,
     prevalences: dict[tuple[str, str], float],
     margins: dict[tuple[str, str, str, str, str], float] | None = None,
@@ -385,13 +360,13 @@ def _build_cells(
     cells: list[Cell] = []
     for task, task_type in sorted(task_types.items()):
         for split, split_weight in split_weights.items():
-            metric_weights = _metric_weights(
+            cell_weights = _metric_weights(
                 task_type,
-                kendall_weight,
+                metric_weights[task_type],
                 frozenset(dropped[task, split]),
                 label=f"{task}/{split}",
             )
-            for metric, metric_weight in metric_weights.items():
+            for metric, metric_weight in cell_weights.items():
                 key = (task, split, metric)
                 present = set(arrays[key])
                 if present != expected:
@@ -524,12 +499,20 @@ def _ranking_rows(
     return rows
 
 
+def _display_path(path: Path) -> str:
+    """Write a path relative to the repository when it lies inside it."""
+    try:
+        return str(Path(path).resolve().relative_to(_REPO))
+    except ValueError:
+        return str(path)
+
+
 def _source_payload(sources: tuple[Source, ...]) -> list[dict[str, object]]:
     """Serialize rating input roots for provenance."""
     return [
         {
-            "predictions_root": str(source.predictions_root),
-            "bootstrap_root": str(source.bootstrap_root),
+            "predictions_root": _display_path(source.predictions_root),
+            "bootstrap_root": _display_path(source.bootstrap_root),
             "task_scope": source.task_scope,
             "pool_types": list(source.pool_types),
         }
@@ -568,6 +551,7 @@ def _compute_leaderboard(
     split_weights: dict[str, float],
     rules: dict,
     prevalences: dict[tuple[str, str], float],
+    rating: dict,
     args: argparse.Namespace,
 ) -> None:
     """Compute, summarize, and persist one global leaderboard."""
@@ -576,13 +560,13 @@ def _compute_leaderboard(
     margins = (
         None if args.tie_margins is None else _load_tie_margins(args.tie_margins)
     )
-    task_weights = _task_weights(name, sorted(task_types))
+    task_weights = _task_weights(rating, name, sorted(task_types))
     competitors, cells, exclusions = _build_cells(
         sources,
         task_types,
         split_weights,
         args.n_battles,
-        args.kendall_weight,
+        rating["metric_weights"],
         rules,
         prevalences,
         margins,
@@ -626,13 +610,13 @@ def _compute_leaderboard(
         "task_weights": task_weights,
         "split_weights": split_weights,
         "metric_weights": {
-            "kendall_tau": args.kendall_weight,
-            "other_metrics": 1.0,
+            **rating["metric_weights"],
             "normalization": (
                 "within each task and split, over the metrics that survive "
                 "rating_exclusions"
             ),
         },
+        "unrated_metrics": rating.get("unrated_metrics", {}),
         "rating_exclusions": {
             "rules": rules,
             "excluded_cells": [
@@ -643,7 +627,7 @@ def _compute_leaderboard(
             None
             if args.tie_margins is None
             else {
-                "path": str(args.tie_margins),
+                "path": _display_path(args.tie_margins),
                 "sha256": hashlib.sha256(args.tie_margins.read_bytes()).hexdigest(),
                 "z": args.tie_z,
                 "rule": "tie when |gap| <= z * sqrt(sigma_a^2 + sigma_b^2)",
@@ -712,13 +696,10 @@ def _parse_args() -> argparse.Namespace:
         default=repo / "results" / "ratings" / "seed_42_two_leaderboards",
     )
     parser.add_argument("--n-battles", type=int, default=1000)
-    parser.add_argument(
-        "--kendall-weight",
-        type=float,
-        default=metrics_registry.rating_weights_for("regression")["kendall_tau"],
-    )
-    parser.add_argument("--random-weight", type=float, default=0.4)
-    parser.add_argument("--similarity-weight", type=float, default=0.6)
+    # The weights, the tie margins and their z live in the card's "rating" section;
+    # these flags only override them, for sensitivity analyses.
+    parser.add_argument("--random-weight", type=float, default=None)
+    parser.add_argument("--similarity-weight", type=float, default=None)
     parser.add_argument("--center-rating", type=float, default=1500.0)
     parser.add_argument(
         "--tie-margins",
@@ -726,10 +707,16 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "CSV of training-noise SDs (task, split, metric, model_family, "
-            "pool_type, sigma). Battles within the margin count as ties."
+            "pool_type, sigma) replacing the card's. Battles within the margin "
+            "count as ties."
         ),
     )
-    parser.add_argument("--tie-z", type=float, default=1.96)
+    parser.add_argument(
+        "--tie-z",
+        type=float,
+        default=None,
+        help="Override the card's z; 0 gives the strict comparison.",
+    )
     return parser.parse_args()
 
 
@@ -759,23 +746,42 @@ def main() -> None:
         ),
     )
     card = json.loads(args.benchmark_card.read_text())
-    rules = card.get("rating_exclusions", {})
+    rating = card["rating"]
+    rules = rating.get("exclusions", {})
+    margins = rating.get("tie_margins") or {}
+    if args.tie_margins is None and margins.get("path"):
+        args.tie_margins = _REPO / margins["path"]
+    if args.tie_z is None:
+        args.tie_z = float(margins.get("z", 1.96))
+    split_weights = {
+        scope: {split: float(weight) for split, weight in table.items()}
+        for scope, table in rating["split_weights"].items()
+    }
+    if args.random_weight is not None or args.similarity_weight is not None:
+        if args.random_weight is None or args.similarity_weight is None:
+            raise ValueError("Override both --random-weight and --similarity-weight.")
+        split_weights["properties"] = {
+            "random": args.random_weight,
+            "similarity": args.similarity_weight,
+        }
     _compute_leaderboard(
         "properties",
         properties_sources,
         _task_types(card, "properties"),
-        {"random": args.random_weight, "similarity": args.similarity_weight},
+        split_weights["properties"],
         rules,
         _class_prevalences(card, "properties"),
+        rating,
         args,
     )
     _compute_leaderboard(
         "real_case",
         real_case_sources,
         _task_types(card, "real_case"),
-        {"random": 1.0},
+        split_weights["real_case"],
         rules,
         _class_prevalences(card, "real_case"),
+        rating,
         args,
     )
     print("Two leaderboards complete.")

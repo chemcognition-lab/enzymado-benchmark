@@ -3,9 +3,9 @@
 **A reproducible benchmark for protein language model embeddings on enzyme property prediction.**
 
 Enzymado asks a narrow, practical question: *if you take a frozen protein language model
-and train a simple head on top of its embeddings, how well does that work for real enzyme
-engineering tasks?* It answers it the same way for every model, on every dataset, with
-every split, so the numbers are comparable.
+and train a simple head on top of its embeddings, how well does that work for enzyme
+tasks?* It answers it the same way for every model, on every dataset, with every split, so
+the numbers are comparable.
 
 <p align="center">
   <img src="assets/enzymado_evaluation_diagram.png"
@@ -19,11 +19,11 @@ every split, so the numbers are comparable.
 
 | axis | values |
 |---|---|
-| **Property datasets** | 10 - `binding`, `binding_site`, `active_sites`, `ec_number`, `solubility`, `kcat`, `km`, `ph_opt`, `dtm`, `ddg` |
-| **Real-case datasets** | 8 - amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase. All regression. |
-| **Protein language models** | 14 - see the table below |
-| **Split types** | 2 - `random` and `similarity` (MMseqs2 at 30% minimum sequence identity, 80/10/10, so test proteins are not near-duplicates of training ones). Real-case datasets are `random` only. |
-| **Baselines** | 5 - linear, MLP and XGBoost without attention, plus linear and MLP over learned attention pooling. How the embedding reaches the head depends on the task: protein-level tasks mean-pool it, residue-level tasks (`active_sites`, `binding_site`) feed one embedding per residue with no pooling at all. |
+| **Property datasets** | 10: `binding`, `binding_site`, `active_sites`, `ec_number`, `solubility`, `kcat`, `km`, `ph_opt`, `dtm`, `ddg` |
+| **Real-case datasets** | 8: amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase. All regression. |
+| **Protein language models** | 14, see the table below, plus `noplm`, a reference built without a language model |
+| **Split types** | 2: `random` and `similarity` (MMseqs2 at 30% identity and 80% coverage, whole clusters assigned to one split, 80/10/10). Real-case datasets are `random` only. |
+| **Baselines** | 5: linear, MLP and XGBoost on mean-pooled embeddings, plus linear and MLP over learned attention pooling. Protein-level tasks pool the embedding; residue-level tasks (`active_sites`, `binding_site`) keep one embedding per residue. |
 
 The 14 embedding models, with the manifest key each one is addressed by:
 
@@ -38,20 +38,57 @@ The 14 embedding models, with the manifest key each one is addressed by:
 | ProstT5 | `prost5` | 1024 |
 | ProFluent-E1 | `profluent_e1_300m`, `profluent_e1_600m` | 1024, 1280 |
 
-That grid is **1,960 model–dataset evaluations**: 1,400 on properties (10 × 14 × 2 × 5)
-and 560 on real cases (8 × 14 × 1 × 5).
+`noplm` holds 36 ProtParam descriptors (amino acid composition, secondary structure
+fractions, molecular weight, isoelectric point, GRAVY, instability index, aromaticity,
+extinction coefficients, net charge at pH 7.4 and five statistics of the flexibility
+profile) as its pooled vector and a one-hot encoding of the 20 amino acids per residue
+(`scripts/embeddings/build_noplm_features.py`). It runs through the same five baselines and
+competes in both leaderboards, so every PLM is compared with what needs no language model.
 
-Embeddings are **frozen**. Nothing fine-tunes the language model — the benchmark measures
+That grid is **1,960 PLM runs** (1,400 on properties, 10 × 14 × 2 × 5, and 560 on real
+cases, 8 × 14 × 1 × 5) plus **140 `noplm` runs**.
+
+Embeddings are **frozen**. Nothing fine-tunes the language model: the benchmark measures
 what the representation already carries, not what a full fine-tune could extract.
 
-Every model competes on the **same proteins**. The 14 embedding stores do not cover the
+Every model competes on the **same proteins**. The embedding stores do not cover the
 sequence index identically, so `scripts/embeddings/build_embedding_intersection.py`
-computes their intersection once and training restricts every run to it via
-`--allowed_ids`. The published results use **269,409 shared sequence IDs**, with 10,235
-excluded; `results/embedding_intersection/report.tsv` records the per-model coverage that
-produced that set.
+computes their intersection once and every run is restricted to it via `--allowed_ids`.
+The published runs use **269,409 shared sequence IDs**: of the 270,029 sequences in
+`data/processed/protein_pool.csv`, the 620 left out are all longer than 2,644 residues,
+which ESM3 could not embed. (`excluded_ids.txt` also lists IDs of an earlier, larger index
+that no dataset uses any more.) `results/embedding_intersection/report.tsv` records the
+per-model coverage.
 
-Every published run uses **training seed 42**.
+Every published run uses **training seed 42**. Seeds 43 and 44 retrain a subset of the runs
+to measure training noise (see [Ratings](#ratings)).
+
+---
+
+## Datasets
+
+Every source is converted to one table format, deduplicated into the shared sequence index,
+split once, and released with its split assignment as a column of the CSV. Regression
+targets are standardized on the training split. Two dataset-level decisions matter when
+reading the results:
+
+- **UniProt fragments are removed** from the tasks whose label describes the whole protein
+  (`binding`, `ec_number`, `kcat`, `km`, `ph_opt`, `solubility`) by
+  `scripts/data_prep/remove_uniprot_fragments.py`, after the splits are made: rows keep
+  their split and regression targets are standardized again on the remaining train rows.
+  The fragment list and its UniProt release are in `data/processed/uniprot_fragments.{csv,json}`.
+  Residue tasks keep fragments: their labels are positions on the deposited sequence and all
+  fall inside it.
+- **Real-case targets that span two or more orders of magnitude are modeled as log10**
+  (GalOx and PETase activity, amylase activity and stability, glucosidase activity and
+  expression), with zeros offset by the smallest positive value at one significant figure
+  (`scripts/data_prep/clean_real.py`). PETase rows also carry the reaction temperature, pH
+  and buffer as numeric features.
+
+Similarity splits use MMseqs2 at a minimum identity of 0.3. The 0.5 threshold recorded in
+the dataset cards belongs to a separate whole-dataset diversity analysis and does not define
+the splits. `fluorescence` was dropped from the benchmark because it does not contain
+enzymes.
 
 ---
 
@@ -67,23 +104,64 @@ data_loading  →  training  →  prediction  →  evaluation
    CSV, embeddings pulled from safetensors shards, labels built per task type, and the
    split assignment. Residue-level tasks stream embeddings lazily so that a ~390 GB store
    never has to fit in RAM.
-2. **`training`** takes that bundle plus an architecture from `models`, runs the training
-   loop with early stopping on validation loss, and returns a fitted estimator.
-3. **`prediction`** takes what training produced and writes predictions for each split as
-   compressed safetensors, alongside the model weights and the run's hyperparameters.
+2. **`training`** takes that bundle plus an architecture from `models`, trains it with early
+   stopping on the validation split, and returns a fitted estimator.
+3. **`prediction`** writes predictions for each split as compressed safetensors, alongside
+   the model weights and the run's hyperparameters.
 4. **`evaluation`** reads those prediction artifacts and produces metrics, bootstrap
-   confidence intervals, and finally the global leaderboards.
+   confidence intervals, training-noise margins and the global leaderboards.
 
 `pipeline` is the orchestration layer that resolves a CLI selection into concrete runs and
 drives those four stages. Two packages sit underneath them: **`models`** holds only
 architectures, and **`artifacts`** owns the result-tree layout, serialization, and
-provenance. Dependencies run one way, `evaluation` never imports `training`.
+provenance. Dependencies run one way: `evaluation` never imports `training`.
 
 Three more packages build the inputs rather than consume them, and run only when datasets
 are regenerated: **`propertyprep`** (source-specific ingestion for BRENDA, BioLiP,
-SwissProt, FireProtDB, CatPred, Proteinea and UniProt), **`splitting`** (random and
-MMseqs2 similarity splits, plus their metadata), and **`dataset_card`** (per-dataset
-statistics, clustering, and UMAP figures).
+SwissProt, FireProtDB, CatPred, Proteinea and UniProt), **`splitting`** (random and MMseqs2
+similarity splits, plus their metadata), and **`dataset_card`** (per-dataset statistics,
+clustering, and UMAP figures).
+
+### Training routes
+
+A task's `batch_kind` and `label_kind` in `src/enzymado/data_loading/data_registry.py`
+choose its route; `src/enzymado/training/model_registry.py` maps each model name to its
+wrapper.
+
+| route | tasks | input |
+|---|---|---|
+| `protein_global` + `binary` / `scalar_regression` | `solubility`, `ph_opt`, real cases | pooled protein vector |
+| `protein_global` + `multilabel_ec` | `ec_number` | pooled vector; hierarchical multi-head classifier, or one flat concatenated target for XGBoost with unknown descendants masked per column |
+| `protein_ligand_global` | `binding`, `kcat`, `km`, `cleeveland_galox` | pooled vector joined with the 200 descriptastorus `RDKit2DNormalized` descriptors of the substrate (`data/processed/ligand_features/descriptastorus.npz`, built by `scripts/data_prep/build_ligand_features.py`) |
+| `mutation_delta_global` | `ddg`, `dtm` | mutant minus wild-type embedding |
+| `protein_residue` + `residue_binary_vector` | `active_sites`, `binding_site` | one embedding per residue, through `DataLoader` batches |
+
+Global attention pooling (`ResidualAttentionAggregation`) adds a learned attention update to
+the mean of the residues: the mean of the layer-normalized residues queries the residues,
+and the result is added back to the mean, so a silent attention branch returns mean pooling
+exactly. Residue tasks use `AttentionResidueMixer`, the same block with every residue as a
+query and nothing pooled. Attention heads train like their mean-pool counterparts (same
+optimizer, learning rate, weight decay, dropout and early stopping, gradients accumulated to
+a batch of 256).
+
+The linear head is the MLP wrapper with no hidden layer, trained in minibatches of 256 like
+the MLP. The MLP has one hidden layer of 2,048 units (256 on residue tasks), chosen once by a
+400-sample Latin hypercube search on `km` and reused everywhere.
+
+### Checkpoint selection
+
+Neural heads are scored on the validation split after every epoch and the best epoch is
+restored; epoch 0 is kept as `initial_model.pt` only as a reference. Pooled tasks select on
+Kendall's tau (regression) and AUPRC (classification). EC heads select on validation AUPRC
+pooled over the four EC levels, accumulated batch by batch in a score histogram
+(`StreamingAUPRC`), the same estimator the leaderboard uses, so memory does not grow with
+the validation matrix. The residue tasks select on validation loss. XGBoost stops early on
+AUPRC, RMSE, or log loss (EC and residue tasks).
+
+Non-finite losses, gradients, weights and monitored predictions fail the run. Constant
+predictions leave Kendall's tau undefined and make an epoch ineligible; in evaluation, a
+fully tied prediction scores tau = 0. A checkpoint resumes only in an identical environment:
+the run manifest hashes the dataset, the embedding store, the source tree and the lockfile.
 
 ### Metrics
 
@@ -92,46 +170,76 @@ statistics, clustering, and UMAP figures).
 | classification | `accuracy`, `precision`, `recall`, `f1`, `auroc`, `auprc` |
 | regression | `mae`, `rmse`, `r2`, `kendall_tau` |
 
-Classification metrics are computed from per-row sufficient statistics, confusion counts
-for the threshold metrics, score histograms for AUROC and AUPRC. That keeps each of the
-1,000 bootstrap replicates an O(1) aggregation instead of a full recomputation, which is
-what makes interval estimation tractable on tasks with 10⁸ predictions — `ec_number` alone
-scores 1.36 × 10⁸ test predictions.
+Classification metrics are computed from per-row sufficient statistics: confusion counts for
+the threshold metrics and score histograms for AUROC and AUPRC (`ranking_source` records
+which). That keeps each of the 1,000 bootstrap replicates an O(1) aggregation instead of a
+full recomputation, which makes intervals tractable on tasks with 10⁸ predictions:
+`ec_number` alone scores 1.36 × 10⁸ test predictions. Bootstrap units are proteins for EC
+and residue tasks and rows otherwise; every model of a task and split is scored on the same
+resamples, after their ordered test sample identities are checked.
 
 ### Ratings
 
-Per-task metrics become two global leaderboards (`properties` and `real_case`) via
-**Bradley–Terry maximum likelihood** over pairwise outcomes, anchored at 1500. Defaults:
-1,000 battle rounds, Kendall tau weighted double among regression metrics, and property
-splits weighted 55% similarity / 45% random.
+Per-task results become two global leaderboards (`properties` and `real_case`) via
+weighted **Bradley–Terry maximum likelihood** over paired bootstrap battles, centered at
+1500. In each of 1,000 bootstrap rounds every pair of the 75 competitors (15 embeddings × 5
+baselines) plays one battle per rated metric on every task and split; refits per round give
+the intervals.
 
-Every registered metric is computed and bootstrapped for every run, but not every metric
-cell is allowed to cast battles:
+Everything that shapes the ratings lives in the **`rating` section of
+`benchmark_card.json`**, which `compute_ratings.py` reads and each leaderboard JSON records:
 
-- **`r2` carries rating weight 0.** Within a bootstrap replicate SS_tot is fixed, so `r2`
-  is a strictly monotone function of `rmse`; weighting both would count squared error
-  twice. It is still reported per model.
-- **`benchmark_card.json:rating_exclusions` withholds degenerate cells.** `accuracy` is
-  withheld below 5% positive-class prevalence, and `kendall_tau` / `auroc` are withheld
-  when the best competitor on that task and split fails to clear 0.1 / 0.55. In the
-  published results this withheld 6 of 90 property metric cells — `accuracy` on
-  `active_sites`, `binding_site` and `ec_number`, in both splits, where prevalence runs
-  from 0.07% to 2.5% — leaving 84. No real-case cell was withheld. Each leaderboard's
-  JSON lists exactly which cells it dropped and why.
+- **Rated metrics.** Regression: Kendall's tau (0.75) and MAE (0.25). Classification:
+  AUROC, AUPRC, F1, precision and recall (0.2 each). `rmse`, `r2` and `accuracy` are
+  reported but not rated: within a replicate `rmse` orders models exactly as `r2` does and
+  MAE already scores the error size, and accuracy is uninformative on rare labels.
+- **Task weights.** Property tasks are weighted by how directly they test knowledge of
+  enzymes, in five equal steps: `ec_number`, `active_sites` 1.0; `kcat`, `binding_site`
+  0.8; `km`, `ph_opt` 0.6; `ddg`, `dtm` 0.4; `binding`, `solubility` 0.2. Real-case
+  datasets weigh equally.
+- **Split weights.** Each property task weight is split 0.4 random / 0.6 similarity.
+- **Training-noise ties.** A battle is a tie, half a win each, when the gap is within
+  `z * sqrt(sigma_a^2 + sigma_b^2)` with z = 1.96, sigma being the training-noise SD of each
+  competitor's head and pooling on that task, split and metric
+  (`results/noise_seeds/tie_margins_v4.csv`). `scripts/results/compute_tie_margins.py`
+  derives it from seeds 42-44: the median over PLMs of each PLM's seed SD, divided by
+  `c_n = sqrt(median(chi2_{n-1}) / (n - 1))` so it estimates sigma under normal noise.
+  Regression runs with a training R² below -1 are left out of sigma (not of the
+  leaderboard).
+- **Exclusions.** A Kendall's tau or AUROC cell is withheld when even the best competitor
+  stays below the no-skill references 0.1 / 0.55; no cell met that rule in the published
+  results. The property leaderboard rates 70 metric cells and the real-case one 16.
+
+Command-line flags of `compute_ratings.py` (`--tie-z`, `--tie-margins`,
+`--random-weight`, `--similarity-weight`) override the card for sensitivity analyses; for
+example `--tie-z 0` gives the strict comparison.
 
 ---
 
 ## Quickstart
 
 Requires Python ≥3.12,<3.14, [uv](https://docs.astral.sh/uv/), and **Git LFS**. The
-datasets under `data/` are LFS objects: without `git lfs install` before cloning, they
-arrive as pointer files and every run fails on unreadable CSVs.
+datasets under `data/` and the JSON results are LFS objects: without `git lfs install`
+before cloning, they arrive as pointer files and every run fails on unreadable inputs.
 
 ```bash
 git lfs install
 git clone <repo-url> && cd enzymado-benchmark
 uv sync --extra train
 ```
+
+### Reproduce the leaderboards
+
+The tracked results are enough to recompute both leaderboards on a CPU in a few minutes:
+
+```bash
+python scripts/results/compute_tie_margins.py   # seeds 42-44 metrics -> results/noise_seeds/tie_margins_v4.csv
+python scripts/results/compute_ratings.py       # results/bootstrap + card -> results/ratings/seed_42_two_leaderboards/
+```
+
+Both rewrite their outputs in place; `git diff` shows that nothing changed.
+
+### Train and evaluate
 
 Training reads embeddings through a manifest of local paths, which is machine-specific and
 therefore not tracked. Copy the template and point it at your own embedding store:
@@ -143,11 +251,9 @@ cp embeddings_models_output_mean_pooled.example.json embeddings_models_output_me
 ```
 
 `embeddings_models_output.json` lists per-residue shard directories;
-`embeddings_models_output_mean_pooled.json` lists single mean-pooled files. Pooled tasks
-work from either manifest — a residue store is mean-pooled on the fly — but the pooled
-manifest is much faster, and residue-level tasks and attention baselines require the
-residue one. See [Computing the embeddings](#computing-the-embeddings) if you do not have
-an embedding store yet.
+`embeddings_models_output_mean_pooled.json` lists single mean-pooled files. Pooled tasks work
+from either manifest (a residue store is mean-pooled on the fly), but the pooled manifest is
+much faster, and residue-level tasks and attention baselines require the residue one.
 
 Train and predict one combination:
 
@@ -157,22 +263,24 @@ python scripts/run_benchmark.py embeddings_models_output_mean_pooled.json \
   --emb_name ankh_base \
   --task_name ph_opt \
   --model_prefix mlp_ \
-  --split_variant random
+  --split_variant random \
+  --allowed_ids results/embedding_intersection/common_ids.txt
 ```
 
-Real-case tasks live in a separate benchmark-card section and are not selected by default:
+Useful filters: `--emb_name` (one embedding), `--model_prefix` (`linear_`, `mlp_`, `xgb_`,
+`attention_linear_`, `attention_mlp_`), `--task_name` (repeatable), `--task_scope`
+(`properties` by default; `real_case` must be requested), `--split_variant` (`random` by
+default), `--embedding_mode` (`attention` / `no_attention`), `--attention_embeddings_json`
+(the per-residue manifest; attention models do not train without it), `--residue_store_mode`
+(`materialized` / `lazy`), `--overwrite_results` and `--deterministic`.
+`python scripts/run_benchmark.py --help` lists the rest.
 
 ```bash
 python scripts/run_benchmark.py embeddings_models_output_mean_pooled.json \
   --task_scope real_case --task_name erickson_petase --model_prefix linear_
-```
-
-Attention baselines only run when a per-residue manifest is supplied as well:
-
-```bash
 python scripts/run_benchmark.py embeddings_models_output_mean_pooled.json \
   --attention_embeddings_json embeddings_models_output.json \
-  --embedding_mode attention --task_name ph_opt --model_prefix mlp_
+  --embedding_mode attention --task_name ph_opt --model_prefix attention_mlp_
 ```
 
 Then evaluate:
@@ -180,21 +288,21 @@ Then evaluate:
 ```bash
 python scripts/results/compute_metrics.py            --filter-task ph_opt
 python scripts/results/compute_bootstrap_metrics.py  --filter-task ph_opt --n-replicates 1000
+python scripts/results/compute_tie_margins.py
 python scripts/results/compute_ratings.py
 ```
 
 `compute_metrics.py` caches per-row sufficient statistics under
-`results/evaluation_statistics/` (untracked); `compute_bootstrap_metrics.py` reuses that
-cache, so run the two in order. Its `--n-replicates` default is 200 — the published
-results use 1,000.
+`results/evaluation_statistics/` (untracked), each keyed by the SHA-256 of its prediction
+file; `compute_bootstrap_metrics.py` reuses that cache, so run the two in order. Its
+`--n-replicates` default is 200; the published results use 1,000.
 
-On a Slurm cluster, `scripts/slurm/` wraps the same entry points as array jobs over the
-14 embedding models. See [PIPELINES.md](PIPELINES.md) for how a task resolves to a
-training route and for the post-training evaluation contract.
+On a Slurm cluster, `scripts/slurm/` wraps the same entry points as array jobs over the 14
+embedding models; pass your own `--account`.
 
 ### Computing the embeddings
 
-The embedding stores are not distributed — they are ~390 GB at residue level. To rebuild
+The embedding stores are not distributed: they are ~390 GB at residue level. To rebuild
 them:
 
 ```bash
@@ -204,10 +312,11 @@ python scripts/data_prep/make_fasta_from_unique_sequences.py  # deduplicated FAS
 
 then run the per-family scripts in `embedding_scripts/` (`ankh`, `esm2`, `esm3`, `esmc`,
 `profluent`, `prost5`, `prot5`), each of which takes `-i <fasta> -o <shard dir> --model
-<key>` and can also emit the mean-pooled file via `--mean_pooled_output`. These models
-have mutually incompatible dependencies, so each family needs its own environment;
-`envs_files/` holds the conda YAMLs and pinned requirement files used for the published
-run. Finally, rebuild the shared ID set:
+<key>` and can also emit the mean-pooled file via `--mean_pooled_output`. These models have
+mutually incompatible dependencies, so each family needs its own environment; `envs_files/`
+holds the conda YAMLs and pinned requirement files used for the published run. The
+`noplm` reference is built with `scripts/embeddings/build_noplm_features.py`. Finally,
+rebuild the shared ID set:
 
 ```bash
 python scripts/embeddings/build_embedding_intersection.py --embeddings-json embeddings_models_output_mean_pooled.json
@@ -220,24 +329,32 @@ uv run pytest
 ```
 
 `tests/` covers the registries, the data-loading and training routes, artifact
-serialization, reproducibility contracts, and the evaluation and ranking statistics.
+serialization, reproducibility contracts, the rating configuration in the benchmark card,
+and the evaluation and ranking statistics.
 
 ---
 
 ## Extending it
 
-**Add a dataset.** Register it in `benchmark_card.json` with its task type and paths, then
-add a `TaskConfig` in `src/enzymado/data_loading/data_registry.py` describing its columns,
-label kind, and batch kind. Nothing else needs to change: splits, training, prediction, and
-evaluation all dispatch on that config. `scripts/ci/check_registry_card_parity.py` checks
-that the two stay in sync.
+**Add a dataset.** Register it in `benchmark_card.json` with its task type and paths, give
+it a weight in the card's `rating.task_weights` if it is a property task, then add a
+`TaskConfig` in `src/enzymado/data_loading/data_registry.py` describing its columns, label
+kind, and batch kind. Splits, training, prediction, and evaluation all dispatch on that
+config. `scripts/ci/check_registry_card_parity.py` checks that the registry and the card
+stay in sync.
 
 **Add a model.** Implement the estimator in `src/enzymado/training/`, exposing `fit` /
 `predict` (or `fit_loader` / `predict_loader` for residue-level tasks), and register it in
 `model_registry.py` with its hyperparameters.
 
+**Add an embedding.** Embed the shared sequence index, add the model to the manifests, train
+the five baselines, add the key to `_foundation_models()` in
+`scripts/results/compute_ratings.py`, and recompute metrics, bootstrap and ratings. The
+existing runs stay valid.
+
 **Add a metric.** Declare it in `src/enzymado/evaluation/metrics_registry.py` with its task
-type and direction. Classification metrics must be derivable from confusion counts or score
+type and direction, and give it a weight in the card's `rating.metric_weights` if it should
+cast battles. Classification metrics must be derivable from confusion counts or score
 histograms so the bootstrap stays fast.
 
 ---
@@ -246,27 +363,27 @@ histograms so the bootstrap stays fast.
 
 ```
 results/
-  predictions/            per-run artifacts: predictions, weights, hparams.json, metrics.json
-  bootstrap/              resampled metric distributions
-  ratings/                the two global leaderboards
+  predictions/            per-run artifacts; metrics.json and hparams.json are published
+  bootstrap/              1,000-replicate metric distributions per run
+  ratings/                the two global leaderboards and their per-round ratings
+  noise_seeds/            tie_margins_v4.csv and the test metrics of seeds 43 and 44
   embedding_intersection/ the shared sequence-ID set every run is restricted to
-  analysis/               training-runtime breakdown
-  figures/                cluster diversity and UMAP projections
+  figures/                cluster diversity figures
 ```
 
 Runs are addressed by
 `<scope>/<pool_type>/<split>/<model_family>/<task>/<embedding_model>/`, and each run
 directory carries a `hparams.json` fingerprinting its dataset paths, task config,
-hyperparameters and seed, so a published number can be traced back to the exact inputs
-that produced it.
+hyperparameters and seed, so a published number can be traced back to the exact inputs that
+produced it.
 
 Only the numbers are published. Prediction tensors, model weights and per-epoch logs stay
-local — they are gigabytes of LFS, and every figure and leaderboard is recomputable from
-the tracked `metrics.json`, `hparams.json` and bootstrap distributions. Per-dataset cards
-live next to the data, at `data/processed/properties/<task>/dataset_card.json`.
+local: they are gigabytes of LFS, and every figure and leaderboard is recomputable from the
+tracked `metrics.json`, `hparams.json` and bootstrap distributions. Per-dataset cards live
+next to the data, at `data/processed/properties/<task>/dataset_card.json`.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

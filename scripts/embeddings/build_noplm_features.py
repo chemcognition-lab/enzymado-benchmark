@@ -37,9 +37,9 @@ POOL = _REPO / "data" / "processed" / "protein_pool.csv"
 POOLED_OUT = (
     _REPO / "data" / "embeddings_mean_pooled" / "protein_sequences_unique" / "noplm.safetensors"
 )
-RESIDUE_OUT = Path(
-    "/scratch/chemist/enzymado/data/embeddings/protein_sequences_unique/noplm_shards"
-)
+# Residue shards are large; point --residue-out at the store that
+# embeddings_models_output.json names for noplm.
+RESIDUE_OUT = _REPO / "data" / "embeddings" / "protein_sequences_unique" / "noplm_shards"
 STANDARD = "ACDEFGHIKLMNPQRSTVWY"
 ONE_HOT_SHARES = {
     **{aa: {aa: 1.0} for aa in STANDARD},

@@ -55,7 +55,6 @@ class MetricSpec:
     aggregate_fn: AggregateMetricFn | None = None
     score_aggregate_fn: AggregateMetricFn | None = None
     is_primary: bool = False
-    rating_weight: float = 1.0
 
 
 class ModelInfo(typing.TypedDict):

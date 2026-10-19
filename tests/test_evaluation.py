@@ -676,9 +676,13 @@ class TestGlobalRatings(TestCase):
         self.assertEqual(len(set(competitors)), 75)
         self.assertIn("noplm/xgboost/no_attention", competitors)
 
+    _RATING = json.loads(
+        (Path(__file__).resolve().parents[1] / "benchmark_card.json").read_text()
+    )["rating"]
+
     def test_property_task_weights_follow_five_descending_tiers(self) -> None:
-        tasks = sorted(ratings_script._TASK_WEIGHTS["properties"])
-        w = ratings_script._task_weights("properties", tasks)
+        tasks = sorted(self._RATING["task_weights"]["properties"])
+        w = ratings_script._task_weights(self._RATING, "properties", tasks)
         self.assertEqual({w["active_sites"], w["ec_number"]}, {1.0})
         self.assertEqual(w["kcat"], w["binding_site"])
         self.assertEqual(w["km"], w["ph_opt"])
@@ -688,43 +692,62 @@ class TestGlobalRatings(TestCase):
         self.assertEqual(tiers, sorted(tiers, reverse=True))
         self.assertEqual(len(set(tiers)), 5)
 
+    def test_card_covers_every_property_task_and_split(self) -> None:
+        card = json.loads(
+            (Path(__file__).resolve().parents[1] / "benchmark_card.json").read_text()
+        )
+        self.assertEqual(
+            set(self._RATING["task_weights"]["properties"]), set(card["properties"])
+        )
+        for table in self._RATING["split_weights"].values():
+            self.assertAlmostEqual(sum(table.values()), 1.0)
+
     def test_scope_without_a_weight_table_weighs_tasks_equally(self) -> None:
-        weights = ratings_script._task_weights("real_case", ["a", "b"])
+        weights = ratings_script._task_weights({"task_weights": {}}, "real_case", ["a", "b"])
         self.assertEqual(weights, {"a": 1.0, "b": 1.0})
 
     def test_unweighted_property_task_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "new_task"):
-            ratings_script._task_weights("properties", ["kcat", "new_task"])
+            ratings_script._task_weights(self._RATING, "properties", ["kcat", "new_task"])
 
     def test_kendall_weight_is_normalized_within_regression(self) -> None:
-        weights = ratings_script._metric_weights("regression", 3.0)
+        weights = ratings_script._metric_weights(
+            "regression", self._RATING["metric_weights"]["regression"]
+        )
         self.assertAlmostEqual(sum(weights.values()), 1.0)
         self.assertAlmostEqual(weights["kendall_tau"], 0.75)
         self.assertAlmostEqual(weights["mae"], 0.25)
         self.assertNotIn("rmse", weights)
 
     def test_unrated_metrics_never_reach_the_leaderboard(self) -> None:
-        """A zero registry weight must drop out of the battles entirely."""
-        registered = metrics_registry.rating_weights_for("regression")
-        unrated = {name for name, weight in registered.items() if weight == 0.0}
+        """Metrics the card lists as unrated must cast no battles and must exist."""
+        unrated = set(self._RATING["unrated_metrics"])
         self.assertTrue(unrated)
-        weights = ratings_script._metric_weights("regression", 2.0)
-        self.assertFalse(unrated & set(weights))
+        for task_type, table in self._RATING["metric_weights"].items():
+            known = set(metrics_registry.higher_is_better_for(task_type))
+            weights = ratings_script._metric_weights(task_type, table)
+            self.assertFalse(unrated & set(weights))
+            self.assertTrue(set(weights) <= known)
+
+    def test_unknown_metric_names_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "spearman"):
+            ratings_script._metric_weights("regression", {"spearman": 1.0})
 
     def test_excluded_metrics_are_renormalized_within_the_cell(self) -> None:
         """Dropping a metric must not cost its task any leaderboard influence."""
+        table = {name: 1.0 for name in ("accuracy", "precision", "recall", "f1", "auroc", "auprc")}
         weights = ratings_script._metric_weights(
-            "classification", 2.0, frozenset({"accuracy"})
+            "classification", table, frozenset({"accuracy"})
         )
         self.assertAlmostEqual(sum(weights.values()), 1.0)
         self.assertNotIn("accuracy", weights)
         self.assertTrue(all(value == 0.2 for value in weights.values()))
 
     def test_metric_weights_reject_a_fully_excluded_cell(self) -> None:
-        every = set(metrics_registry.rating_weights_for("classification"))
+        table = self._RATING["metric_weights"]["classification"]
         with self.assertRaisesRegex(ValueError, "ec_number/random"):
             ratings_script._metric_weights(
-                "classification", 2.0, frozenset(every), label="ec_number/random"
+                "classification", table, frozenset(table), label="ec_number/random"
             )
 
     def test_prevalence_rule_drops_only_the_imbalanced_splits(self) -> None:

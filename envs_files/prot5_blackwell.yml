@@ -125,4 +125,3 @@ dependencies:
       - triton==3.6.0
       - typer-slim==0.21.1
       - urllib3==2.6.3
-prefix: /home/ralmadamonter/miniconda3/envs/prot5_blackwell

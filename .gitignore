@@ -26,6 +26,21 @@ cluster_env.sh
 logs/
 scripts/logs/
 *.out
+# Under results/ only the release trees are versioned; reruns, pilots, seed runs and
+# backups stay local, so a broad `git add` cannot sweep them in.
+results/*
+!results/predictions/
+!results/bootstrap/
+!results/ratings/
+!results/embedding_intersection/
+!results/figures/
+results/figures/umaps/
+# Training-noise seeds: only their test metrics and the tie margins derived from them.
+!results/noise_seeds/
+results/noise_seeds/**
+!results/noise_seeds/**/
+!results/noise_seeds/tie_margins_v4.csv
+!results/noise_seeds/seed_*/predictions/**/metrics.json
 # Published results keep the numbers (metrics, bootstrap, ratings, figures).
 # The raw per-run tensors and weights stay local: they are ~820 MB of LFS and
 # every number in the paper is recomputable from what is kept.
@@ -40,7 +55,7 @@ results/evaluation_statistics/
 # the release. The canonical numbers live in results/bootstrap/{properties,real_case}.
 results/bootstrap/experiments/
 results/*_audit_report.json
-pytest-of-chemist/
+pytest-of-*/
 .claude
 Notebook_coding_style.md
 Project_coding_style.md

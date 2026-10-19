@@ -6,7 +6,6 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=%x_%A_%a.out
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --mail-user=josechemistry.qb@gmail.com
 
 set -euo pipefail
 
@@ -45,7 +44,7 @@ mkdir -p "${UV_CACHE_DIR}" "${HF_HOME}" "${TORCH_HOME}" "${XDG_CACHE_HOME}" "${T
 : "${ALLOW_PARTIAL:=1}"
 : "${EMBED_OUTPUT_ROOT:=${SCRATCH_ROOT}/data}"
 : "${SAVE_MEAN_POOLED:=0}"
-MEAN_POOLED_ROOT="/home/chemist/projects/aip-bensl/chemist/enzymado/enzymado-benchmark/data/embeddings_mean_pooled"
+: "${MEAN_POOLED_ROOT:=${REPO}/data/embeddings_mean_pooled}"
 
 export PER_PROTEIN ALLOW_PARTIAL EMBED_OUTPUT_ROOT SAVE_MEAN_POOLED
 

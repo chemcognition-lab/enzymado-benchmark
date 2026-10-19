@@ -42,11 +42,6 @@ def higher_is_better_for(task_type: str) -> dict[str, int]:
     }
 
 
-def rating_weights_for(task_type: str) -> dict[str, float]:
-    """Return the unnormalized leaderboard weight for every metric."""
-    return {spec.name: spec.rating_weight for spec in metric_specs(task_type)}
-
-
 def primary_metric_for(task_type: str) -> str | None:
     """Return the name of the primary metric for the given task type."""
     for spec in metric_specs(task_type):
@@ -533,9 +528,6 @@ METRICS = (
         higher_is_better=False,
         statistic=enzymado.types.MetricStatistic.ERROR_SUMS,
         aggregate_fn=_error_rmse,
-        # Not rated, for the same reason as r2 below: it orders models exactly as
-        # r2 does, and MAE already carries the size of the error.
-        rating_weight=0.0,
     ),
     enzymado.types.MetricSpec(
         name="r2",
@@ -543,11 +535,6 @@ METRICS = (
         fn=regression_r2,
         higher_is_better=True,
         statistic=enzymado.types.MetricStatistic.RAW,
-        # Reported per model but given no leaderboard weight: within a bootstrap
-        # replicate SS_tot is fixed, so r2 is a strictly monotone function of
-        # rmse and casts the same pairwise battles. Neither is rated; MAE scores
-        # the error and Kendall's tau the ordering.
-        rating_weight=0.0,
     ),
     enzymado.types.MetricSpec(
         name="kendall_tau",
@@ -555,7 +542,6 @@ METRICS = (
         fn=regression_kendall_tau,
         higher_is_better=True,
         statistic=enzymado.types.MetricStatistic.RAW,
-        rating_weight=3.0,
     ),
     enzymado.types.MetricSpec(
         name="accuracy",
@@ -563,10 +549,6 @@ METRICS = (
         higher_is_better=True,
         statistic=enzymado.types.MetricStatistic.CONFUSION,
         aggregate_fn=_count_accuracy,
-        # Reported but not rated: on rare labels the all-negative classifier
-        # scores near 1, and on balanced ones precision, recall and F1 already
-        # judge the same threshold.
-        rating_weight=0.0,
     ),
     enzymado.types.MetricSpec(
         name="precision",
@@ -660,7 +642,6 @@ __all__ = [
     "metric_specs_for_statistic",
     "primary_metric_for",
     "ranking_metrics",
-    "rating_weights_for",
     "regression_kendall_tau",
     "regression_mae",
     "regression_r2",
