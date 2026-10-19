@@ -82,13 +82,58 @@ def _foundation_models() -> tuple[str, ...]:
     )
 
 
+def _reference_embeddings() -> tuple[str, ...]:
+    """Return the representations built without a PLM that compete as references.
+
+    ``noplm`` holds ProtParam descriptors (pooled) and a residue one-hot, so it
+    shows how much of each task needs no language model at all.
+    """
+    return ("noplm",)
+
+
+# Official task weights of the property leaderboard, ordered by how directly a task
+# tests knowledge of enzymes, in five tiers one equal step apart: what reaction an
+# enzyme catalyzes (EC number) and which residues catalyze it (active sites); how
+# fast it turns over (kcat) and where it binds (binding sites); substrate recognition
+# under turnover (KM) and the ionization of its catalytic groups (pH optimum);
+# folding stability, which is protein biophysics in general (ddG, dTm); and last
+# the tasks that say least about the enzyme itself: BioLiP binding, which the
+# ligand descriptors largely decide, and solubility, an expression property. The
+# real-case datasets keep equal weights.
+_TASK_WEIGHTS: dict[str, dict[str, float]] = {
+    "properties": {
+        "active_sites": 1.0,
+        "ec_number": 1.0,
+        "kcat": 0.8,
+        "binding_site": 0.8,
+        "km": 0.6,
+        "ph_opt": 0.6,
+        "ddg": 0.4,
+        "dtm": 0.4,
+        "binding": 0.2,
+        "solubility": 0.2,
+    },
+}
+
+
+def _task_weights(scope: str, tasks: list[str]) -> dict[str, float]:
+    """Return each task's leaderboard weight; a scope without a table weighs tasks equally."""
+    table = _TASK_WEIGHTS.get(scope)
+    if table is None:
+        return {task: 1.0 for task in tasks}
+    missing = sorted(set(tasks) - set(table))
+    if missing:
+        raise ValueError(f"No task weight for {missing} in the {scope} leaderboard.")
+    return {task: table[task] for task in tasks}
+
+
 def _competitor_name(exp: discover.Experiment) -> str:
     """Identify a complete baseline, including architecture and embedding."""
     return f"{exp.embedding_model}/{exp.model_family}/{exp.pool_type}"
 
 
 def _expected_competitors() -> list[str]:
-    """Return the 70 baselines that must compete in both leaderboards."""
+    """Return the 75 baselines that must compete in both leaderboards."""
     configurations = (
         ("attention", "linear"),
         ("attention", "mlp"),
@@ -98,7 +143,7 @@ def _expected_competitors() -> list[str]:
     )
     return sorted(
         f"{embedding}/{family}/{pool}"
-        for embedding in _foundation_models()
+        for embedding in (*_foundation_models(), *_reference_embeddings())
         for pool, family in configurations
     )
 
@@ -323,6 +368,7 @@ def _build_cells(
     rules: dict,
     prevalences: dict[tuple[str, str], float],
     margins: dict[tuple[str, str, str, str, str], float] | None = None,
+    task_weights: dict[str, float] | None = None,
 ) -> tuple[list[str], list[Cell], list[Exclusion]]:
     """Load and validate a complete leaderboard design."""
     arrays: dict[tuple[str, str, str], dict[str, np.ndarray]] = defaultdict(dict)
@@ -366,7 +412,11 @@ def _build_cells(
                         task=task,
                         split=split,
                         metric=metric,
-                        weight=split_weight * metric_weight,
+                        weight=(
+                            (1.0 if task_weights is None else task_weights[task])
+                            * split_weight
+                            * metric_weight
+                        ),
                         scores=scores,
                         sigma=sigma,
                     )
@@ -526,6 +576,7 @@ def _compute_leaderboard(
     margins = (
         None if args.tie_margins is None else _load_tie_margins(args.tie_margins)
     )
+    task_weights = _task_weights(name, sorted(task_types))
     competitors, cells, exclusions = _build_cells(
         sources,
         task_types,
@@ -535,6 +586,7 @@ def _compute_leaderboard(
         rules,
         prevalences,
         margins,
+        task_weights,
     )
     for exclusion in exclusions:
         print(
@@ -571,6 +623,7 @@ def _compute_leaderboard(
         "raw_pairwise_battles_per_round": raw_per_round,
         "raw_pairwise_battles_total": raw_per_round * args.n_battles,
         "effective_pair_weight_per_round": float(pair_weight[0]),
+        "task_weights": task_weights,
         "split_weights": split_weights,
         "metric_weights": {
             "kendall_tau": args.kendall_weight,
@@ -664,8 +717,8 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=metrics_registry.rating_weights_for("regression")["kendall_tau"],
     )
-    parser.add_argument("--random-weight", type=float, default=0.45)
-    parser.add_argument("--similarity-weight", type=float, default=0.55)
+    parser.add_argument("--random-weight", type=float, default=0.4)
+    parser.add_argument("--similarity-weight", type=float, default=0.6)
     parser.add_argument("--center-rating", type=float, default=1500.0)
     parser.add_argument(
         "--tie-margins",

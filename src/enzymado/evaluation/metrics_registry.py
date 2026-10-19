@@ -533,6 +533,9 @@ METRICS = (
         higher_is_better=False,
         statistic=enzymado.types.MetricStatistic.ERROR_SUMS,
         aggregate_fn=_error_rmse,
+        # Not rated, for the same reason as r2 below: it orders models exactly as
+        # r2 does, and MAE already carries the size of the error.
+        rating_weight=0.0,
     ),
     enzymado.types.MetricSpec(
         name="r2",
@@ -542,8 +545,8 @@ METRICS = (
         statistic=enzymado.types.MetricStatistic.RAW,
         # Reported per model but given no leaderboard weight: within a bootstrap
         # replicate SS_tot is fixed, so r2 is a strictly monotone function of
-        # rmse and every pairwise battle it casts duplicates one rmse already
-        # casts. Weighting both counts squared error twice.
+        # rmse and casts the same pairwise battles. Neither is rated; MAE scores
+        # the error and Kendall's tau the ordering.
         rating_weight=0.0,
     ),
     enzymado.types.MetricSpec(
@@ -552,7 +555,7 @@ METRICS = (
         fn=regression_kendall_tau,
         higher_is_better=True,
         statistic=enzymado.types.MetricStatistic.RAW,
-        rating_weight=2.0,
+        rating_weight=3.0,
     ),
     enzymado.types.MetricSpec(
         name="accuracy",
@@ -560,6 +563,10 @@ METRICS = (
         higher_is_better=True,
         statistic=enzymado.types.MetricStatistic.CONFUSION,
         aggregate_fn=_count_accuracy,
+        # Reported but not rated: on rare labels the all-negative classifier
+        # scores near 1, and on balanced ones precision, recall and F1 already
+        # judge the same threshold.
+        rating_weight=0.0,
     ),
     enzymado.types.MetricSpec(
         name="precision",

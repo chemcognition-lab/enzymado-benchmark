@@ -672,14 +672,36 @@ class TestRatingTieMargins(TestCase):
 class TestGlobalRatings(TestCase):
     def test_expected_competitors_include_all_five_configurations(self) -> None:
         competitors = ratings_script._expected_competitors()
-        self.assertEqual(len(competitors), 70)
-        self.assertEqual(len(set(competitors)), 70)
+        self.assertEqual(len(competitors), 75)
+        self.assertEqual(len(set(competitors)), 75)
+        self.assertIn("noplm/xgboost/no_attention", competitors)
+
+    def test_property_task_weights_follow_five_descending_tiers(self) -> None:
+        tasks = sorted(ratings_script._TASK_WEIGHTS["properties"])
+        w = ratings_script._task_weights("properties", tasks)
+        self.assertEqual({w["active_sites"], w["ec_number"]}, {1.0})
+        self.assertEqual(w["kcat"], w["binding_site"])
+        self.assertEqual(w["km"], w["ph_opt"])
+        self.assertEqual(w["ddg"], w["dtm"])
+        self.assertEqual(w["binding"], w["solubility"])
+        tiers = [w["ec_number"], w["kcat"], w["km"], w["ddg"], w["binding"]]
+        self.assertEqual(tiers, sorted(tiers, reverse=True))
+        self.assertEqual(len(set(tiers)), 5)
+
+    def test_scope_without_a_weight_table_weighs_tasks_equally(self) -> None:
+        weights = ratings_script._task_weights("real_case", ["a", "b"])
+        self.assertEqual(weights, {"a": 1.0, "b": 1.0})
+
+    def test_unweighted_property_task_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "new_task"):
+            ratings_script._task_weights("properties", ["kcat", "new_task"])
 
     def test_kendall_weight_is_normalized_within_regression(self) -> None:
-        weights = ratings_script._metric_weights("regression", 2.0)
+        weights = ratings_script._metric_weights("regression", 3.0)
         self.assertAlmostEqual(sum(weights.values()), 1.0)
-        self.assertAlmostEqual(weights["kendall_tau"], 0.5)
-        self.assertTrue(all(weights[name] == 0.25 for name in ("mae", "rmse")))
+        self.assertAlmostEqual(weights["kendall_tau"], 0.75)
+        self.assertAlmostEqual(weights["mae"], 0.25)
+        self.assertNotIn("rmse", weights)
 
     def test_unrated_metrics_never_reach_the_leaderboard(self) -> None:
         """A zero registry weight must drop out of the battles entirely."""
