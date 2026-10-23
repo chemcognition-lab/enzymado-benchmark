@@ -13,6 +13,25 @@ every split, so the numbers are comparable.
        width="820">
 </p>
 
+## Where to start
+
+| You want to | Read |
+|---|---|
+| Rerun our benchmark and get the published numbers, from recomputing the leaderboards on a laptop to retraining everything on a cluster | [REPRODUCE.md](REPRODUCE.md) |
+| Run only some tasks, embedding models or heads, without the full benchmark | [REPRODUCE.md, Level 2](REPRODUCE.md#level-2-rerun-one-task) |
+| Benchmark your own dataset | [add_data.md, Part 1](add_data.md#part-1-add-a-dataset) |
+| Get trained model weights, or train your own architecture | [add_data.md, Part 2](add_data.md#part-2-train-your-own-model-and-get-its-weights) |
+
+Requires Python ≥3.12,<3.14, [uv](https://docs.astral.sh/uv/) and **Git LFS**. Without
+Git LFS the datasets arrive as pointer files and every run fails.
+
+```bash
+git lfs install
+git clone <repo-url> && cd enzymado-benchmark
+uv sync --extra train
+uv run pytest        # optional: check that the installation works
+```
+
 ---
 
 ## What it evaluates
@@ -37,6 +56,11 @@ The 14 embedding models, with the manifest key each one is addressed by:
 | ProtT5 | `prot5_xl_uniref50`, `prot5_xl_half_uniref50` | 1024, 1024 |
 | ProstT5 | `prost5` | 1024 |
 | ProFluent-E1 | `profluent_e1_300m`, `profluent_e1_600m` | 1024, 1280 |
+
+`dtm` and `ddg` are **mutation tasks**: each row is a mutant of a known wild-type
+protein, and the head sees the mutant's embedding minus the wild type's, so it has to
+predict the effect of the mutation rather than recognize the protein. The six
+amylase and glucosidase real-case datasets are variant libraries of a single enzyme.
 
 That grid is **1,960 model–dataset evaluations**: 1,400 on properties (10 × 14 × 2 × 5)
 and 560 on real cases (8 × 14 × 1 × 5).
@@ -68,7 +92,9 @@ data_loading  →  training  →  prediction  →  evaluation
    split assignment. Residue-level tasks stream embeddings lazily so that a ~390 GB store
    never has to fit in RAM.
 2. **`training`** takes that bundle plus an architecture from `models`, runs the training
-   loop with early stopping on validation loss, and returns a fitted estimator.
+   loop, keeps the epoch with the best validation score (Kendall tau for regression,
+   AUPRC for classification, validation loss for EC and residue tasks), and returns a
+   fitted estimator.
 3. **`prediction`** takes what training produced and writes predictions for each split as
    compressed safetensors, alongside the model weights and the run's hyperparameters.
 4. **`evaluation`** reads those prediction artifacts and produces metrics, bootstrap
@@ -121,124 +147,12 @@ cell is allowed to cast battles:
 
 ---
 
-## Quickstart
-
-Requires Python ≥3.12,<3.14, [uv](https://docs.astral.sh/uv/), and **Git LFS**. The
-datasets under `data/` are LFS objects: without `git lfs install` before cloning, they
-arrive as pointer files and every run fails on unreadable CSVs.
-
-```bash
-git lfs install
-git clone <repo-url> && cd enzymado-benchmark
-uv sync --extra train
-```
-
-Training reads embeddings through a manifest of local paths, which is machine-specific and
-therefore not tracked. Copy the template and point it at your own embedding store:
-
-```bash
-cp embeddings_models_output.example.json embeddings_models_output.json
-cp embeddings_models_output_mean_pooled.example.json embeddings_models_output_mean_pooled.json
-# then edit the "path" of each model
-```
-
-`embeddings_models_output.json` lists per-residue shard directories;
-`embeddings_models_output_mean_pooled.json` lists single mean-pooled files. Pooled tasks
-work from either manifest — a residue store is mean-pooled on the fly — but the pooled
-manifest is much faster, and residue-level tasks and attention baselines require the
-residue one. See [Computing the embeddings](#computing-the-embeddings) if you do not have
-an embedding store yet.
-
-Train and predict one combination:
-
-```bash
-python scripts/run_benchmark.py embeddings_models_output_mean_pooled.json \
-  --output_dir results/predictions \
-  --emb_name ankh_base \
-  --task_name ph_opt \
-  --model_prefix mlp_ \
-  --split_variant random
-```
-
-Real-case tasks live in a separate benchmark-card section and are not selected by default:
-
-```bash
-python scripts/run_benchmark.py embeddings_models_output_mean_pooled.json \
-  --task_scope real_case --task_name erickson_petase --model_prefix linear_
-```
-
-Attention baselines only run when a per-residue manifest is supplied as well:
-
-```bash
-python scripts/run_benchmark.py embeddings_models_output_mean_pooled.json \
-  --attention_embeddings_json embeddings_models_output.json \
-  --embedding_mode attention --task_name ph_opt --model_prefix mlp_
-```
-
-Then evaluate:
-
-```bash
-python scripts/results/compute_metrics.py            --filter-task ph_opt
-python scripts/results/compute_bootstrap_metrics.py  --filter-task ph_opt --n-replicates 1000
-python scripts/results/compute_ratings.py
-```
-
-`compute_metrics.py` caches per-row sufficient statistics under
-`results/evaluation_statistics/` (untracked); `compute_bootstrap_metrics.py` reuses that
-cache, so run the two in order. Its `--n-replicates` default is 200 — the published
-results use 1,000.
-
-On a Slurm cluster, `scripts/slurm/` wraps the same entry points as array jobs over the
-14 embedding models. See [PIPELINES.md](PIPELINES.md) for how a task resolves to a
-training route and for the post-training evaluation contract.
-
-### Computing the embeddings
-
-The embedding stores are not distributed — they are ~390 GB at residue level. To rebuild
-them:
-
-```bash
-python scripts/data_prep/concat_unique_protein_sequences.py   # canonical sequence index
-python scripts/data_prep/make_fasta_from_unique_sequences.py  # deduplicated FASTA
-```
-
-then run the per-family scripts in `embedding_scripts/` (`ankh`, `esm2`, `esm3`, `esmc`,
-`profluent`, `prost5`, `prot5`), each of which takes `-i <fasta> -o <shard dir> --model
-<key>` and can also emit the mean-pooled file via `--mean_pooled_output`. These models
-have mutually incompatible dependencies, so each family needs its own environment;
-`envs_files/` holds the conda YAMLs and pinned requirement files used for the published
-run. Finally, rebuild the shared ID set:
-
-```bash
-python scripts/embeddings/build_embedding_intersection.py --embeddings-json embeddings_models_output_mean_pooled.json
-```
-
-### Tests
-
-```bash
-uv run pytest
-```
-
-`tests/` covers the registries, the data-loading and training routes, artifact
-serialization, reproducibility contracts, and the evaluation and ranking statistics.
-
----
-
 ## Extending it
 
-**Add a dataset.** Register it in `benchmark_card.json` with its task type and paths, then
-add a `TaskConfig` in `src/enzymado/data_loading/data_registry.py` describing its columns,
-label kind, and batch kind. Nothing else needs to change: splits, training, prediction, and
-evaluation all dispatch on that config. `scripts/ci/check_registry_card_parity.py` checks
-that the two stay in sync.
-
-**Add a model.** Implement the estimator in `src/enzymado/training/`, exposing `fit` /
-`predict` (or `fit_loader` / `predict_loader` for residue-level tasks), and register it in
-`model_registry.py` with its hyperparameters.
-
-**Add a metric.** Declare it in `src/enzymado/evaluation/metrics_registry.py` with its task
-type and direction. Classification metrics must be derivable from confusion counts or score
-histograms so the bootstrap stays fast.
+To add a dataset or a model, follow [add_data.md](add_data.md). To add a metric, declare
+it in `src/enzymado/evaluation/metrics_registry.py` with its task type and direction.
+Classification metrics must be derivable from confusion counts or score histograms so
+the bootstrap stays fast.
 
 ---
 
