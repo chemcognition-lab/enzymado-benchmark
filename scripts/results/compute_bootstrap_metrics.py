@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 """Bootstrap test metrics directly from prediction artifacts.
 
-Classification reuses cached per-row TP/FP/FN/TN statistics. Regression uses
-the raw payload. Existing metrics are never required: the test point estimate
-is recomputed before bootstrap metadata is written.
+Classification uses per-row TP/FP/FN/TN statistics from the cache and builds
+a missing entry from the predictions. Regression uses the raw payload. Existing
+metrics are never required: the test point estimate is recomputed before
+bootstrap metadata is written, so this script alone produces both.
 
 Example:
-    python scripts/results/compute_bootstrap_metrics.py --filter-task ec_number
+    python scripts/results/compute_bootstrap_metrics.py --filter-task ec_number --n-replicates 1000
 """
 
 from __future__ import annotations

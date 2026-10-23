@@ -3,7 +3,9 @@
 
 The benchmark card determines each task type when training metadata is absent.
 Classification is reduced to compact per-row confusion counts that are cached
-for the bootstrap pass, avoiding dense EC concatenation.
+for the bootstrap pass, avoiding dense EC concatenation. Running this before
+compute_bootstrap_metrics.py is optional: the bootstrap builds missing cache
+entries itself and recomputes these point estimates.
 
 Example:
     python scripts/results/compute_metrics.py --filter-task ec_number

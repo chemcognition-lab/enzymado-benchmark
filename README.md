@@ -292,10 +292,12 @@ python scripts/results/compute_tie_margins.py
 python scripts/results/compute_ratings.py
 ```
 
-`compute_metrics.py` caches per-row sufficient statistics under
+`compute_bootstrap_metrics.py` alone is enough: it recomputes the test point estimates and
+writes them with the bootstrap. Per-row sufficient statistics are cached under
 `results/evaluation_statistics/` (untracked), each keyed by the SHA-256 of its prediction
-file; `compute_bootstrap_metrics.py` reuses that cache, so run the two in order. Its
-`--n-replicates` default is 200; the published results use 1,000.
+file; the bootstrap builds a missing entry itself, and running `compute_metrics.py` first
+only fills the cache in advance. The `--n-replicates` default is 200; the published results
+use 1,000.
 
 On a Slurm cluster, `scripts/slurm/` wraps the same entry points as array jobs over the 14
 embedding models; pass your own `--account`.
