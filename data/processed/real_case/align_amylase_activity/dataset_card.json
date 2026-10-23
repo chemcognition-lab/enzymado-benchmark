@@ -15,7 +15,7 @@
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-10-14",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "alpha_amylase__specific_activity_random_80_10_10_standardized": {
         "train": 7230,
@@ -85,6 +85,27 @@
       "p95": 425,
       "count_greater_than_1024": 0,
       "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 425,
+      "max": 425,
+      "mean": 425.0,
+      "median": 425,
+      "p95": 425,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 9031,
+      "distinct_proteins": 9031,
+      "distinct_protein_length_summary": {
+        "min": 425,
+        "max": 425,
+        "mean": 425.0,
+        "median": 425,
+        "p95": 425,
+        "count_greater_than_1024": 0
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id"

@@ -6,19 +6,6 @@
     "doi": "10.1093/nar/gkaa1025",
     "url": "https://doi.org/10.1093/nar/gkaa1025"
   },
-  "amount_of_removed_data": {
-    "datapoints_before_cleaning": null,
-    "datapoints_after_cleaning": 11464,
-    "datapoints_removed_total": null,
-    "removed_percentage": null,
-    "removed_by_reason": {
-      "missing_values": null,
-      "duplicates": null,
-      "invalid_sequence": null,
-      "was_not_enzyme": null,
-      "other": null
-    }
-  },
   "statistics": {
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -27,15 +14,17 @@
         "coverage_mode": 0,
         "coverage_threshold": 0.8
       },
-      "total_sequences": 11110,
-      "number_of_clusters": 6885,
-      "singleton_clusters": 5132,
-      "largest_cluster_size": 41,
-      "ratio_unique_variants": 0.6197,
+      "total_sequences": 10794,
+      "number_of_clusters": 6708,
+      "singleton_clusters": 4983,
+      "largest_cluster_size": 31,
+      "ratio_unique_variants": 0.6215,
+      "source_file": "brenda_phopt_random_80_10_10_standardized.csv",
+      "generated": "2026-10-23",
       "cluster_diversity_plot": "results/figures/cluster_diversity/ph_opt_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-10-14",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "brenda_phopt_random_80_10_10_standardized": {
         "train": 8912,
@@ -149,35 +138,30 @@
       "count_greater_than_1024": 401,
       "contains_non_standard_aas": 39
     },
+    "distinct_protein_length_summary": {
+      "min": 39,
+      "max": 7096,
+      "mean": 471.72,
+      "median": 411.0,
+      "p95": 918,
+      "count_greater_than_1024": 382
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 11113,
+      "distinct_proteins": 10770,
+      "distinct_protein_length_summary": {
+        "min": 39,
+        "max": 2836,
+        "mean": 464.42,
+        "median": 410.5,
+        "p95": 903,
+        "count_greater_than_1024": 358
+      }
+    },
     "categorical_high_variance_columns": [
       "uniprot_id"
     ]
-  },
-  "additional_important": {
-    "sequence_length_summary": {
-      "min": 5,
-      "max": 7096,
-      "mean": 469.81,
-      "median": 408.0,
-      "p95": 921.0,
-      "count_greater_than_1024": 411,
-      "contains_non_standard_aas": 56
-    },
-    "quality_checks": {
-      "schema_validated": true,
-      "label_format_validated": true,
-      "split_leakage_checked": {
-        "brenda_phopt_similarity_mmseqs2_80_10_10_splits": false,
-        "brenda_phopt_random_80_10_10_splits": false
-      }
-    },
-    "notes": null,
-    "last_updated": "2026-04-11 02:17:47",
-    "umap": {
-      "embedding_model": "prot5_xl_uniref50",
-      "label_colored": "results/figures/umaps/ph_opt_prot5_xl_uniref50_labels.png",
-      "split_colored": "results/figures/umaps/ph_opt_prot5_xl_uniref50_splits.png"
-    }
   },
   "task_scope": "properties",
   "definitions": "benchmark_card.json#/definitions",

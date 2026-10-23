@@ -11,12 +11,17 @@ Three things happen here:
 * the statistics that can be derived from the published CSVs are recomputed, so
   they stop disagreeing with the files they describe.
 
-The MMseqs2 clustering block is left untouched: it needs ``mmseqs`` on PATH and
-is heavy enough to belong in a batch job, not here. Its ``generated`` marker says
-when it was last refreshed so a stale block is visible rather than assumed
-current.
+Length statistics come per row, per distinct protein, and per distinct protein
+among the sequences every PLM embedded (``used_in_runs``), which is what Table 1
+of the paper reports. The legacy ``additional_important`` and
+``amount_of_removed_data`` blocks are dropped.
+
+The MMseqs2 clustering block is kept as is unless ``--clustering`` is given: it
+needs ``mmseqs`` on PATH (``module load mmseqs2``) and is then recomputed on the
+sequences of the published split file, with its diversity figure.
 
     python scripts/data_prep/enrich_dataset_cards.py
+    python scripts/data_prep/enrich_dataset_cards.py --clustering
 """
 
 from __future__ import annotations
@@ -34,13 +39,27 @@ _REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "src"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
+import pandas as pd  # noqa: E402
+
 import card_metadata  # noqa: E402
 from enzymado.data_loading import data_registry  # noqa: E402
+from enzymado.dataset_card import clustering  # noqa: E402
 
 GLOSSARY_POINTER = "benchmark_card.json#/definitions"
+CLUSTER_KEY = "entire_protein_pool_cluster_with_mmseqs2"
+LEGACY_BLOCKS = ("additional_important", "amount_of_removed_data")
+SEQ_IDENTITY = 0.5
+COMMON_IDS = _REPO / "results" / "embedding_intersection" / "common_ids.txt"
+POOL = _REPO / "data" / "processed" / "protein_pool.csv"
+DIVERSITY_DIR = _REPO / "results" / "figures" / "cluster_diversity"
 
-# Kept as is between runs: computing it needs mmseqs, so it runs separately.
-PRESERVED_STATISTICS = ("entire_protein_pool_cluster_with_mmseqs2",)
+
+def used_sequences():
+    """Sequences every PLM embedded, the only ones any run trains or tests on."""
+    ids = set(COMMON_IDS.read_text().split())
+    pool = pd.read_csv(POOL)
+    kept = pool[pool.sequence_id.isin(ids)].protein_sequence
+    return set(kept.str.strip().str.upper())
 
 
 def read_rows(path):
@@ -181,7 +200,7 @@ def sequence_summary(rows, column):
     }
 
 
-def recompute(config):
+def recompute(config, used):
     """Statistics derivable from the published CSVs, for every split variant."""
     stats = {"generated": datetime.date.today().isoformat(),
              "split_sizes_by_method": {}, "label_distribution_by_method": {}}
@@ -216,6 +235,19 @@ def recompute(config):
         1 for row in reference
         if set((row.get(config.sequence_column) or "").strip().upper()) - standard
     )
+    distinct = {(r.get(config.sequence_column) or "").strip() for r in reference} - {""}
+    stats["distinct_protein_length_summary"] = sequence_summary(
+        [{"s": s} for s in distinct], "s")
+    kept = [r for r in reference
+            if (r.get(config.sequence_column) or "").strip().upper() in used]
+    kept_distinct = {(r.get(config.sequence_column) or "").strip() for r in kept}
+    stats["used_in_runs"] = {
+        "note": "rows whose sequence every PLM embedded (common_ids)",
+        "rows": len(kept),
+        "distinct_proteins": len(kept_distinct),
+        "distinct_protein_length_summary": sequence_summary(
+            [{"s": s} for s in kept_distinct], "s"),
+    }
     # A column whose values are nearly all distinct carries identity, not category.
     stats["categorical_high_variance_columns"] = [
         name for name in fields
@@ -225,11 +257,27 @@ def recompute(config):
     return stats
 
 
+def cluster_block(config, name):
+    """MMseqs2 diversity of the published split file, and its rank-abundance figure."""
+    path = sorted(config.dataset_paths.items())[0][1]
+    stats = clustering.run(pd.read_csv(path, low_memory=False), name, SEQ_IDENTITY)
+    plot = clustering.plot_diversity(stats, name, DIVERSITY_DIR, SEQ_IDENTITY)
+    block = {k: v for k, v in stats.items() if not k.startswith("_")}
+    block["source_file"] = path.name
+    block["generated"] = datetime.date.today().isoformat()
+    block["cluster_diversity_plot"] = str(pathlib.Path(plot).relative_to(_REPO))
+    block["dendrogram_plot"] = None
+    return block
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--card", type=pathlib.Path,
                         default=_REPO / "benchmark_card.json")
+    parser.add_argument("--clustering", action="store_true",
+                        help="Recompute the MMseqs2 block (needs mmseqs on PATH).")
     args = parser.parse_args()
+    used = used_sequences()
 
     card = json.loads(args.card.read_text(encoding="utf-8"))
     card["definitions"] = card_metadata.DEFINITIONS
@@ -267,11 +315,16 @@ def main() -> None:
             "description": meta["label"],
             "see_also": GLOSSARY_POINTER,
         }
+        for key in LEGACY_BLOCKS:
+            existing.pop(key, None)
         # Rebuild the block instead of merging, so fields we stop writing disappear.
         previous = existing.get("statistics", {})
-        statistics_block = {key: previous[key] for key in PRESERVED_STATISTICS
-                            if key in previous}
-        statistics_block.update(recompute(config))
+        statistics_block = {}
+        if CLUSTER_KEY in previous:
+            statistics_block[CLUSTER_KEY] = (
+                cluster_block(config, directory.name)
+                if args.clustering else previous[CLUSTER_KEY])
+        statistics_block.update(recompute(config, used))
         existing["statistics"] = statistics_block
 
         path.parent.mkdir(parents=True, exist_ok=True)

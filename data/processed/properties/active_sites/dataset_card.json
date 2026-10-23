@@ -6,19 +6,6 @@
     "doi": "10.1093/nar/gkae1010",
     "url": "https://doi.org/10.1093/nar/gkae1010"
   },
-  "amount_of_removed_data": {
-    "datapoints_before_cleaning": null,
-    "datapoints_after_cleaning": 90436,
-    "datapoints_removed_total": null,
-    "removed_percentage": null,
-    "removed_by_reason": {
-      "missing_values": null,
-      "duplicates": null,
-      "invalid_sequence": null,
-      "was_not_enzyme": null,
-      "other": null
-    }
-  },
   "statistics": {
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -32,10 +19,12 @@
       "singleton_clusters": 9347,
       "largest_cluster_size": 701,
       "ratio_unique_variants": 0.198,
+      "source_file": "swissprot_active_site_random_80_10_10_standardized.csv",
+      "generated": "2026-10-23",
       "cluster_diversity_plot": "results/figures/cluster_diversity/active_sites_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-09-30",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "swissprot_active_site_random_80_10_10_standardized": {
         "train": 72112,
@@ -179,35 +168,30 @@
       "count_greater_than_1024": 3456,
       "contains_non_standard_aas": 449
     },
+    "distinct_protein_length_summary": {
+      "min": 8,
+      "max": 35213,
+      "mean": 440.07,
+      "median": 352,
+      "p95": 929,
+      "count_greater_than_1024": 3456
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 89329,
+      "distinct_proteins": 89329,
+      "distinct_protein_length_summary": {
+        "min": 8,
+        "max": 2799,
+        "mean": 423.87,
+        "median": 351,
+        "p95": 898,
+        "count_greater_than_1024": 3060
+      }
+    },
     "categorical_high_variance_columns": [
       "uniprot_id"
     ]
-  },
-  "additional_important": {
-    "sequence_length_summary": {
-      "min": 8,
-      "max": 35213,
-      "mean": 439.37,
-      "median": 352.0,
-      "p95": 926.0,
-      "count_greater_than_1024": 3462,
-      "contains_non_standard_aas": 449
-    },
-    "quality_checks": {
-      "schema_validated": true,
-      "label_format_validated": true,
-      "split_leakage_checked": {
-        "swissprot_active_site_similarity_mmseqs2_80_10_10_splits": false,
-        "swissprot_active_site_random_80_10_10_splits": false
-      }
-    },
-    "notes": null,
-    "last_updated": "2026-04-11 01:38:58",
-    "umap": {
-      "embedding_model": "prot5_xl_uniref50",
-      "label_colored": "results/figures/umaps/active_sites_prot5_xl_uniref50_labels.png",
-      "split_colored": "results/figures/umaps/active_sites_prot5_xl_uniref50_splits.png"
-    }
   },
   "task_scope": "properties",
   "definitions": "benchmark_card.json#/definitions",

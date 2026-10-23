@@ -6,19 +6,6 @@
     "doi": "10.1093/nar/gkad630",
     "url": "https://doi.org/10.1093/nar/gkad630"
   },
-  "amount_of_removed_data": {
-    "datapoints_before_cleaning": null,
-    "datapoints_after_cleaning": 61115,
-    "datapoints_removed_total": null,
-    "removed_percentage": null,
-    "removed_by_reason": {
-      "missing_values": null,
-      "duplicates": null,
-      "invalid_sequence": null,
-      "was_not_enzyme": null,
-      "other": null
-    }
-  },
   "statistics": {
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -27,15 +14,17 @@
         "coverage_mode": 0,
         "coverage_threshold": 0.8
       },
-      "total_sequences": 19930,
-      "number_of_clusters": 13316,
-      "singleton_clusters": 10128,
-      "largest_cluster_size": 52,
-      "ratio_unique_variants": 0.6681,
+      "total_sequences": 11245,
+      "number_of_clusters": 7591,
+      "singleton_clusters": 5729,
+      "largest_cluster_size": 28,
+      "ratio_unique_variants": 0.6751,
+      "source_file": "biolip_binding_random_80_10_10_standardized.csv",
+      "generated": "2026-10-23",
       "cluster_diversity_plot": "results/figures/cluster_diversity/binding_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-10-14",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "biolip_binding_random_80_10_10_standardized": {
         "train": 22670,
@@ -133,33 +122,28 @@
       "count_greater_than_1024": 642,
       "contains_non_standard_aas": 0
     },
-    "categorical_high_variance_columns": []
-  },
-  "additional_important": {
-    "sequence_length_summary": {
-      "min": 30,
-      "max": 4579,
-      "mean": 394.44,
-      "median": 331.0,
-      "p95": 806.0,
-      "count_greater_than_1024": 1668,
-      "contains_non_standard_aas": 0
+    "distinct_protein_length_summary": {
+      "min": 31,
+      "max": 4426,
+      "mean": 387.9,
+      "median": 337,
+      "p95": 762,
+      "count_greater_than_1024": 208
     },
-    "quality_checks": {
-      "schema_validated": true,
-      "label_format_validated": true,
-      "split_leakage_checked": {
-        "biolip_binding_random_80_10_10_splits": false,
-        "biolip_binding_similarity_mmseqs2_80_10_10_splits": false
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 28316,
+      "distinct_proteins": 11233,
+      "distinct_protein_length_summary": {
+        "min": 31,
+        "max": 2652,
+        "mean": 384.5,
+        "median": 337,
+        "p95": 756,
+        "count_greater_than_1024": 196
       }
     },
-    "notes": "Warning: Base dataset contains 11303 full row duplicates.",
-    "last_updated": "2026-04-11 01:45:08",
-    "umap": {
-      "embedding_model": "prot5_xl_uniref50",
-      "label_colored": "results/figures/umaps/binding_prot5_xl_uniref50_labels.png",
-      "split_colored": "results/figures/umaps/binding_prot5_xl_uniref50_splits.png"
-    }
+    "categorical_high_variance_columns": []
   },
   "task_scope": "properties",
   "definitions": "benchmark_card.json#/definitions",

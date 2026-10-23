@@ -6,19 +6,6 @@
     "doi": "10.1093/nar/gkaa981",
     "url": "https://doi.org/10.1093/nar/gkaa981"
   },
-  "amount_of_removed_data": {
-    "datapoints_before_cleaning": null,
-    "datapoints_after_cleaning": 3774,
-    "datapoints_removed_total": null,
-    "removed_percentage": null,
-    "removed_by_reason": {
-      "missing_values": null,
-      "duplicates": null,
-      "invalid_sequence": null,
-      "was_not_enzyme": null,
-      "other": null
-    }
-  },
   "statistics": {
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -32,10 +19,12 @@
       "singleton_clusters": 57,
       "largest_cluster_size": 3,
       "ratio_unique_variants": 0.8986,
+      "source_file": "fireprotdb_ddg_random_80_10_10_standardized.csv",
+      "generated": "2026-10-23",
       "cluster_diversity_plot": "results/figures/cluster_diversity/ddg_mut_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-09-30",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "fireprotdb_ddg_random_80_10_10_standardized": {
         "val": 377,
@@ -150,35 +139,30 @@
       "count_greater_than_1024": 38,
       "contains_non_standard_aas": 0
     },
+    "distinct_protein_length_summary": {
+      "min": 96,
+      "max": 34350,
+      "mean": 409.61,
+      "median": 164.0,
+      "p95": 537,
+      "count_greater_than_1024": 38
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 3760,
+      "distinct_proteins": 2518,
+      "distinct_protein_length_summary": {
+        "min": 96,
+        "max": 1863,
+        "mean": 231.71,
+        "median": 164.0,
+        "p95": 509,
+        "count_greater_than_1024": 24
+      }
+    },
     "categorical_high_variance_columns": [
       "dataset_id"
     ]
-  },
-  "additional_important": {
-    "sequence_length_summary": {
-      "min": 96,
-      "max": 34350,
-      "mean": 351.55,
-      "median": 164.0,
-      "p95": 537.0,
-      "count_greater_than_1024": 38,
-      "contains_non_standard_aas": 0
-    },
-    "quality_checks": {
-      "schema_validated": true,
-      "label_format_validated": true,
-      "split_leakage_checked": {
-        "fireprotdb_ddg_random_80_10_10_splits": false,
-        "fireprotdb_ddg_similarity_mmseqs2_80_10_10_splits": false
-      }
-    },
-    "notes": null,
-    "last_updated": "2026-04-11 01:56:01",
-    "umap": {
-      "embedding_model": "prot5_xl_uniref50",
-      "label_colored": "results/figures/umaps/ddg_mut_prot5_xl_uniref50_labels.png",
-      "split_colored": "results/figures/umaps/ddg_mut_prot5_xl_uniref50_splits.png"
-    }
   },
   "task_scope": "properties",
   "definitions": "benchmark_card.json#/definitions",

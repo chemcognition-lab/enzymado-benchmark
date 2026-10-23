@@ -15,7 +15,7 @@
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-10-13",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "cleeveland_random_80_10_10_standardized": {
         "train": 316,
@@ -87,6 +87,27 @@
       "p95": 1068,
       "count_greater_than_1024": 35,
       "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 506,
+      "max": 1068,
+      "mean": 705.83,
+      "median": 672.0,
+      "p95": 828,
+      "count_greater_than_1024": 1
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 385,
+      "distinct_proteins": 12,
+      "distinct_protein_length_summary": {
+        "min": 506,
+        "max": 1068,
+        "mean": 705.83,
+        "median": 672.0,
+        "p95": 828,
+        "count_greater_than_1024": 1
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id"

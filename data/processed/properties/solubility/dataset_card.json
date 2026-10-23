@@ -6,19 +6,6 @@
     "doi": "10.1101/2023.01.16.524265",
     "url": "https://doi.org/10.1101/2023.01.16.524265"
   },
-  "amount_of_removed_data": {
-    "datapoints_before_cleaning": null,
-    "datapoints_after_cleaning": 3665,
-    "datapoints_removed_total": null,
-    "removed_percentage": null,
-    "removed_by_reason": {
-      "missing_values": null,
-      "duplicates": null,
-      "invalid_sequence": null,
-      "was_not_enzyme": null,
-      "other": null
-    }
-  },
   "statistics": {
     "entire_protein_pool_cluster_with_mmseqs2": {
       "cluster_method": "mmseqs2",
@@ -27,15 +14,17 @@
         "coverage_mode": 0,
         "coverage_threshold": 0.8
       },
-      "total_sequences": 3665,
-      "number_of_clusters": 2994,
-      "singleton_clusters": 2574,
+      "total_sequences": 3664,
+      "number_of_clusters": 2993,
+      "singleton_clusters": 2573,
       "largest_cluster_size": 11,
       "ratio_unique_variants": 0.8169,
+      "source_file": "proteinea_solubility_random_80_10_10_standardized.csv",
+      "generated": "2026-10-23",
       "cluster_diversity_plot": "results/figures/cluster_diversity/solubility_cluster_diversity.png",
       "dendrogram_plot": null
     },
-    "generated": "2026-10-14",
+    "generated": "2026-10-23",
     "split_sizes_by_method": {
       "proteinea_solubility_random_80_10_10_standardized": {
         "test": 367,
@@ -132,36 +121,31 @@
       "count_greater_than_1024": 32,
       "contains_non_standard_aas": 0
     },
+    "distinct_protein_length_summary": {
+      "min": 61,
+      "max": 1645,
+      "mean": 358.87,
+      "median": 329.5,
+      "p95": 713,
+      "count_greater_than_1024": 32
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 3664,
+      "distinct_proteins": 3664,
+      "distinct_protein_length_summary": {
+        "min": 61,
+        "max": 1645,
+        "mean": 358.87,
+        "median": 329.5,
+        "p95": 713,
+        "count_greater_than_1024": 32
+      }
+    },
     "categorical_high_variance_columns": [
       "dataset_id",
       "uniprot_id"
     ]
-  },
-  "additional_important": {
-    "sequence_length_summary": {
-      "min": 61,
-      "max": 1645,
-      "mean": 358.85,
-      "median": 329.0,
-      "p95": 713.0,
-      "count_greater_than_1024": 32,
-      "contains_non_standard_aas": 0
-    },
-    "quality_checks": {
-      "schema_validated": true,
-      "label_format_validated": true,
-      "split_leakage_checked": {
-        "proteinea_solubility_random_80_10_10_splits": false,
-        "proteinea_solubility_similarity_mmseqs2_80_10_10_splits": false
-      }
-    },
-    "notes": null,
-    "last_updated": "2026-04-11 02:20:37",
-    "umap": {
-      "embedding_model": "prot5_xl_uniref50",
-      "label_colored": "results/figures/umaps/solubility_prot5_xl_uniref50_labels.png",
-      "split_colored": "results/figures/umaps/solubility_prot5_xl_uniref50_splits.png"
-    }
   },
   "task_scope": "properties",
   "definitions": "benchmark_card.json#/definitions",
