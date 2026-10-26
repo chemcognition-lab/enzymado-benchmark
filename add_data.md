@@ -34,6 +34,18 @@ source .venv/bin/activate
 
 Run `source .venv/bin/activate` again each time you open a new terminal.
 
+**Check your Python version before going further:**
+
+```bash
+python -V        # must be 3.12 or 3.13
+```
+
+The code uses syntax introduced in Python 3.12. An older interpreter fails at
+Step 3 with a `SyntaxError` in `src/enzymado/dataset_splitting.py`, which looks
+like a bug in the repository but is not one. `uv sync` installs a suitable
+Python for you; if you built the environment some other way and `python -V`
+reports 3.11 or older, delete `.venv` and rerun `uv sync --extra train`.
+
 ---
 
 # Part 1: Add a dataset
@@ -46,6 +58,11 @@ anything else, see [What Part 1 does not cover](#what-part-1-does-not-cover).
 
 Create the folder `data/processed/real_case/my_enzyme/` and save your data in
 it as `my_enzyme.csv`.
+
+If your source needs reshaping, write the conversion as a script rather than
+editing by hand: it keeps the dataset reproducible, and it is the only way to
+share one whose licence does not let you redistribute the data.
+`scripts/data_prep/convert_biolip_to_csv.py` is a working example.
 
 Pick the layout that matches your data.
 
@@ -138,27 +155,42 @@ embedding.
 
 This puts 80% of the rows in a training set, 10% in a validation set and 10%
 in a test set. It also rescales the number column to a mean of 0 and a
-standard deviation of 1, which helps training. Replace `melting_point` (twice)
-with your number column:
+standard deviation of 1, which helps training.
 
 ```bash
 python scripts/data_prep/generate_dataset_splits.py \
   --input data/processed/real_case/my_enzyme/my_enzyme.csv \
   --mode random \
-  --random-split-unit point --point-id-col dataset_id \
-  --stratify-col melting_point \
+  --random-split-unit protein \
   --standardize-col melting_point \
   --train-fraction 0.8 --val-fraction 0.1 --test-fraction 0.1 \
   --seed 42
 ```
 
-It writes `my_enzyme_random_80_10_10_standardized.csv` into the same folder.
-That file has two new columns: `split` (train, val or test) and
-`melting_point_standardized`.
+Replace `my_enzyme` and `melting_point`. `--random-split-unit protein` keeps
+every row carrying the same sequence in one split, so an enzyme measured
+against several substrates does not end up half in training and half in test.
 
-The split is random by row. If your rows are near-identical variants, the test
-set will contain variants very similar to ones the model trained on, which
-tends to make scores look better than they would be on new enzymes.
+**If your rows are variants of a shared parent** — a variant library, a
+mutational scan, pooled engineering campaigns — use `--mode similarity`
+instead. Each mutant is its own sequence, so a random split scatters one
+parent's variants across all three sets and the test score measures recall
+rather than prediction. Similarity mode clusters sequences with MMseqs2 and
+assigns whole clusters, which keeps relatives together:
+
+```bash
+  --mode similarity --identity-threshold 0.3 --mmseqs-coverage-threshold 0.8
+```
+
+It needs `mmseqs` on your PATH — binaries are at
+<https://github.com/soedinglab/MMseqs2/releases>.
+
+Either way it writes `my_enzyme_<mode>_80_10_10_standardized.csv` into the
+same folder, with two new columns, `split` and `melting_point_standardized`.
+
+For data where every row is an independent protein and you want the target
+balanced across splits, use `--random-split-unit point --point-id-col
+dataset_id --stratify-col melting_point` instead.
 
 ## Step 4. Register the task
 

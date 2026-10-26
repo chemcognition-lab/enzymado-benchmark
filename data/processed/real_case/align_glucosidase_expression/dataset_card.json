@@ -1,91 +1,100 @@
 {
-  "property_name": "align_glucosidase_expression",
+  "task_name": "align_glucosidase_expression",
+  "dataset_id": "b_glucosidase__expression",
   "task_scope": "real_case",
-  "definitions": "benchmark_card.json#/definitions",
-  "description": "Soluble expression for the glucosidase variant library.",
   "origin_of_data": {
-    "source_name": "Protein Engineering Tournament (2023 ALIGN round)",
-    "doi": "10.1002/prot.70008",
-    "url": "https://doi.org/10.1002/prot.70008"
+    "source_name": "ALiGN",
+    "source_version": null,
+    "citation": null
   },
-  "label": {
-    "column": "expression_standardized",
-    "label_kind": "scalar_regression",
-    "description": "Expression level in the assay units of the tournament release, standardized on the training split.",
-    "see_also": "benchmark_card.json#/definitions"
+  "schema": {
+    "protein_id_col": "dataset_id",
+    "sequence_col": "protein_sequence",
+    "ligand_smiles_col": null,
+    "condition_cols": null,
+    "target_col": "expression"
+  },
+  "amount_of_removed_data": {
+    "datapoints_after_cleaning": 415
   },
   "statistics": {
-    "generated": "2026-09-17",
-    "split_sizes_by_method": {
-      "b_glucosidase__expression_random_80_10_10_standardized": {
-        "train": 331,
-        "test": 43,
-        "val": 41
-      }
-    },
-    "label_distribution_by_method": {
-      "b_glucosidase__expression_random_80_10_10_standardized": {
-        "overall": {
-          "kind": "numeric",
-          "total_valid_labels": 415,
-          "mean": -0.0176,
-          "std": 0.9127,
-          "min": -0.6025,
-          "max": 13.2056,
-          "median": -0.2286
-        },
-        "train": {
-          "kind": "numeric",
-          "total_valid_labels": 331,
-          "mean": 0.0,
-          "std": 1.0,
-          "min": -0.6025,
-          "max": 13.2056,
-          "median": -0.2286
-        },
-        "val": {
-          "kind": "numeric",
-          "total_valid_labels": 41,
-          "mean": -0.0867,
-          "std": 0.4085,
-          "min": -0.5823,
-          "max": 0.8877,
-          "median": -0.2286
-        },
-        "test": {
-          "kind": "numeric",
-          "total_valid_labels": 43,
-          "mean": -0.0874,
-          "std": 0.4128,
-          "min": -0.5956,
-          "max": 1.0032,
-          "median": -0.2286
-        }
-      }
-    },
     "nans_dups": {
       "nan_counts_per_column": {
         "dataset_id": 0,
         "protein_sequence": 0,
         "source_split": 0,
-        "expression": 0,
-        "split": 0,
-        "expression_standardized": 0
+        "expression": 0
       },
-      "duplicate_rows_full": 0
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 0
     },
-    "rows": 415,
-    "distinct_proteins": 324,
+    "unique_proteins": 324,
+    "unique_ligands": null,
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 415,
+        "mean": 1.548,
+        "std": 2.3738,
+        "min": 0.0287,
+        "max": 35.9,
+        "median": 1.0
+      },
+      "train": {
+        "b_glucosidase__expression_random_80_10_10_standardized": {
+          "total_valid_labels": 331,
+          "mean": 1.5938,
+          "std": 2.6018,
+          "min": 0.0287,
+          "max": 35.9,
+          "median": 1.0
+        }
+      },
+      "validation": {
+        "b_glucosidase__expression_random_80_10_10_standardized": {
+          "total_valid_labels": 41,
+          "mean": 1.3685,
+          "std": 1.0745,
+          "min": 0.081,
+          "max": 3.9,
+          "median": 1.0
+        }
+      },
+      "test": {
+        "b_glucosidase__expression_random_80_10_10_standardized": {
+          "total_valid_labels": 43,
+          "mean": 1.3668,
+          "std": 1.0851,
+          "min": 0.0464,
+          "max": 4.2,
+          "median": 1.0
+        }
+      }
+    },
+    "split_sizes": {
+      "b_glucosidase__expression_random_80_10_10_standardized": {
+        "train": 331,
+        "test": 43,
+        "val": 41
+      }
+    }
+  },
+  "additional_important": {
     "sequence_length_summary": {
       "min": 445,
       "max": 445,
       "mean": 445.0,
-      "median": 445,
-      "p95": 445,
-      "count_greater_than_1024": 0
+      "median": 445.0,
+      "p95": 445.0
     },
-    "categorical_high_variance_columns": [
-      "dataset_id"
-    ]
+    "quality_checks": {
+      "schema_validated": true,
+      "split_leakage_checked": {
+        "b_glucosidase__expression_random_80_10_10_standardized": false
+      },
+      "label_format_validated": true,
+      "small_dataset_warning": null
+    },
+    "notes": null,
+    "last_updated": "2026-10-25 15:44:52"
   }
 }

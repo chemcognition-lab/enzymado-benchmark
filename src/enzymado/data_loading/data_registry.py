@@ -318,44 +318,36 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         numeric_feature_columns=("temperature",),
         index_columns=("dataset_id",),
     ),
-    "skid_adh_km_demo": TaskConfig(
-        name="skid_adh_km_demo",
+    "enzyarena_kcat": TaskConfig(
+        name="enzyarena_kcat",
         batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
         task_scope="real_case",
         dataset_paths={
-            SplitType.RANDOM: _DATA / "real_case/skid_adh_km_demo/skid_adh_km_demo_random_80_10_10_standardized.csv",
+            SplitType.SIMILARITY: _DATA
+            / "real_case/enzyarena_kcat"
+            / "enzyarena_kcat_similarity_mmseqs2_80_10_10_standardized.csv",
         },
-        target_column="km_value_mM_standardized",
+        target_column="log10_kcat_standardized",
         ligand_column="smiles",
+        numeric_feature_columns=("temperature", "ph"),
         index_columns=("dataset_id",),
     ),
-    "nhase_substrate_scope": TaskConfig(
-        name="nhase_substrate_scope",
+    "enzyarena_km": TaskConfig(
+        name="enzyarena_km",
         batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
         label_kind=LabelType.SCALAR_REGRESSION,
         task_scope="real_case",
         dataset_paths={
-            SplitType.RANDOM: _DATA / "real_case/nhase_substrate_scope/nhase_substrate_scope_random_80_10_10_standardized.csv",
+            SplitType.SIMILARITY: _DATA
+            / "real_case/enzyarena_km"
+            / "enzyarena_km_similarity_mmseqs2_80_10_10_standardized.csv",
         },
-        target_column="specific_activity_U_mg_standardized",
+        target_column="log10_km_standardized",
         ligand_column="smiles",
+        numeric_feature_columns=("temperature", "ph"),
         index_columns=("dataset_id",),
     ),
-
-        "practice_esterase": TaskConfig(
-        name="practice_esterase",
-        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
-        label_kind=LabelType.SCALAR_REGRESSION,
-        task_scope="real_case",
-        dataset_paths={
-            SplitType.RANDOM: _DATA / "real_case/practice_esterase/practice_esterase_scope_random_80_10_10_standardized.csv",
-        },
-        target_column="activity_u_mg_standardized",
-        ligand_column="smiles",
-        index_columns=("dataset_id",),
-    ),
-
 }
 
 
