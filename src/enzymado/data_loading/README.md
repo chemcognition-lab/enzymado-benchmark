@@ -140,9 +140,9 @@ after adding your task.
 
 ## A real worked example
 
-`data/processed/real_case/skid_adh_km_demo/` is a small, real, working
-example built exactly this way — 44 Km measurements across 6 alcohol
-dehydrogenase enzymes, sequences fetched live from UniProt, split via the
-real `dataset_splitting.py`, and registered as `skid_adh_km_demo` in
-`TASK_REGISTRY`. Read alongside its `TaskConfig` entry as a concrete
-template — every step above is what actually produced it.
+`data/processed/real_case/enzyarena_km/` is a real, working example built
+exactly this way — 2,250 Km measurements across 110 enzyme families, taken
+from EnzyArena's condition-matched mutagenesis campaigns, split via the real
+`dataset_splitting.py`, and registered as `enzyarena_km` in `TASK_REGISTRY`.
+Read alongside its `TaskConfig` entry as a concrete template — every step
+above is what actually produced it.
