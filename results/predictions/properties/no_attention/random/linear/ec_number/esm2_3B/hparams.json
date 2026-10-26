@@ -1,3 +1,53 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:996f2fcd5377a6f3c6c0c9adb70cc7e9ec56092b1af5a2a2490af5e6f2285441
-size 1900
+{
+    "schema_version": 1,
+    "task_name": "ec_number",
+    "embedding_model": "esm2_3B",
+    "model_name": "linear_classification",
+    "split_variant": "random",
+    "wrapper": "ECMultiHeadClassifierTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.01,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "auprc",
+        "objective": "negative_auprc",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ec_number",
+        "batch_kind": "protein_global",
+        "label_kind": "multilabel_ec",
+        "target_column": "ec_number",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ec_number/swissprot_ec_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ec_number/swissprot_ec_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 186846,
+            "ordered_sha256": "af0c05510ebaebe0037700c6ef512b00ecb05b92a392706aa70e2e288e6cf0fd"
+        },
+        "val": {
+            "count": 23366,
+            "ordered_sha256": "23d5069ece3cee0b941908446252486c30660516c1b9dd1b875b11ceb81beeb2"
+        },
+        "test": {
+            "count": 23374,
+            "ordered_sha256": "7d1e927b373b4ab477fd716f27701613c899c81b3cda37ba5ec7640d061053ad"
+        }
+    }
+}

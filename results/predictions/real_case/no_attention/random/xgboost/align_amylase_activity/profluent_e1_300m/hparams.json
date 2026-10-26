@@ -1,3 +1,51 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d46a8128f873ee35d2805febd0739ebc05dac466cf10a9b207282b1e353875d9
-size 1699
+{
+    "schema_version": 1,
+    "task_name": "align_amylase_activity",
+    "embedding_model": "profluent_e1_300m",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_amylase_activity",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_specific_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/align_amylase_activity/alpha_amylase__specific_activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 7230,
+            "ordered_sha256": "5264c03bfcfcaa1bb88f8cca9b98e87c34f59b0aed35531d490bd91fcdba1a9a"
+        },
+        "val": {
+            "count": 901,
+            "ordered_sha256": "f62f0cfe2430081d0bc0c05d75ea3279806fbe109ee555292a58644b85fe27f0"
+        },
+        "test": {
+            "count": 900,
+            "ordered_sha256": "65c6f677527075b8d480e4f6c0e134bdaec5f2d7702fbdcfd16612d32b7d4b20"
+        }
+    }
+}

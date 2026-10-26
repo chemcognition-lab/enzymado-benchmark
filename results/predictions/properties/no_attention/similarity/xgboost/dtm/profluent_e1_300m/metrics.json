@@ -1,3 +1,54 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:280a5d2af3b944062cb6381b893796484749769be194060fabf1a3a3002a58ee
-size 1760
+{
+    "test": {
+        "split": "test",
+        "task_type": "regression",
+        "n": 333,
+        "ranking_source": "hard_labels",
+        "mae": 0.7142959927020289,
+        "rmse": 1.2337453872688344,
+        "r2": 0.038504557710077325,
+        "kendall_tau": 0.2500003268391162
+    },
+    "test_bootstrap": {
+        "n_replicates": 1000,
+        "confidence_level": 0.95,
+        "primary_metric": "mae",
+        "task_type": "regression",
+        "seed": 449623657,
+        "n_units": 333,
+        "sample_identity_status": "verified",
+        "sample_identity_sha256": "8e6e4ac0296f2550d12436d461afd9ac660fbc65aae29933640b8b5e4405d43b",
+        "paired_by_sample_id": true,
+        "paired_by_position": true,
+        "metrics": {
+            "mae": {
+                "mean": 0.7108448102841338,
+                "std": 0.05216719843909206,
+                "ci_lo": 0.6194974050608302,
+                "ci_hi": 0.8246844268496328,
+                "n_finite": 1000
+            },
+            "rmse": {
+                "mean": 1.2037161404157999,
+                "std": 0.19117945342794218,
+                "ci_lo": 0.8435744171369127,
+                "ci_hi": 1.5869026906679518,
+                "n_finite": 1000
+            },
+            "r2": {
+                "mean": 0.0401805726250778,
+                "std": 0.03317859681218374,
+                "ci_lo": -0.018445320754149692,
+                "ci_hi": 0.10975362930075672,
+                "n_finite": 1000
+            },
+            "kendall_tau": {
+                "mean": 0.25026187249033427,
+                "std": 0.034021692429345114,
+                "ci_lo": 0.18240518791041493,
+                "ci_hi": 0.3151577582906119,
+                "n_finite": 1000
+            }
+        }
+    }
+}

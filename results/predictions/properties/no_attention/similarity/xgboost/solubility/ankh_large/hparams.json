@@ -1,3 +1,52 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:b8c22edf0de26846dae3ea3fd9f95114b3815f311374fcaf77438ffc8867439e
-size 1797
+{
+    "schema_version": 1,
+    "task_name": "solubility",
+    "embedding_model": "ankh_large",
+    "model_name": "xgb_classification",
+    "split_variant": "similarity",
+    "wrapper": "XGBClassifier",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "aucpr",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "aucpr",
+        "mode": "max",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "solubility",
+        "batch_kind": "protein_global",
+        "label_kind": "binary",
+        "target_column": "solubility",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/solubility/proteinea_solubility_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/solubility/proteinea_solubility_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 2931,
+            "ordered_sha256": "80f49cf48ff4e3a551c90c7388e675e913631406f9ad536675edf1d3c8847cd8"
+        },
+        "val": {
+            "count": 366,
+            "ordered_sha256": "1581aa50037b6b2c79cf1b64cfe51e2f83ef0809a0ca5ee0fb9db5d685297698"
+        },
+        "test": {
+            "count": 367,
+            "ordered_sha256": "4d6a797e57d8a476bbd3fa1dc201b80fd171598918fdad12c12b647164f15fdf"
+        }
+    }
+}

@@ -1,3 +1,56 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:1de96d85342ae01c4e145541abcfac3cc3883c71c7fee77ceb3b42c665ebf6b2
-size 2007
+{
+    "schema_version": 1,
+    "task_name": "dtm",
+    "embedding_model": "esm2_3B",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "similarity",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "dtm",
+        "batch_kind": "mutation_delta_global",
+        "label_kind": "scalar_regression",
+        "target_column": "dtm_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/dtm/fireprotdb_dtm_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/dtm/fireprotdb_dtm_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 2326,
+            "ordered_sha256": "885f7512a7760e42823cc9f9f74713583b1bba2186f81f87a7bc8cceeb3c942d"
+        },
+        "val": {
+            "count": 679,
+            "ordered_sha256": "a3f1c67d895ec00ba9c4b94647bf34bb44d3e32df4c1f7e75c5d63e6a5d2a2e8"
+        },
+        "test": {
+            "count": 333,
+            "ordered_sha256": "8e6e4ac0296f2550d12436d461afd9ac660fbc65aae29933640b8b5e4405d43b"
+        }
+    }
+}

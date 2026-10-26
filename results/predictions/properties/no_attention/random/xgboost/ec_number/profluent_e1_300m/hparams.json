@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e3c2555e94451ec70776c53776b6359b3f13a5154682d9d9699a786ab0467d8b
-size 1946
+{
+    "schema_version": 1,
+    "task_name": "ec_number",
+    "embedding_model": "profluent_e1_300m",
+    "model_name": "xgb_classification",
+    "split_variant": "random",
+    "wrapper": "XGBFlatECBlockClassifier",
+    "params": {
+        "n_estimators": 50,
+        "max_depth": 4,
+        "learning_rate": 0.1,
+        "subsample": 0.8,
+        "colsample_bytree": 0.1,
+        "tree_method": "hist",
+        "max_bin": 64,
+        "block_size": 256,
+        "n_jobs": -1,
+        "device": "cuda",
+        "random_state": 42,
+        "eval_metric": "logloss",
+        "early_stopping_rounds": 20
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "logloss",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ec_number",
+        "batch_kind": "protein_global",
+        "label_kind": "multilabel_ec",
+        "target_column": "ec_number",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ec_number/swissprot_ec_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ec_number/swissprot_ec_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 186846,
+            "ordered_sha256": "af0c05510ebaebe0037700c6ef512b00ecb05b92a392706aa70e2e288e6cf0fd"
+        },
+        "val": {
+            "count": 23366,
+            "ordered_sha256": "23d5069ece3cee0b941908446252486c30660516c1b9dd1b875b11ceb81beeb2"
+        },
+        "test": {
+            "count": 23374,
+            "ordered_sha256": "7d1e927b373b4ab477fd716f27701613c899c81b3cda37ba5ec7640d061053ad"
+        }
+    }
+}

@@ -1,3 +1,51 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:3f2254c232f3a68ba1f4b50732bf5a8016b23ae764e6cdaabf1dd33778ab1b2f
-size 1690
+{
+    "schema_version": 1,
+    "task_name": "align_amylase_stability",
+    "embedding_model": "esm2_650M",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_amylase_stability",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_thermostability_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/align_amylase_stability/alpha_amylase__thermostability_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 6990,
+            "ordered_sha256": "f26855452627c11aee9c5861b047ef414facf018638204d4cb7be1305bc020b4"
+        },
+        "val": {
+            "count": 875,
+            "ordered_sha256": "6821cccdaaab35cb2b9333fb6f1243ca001c8aba8d0a865b0314e8c10c222c07"
+        },
+        "test": {
+            "count": 871,
+            "ordered_sha256": "710c9295f9ec54b4db184a745d67c4434801c09e56362f970110960bc7e51a56"
+        }
+    }
+}

@@ -1,3 +1,32 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:2e3d293bacce5f0d87c97d9b1dbf05bb978ae6c8b59852c737702f2a7defb708
-size 863
+{
+    "train": {
+        "split": "train",
+        "task_type": "regression",
+        "n": 284,
+        "ranking_source": "hard_labels",
+        "mae": 0.5102356190196383,
+        "rmse": 0.6509220172550514,
+        "r2": 0.5763005171217976,
+        "kendall_tau": 0.5135825788713122
+    },
+    "val": {
+        "split": "val",
+        "task_type": "regression",
+        "n": 34,
+        "ranking_source": "hard_labels",
+        "mae": 0.6222396852612934,
+        "rmse": 0.8449710201550891,
+        "r2": 0.28415736463290786,
+        "kendall_tau": 0.4251454611090237
+    },
+    "test": {
+        "split": "test",
+        "task_type": "regression",
+        "n": 36,
+        "ranking_source": "hard_labels",
+        "mae": 0.7357941140782915,
+        "rmse": 0.8950547013339707,
+        "r2": 0.17359239870987164,
+        "kendall_tau": 0.327730693416725
+    }
+}

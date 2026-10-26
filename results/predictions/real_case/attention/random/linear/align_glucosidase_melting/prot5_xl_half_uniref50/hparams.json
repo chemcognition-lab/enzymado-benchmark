@@ -1,3 +1,55 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:3e523efa5f5cd5b1c8c1238d20fec7d5145e4760d3efd7096b452e2cdf85cf2a
-size 1924
+{
+    "schema_version": 1,
+    "task_name": "align_glucosidase_melting",
+    "embedding_model": "prot5_xl_half_uniref50",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_glucosidase_melting",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "melting_point_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/real_case/align_glucosidase_melting/b_glucosidase__melting_point_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 86,
+            "ordered_sha256": "18e4f94e338436522064204fb88cbaedb59a3517e388caeae96417d34c8a668a"
+        },
+        "val": {
+            "count": 10,
+            "ordered_sha256": "69ffaf66c21e523db0a6c5a0c8113d1250ec17e7d7fc9bcef815d7ccbde77cda"
+        },
+        "test": {
+            "count": 10,
+            "ordered_sha256": "eec461fe24fbb824d189f326be200006307321cadbbb49c8c0593b50d731b877"
+        }
+    }
+}

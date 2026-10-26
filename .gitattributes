@@ -12,3 +12,5 @@ results/predictions/**/*_test_predictions.safetensors.xz filter=lfs diff=lfs mer
 embeddings_models_output.example.json -filter -diff -merge text
 embeddings_models_output_mean_pooled.example.json -filter -diff -merge text
 
+results/**/metrics.json -filter -diff -merge text
+results/**/hparams.json -filter -diff -merge text

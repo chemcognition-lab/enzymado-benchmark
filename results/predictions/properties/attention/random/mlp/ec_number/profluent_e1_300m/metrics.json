@@ -1,3 +1,94 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:fc0ec3a30589b2ac46f2876a8579368c633395230d239d5748ee7c0046add9d6
-size 3107
+{
+    "train": {
+        "split": "train",
+        "task_type": "classification",
+        "n": 1064299693,
+        "accuracy": 0.9999754035445353,
+        "precision": 0.9908000875010254,
+        "recall": 0.9738637890719488,
+        "f1": 0.9822589389790994,
+        "auroc": 0.9869287310905008,
+        "auprc": 0.9649226014147378,
+        "ranking_source": "hard_labels"
+    },
+    "val": {
+        "split": "val",
+        "task_type": "classification",
+        "n": 133115453,
+        "accuracy": 0.9999619728597551,
+        "precision": 0.985017236807213,
+        "recall": 0.9600878798974735,
+        "f1": 0.9723928053316463,
+        "auroc": 0.9800388430704237,
+        "auprc": 0.9457309510429259,
+        "ranking_source": "hard_labels"
+    },
+    "test": {
+        "split": "test",
+        "task_type": "classification",
+        "n": 133100660,
+        "accuracy": 0.9999612624009527,
+        "precision": 0.9860876104530927,
+        "recall": 0.9581143956244694,
+        "f1": 0.9718997634696925,
+        "auroc": 0.9986537636670545,
+        "auprc": 0.9895341927517907,
+        "ranking_source": "proba"
+    },
+    "test_bootstrap": {
+        "n_replicates": 1000,
+        "confidence_level": 0.95,
+        "primary_metric": "f1",
+        "task_type": "classification",
+        "seed": 1727227969,
+        "n_units": 23374,
+        "sample_identity_status": "verified",
+        "sample_identity_sha256": "7d1e927b373b4ab477fd716f27701613c899c81b3cda37ba5ec7640d061053ad",
+        "paired_by_sample_id": true,
+        "paired_by_position": true,
+        "metrics": {
+            "accuracy": {
+                "mean": 0.9999612756637537,
+                "std": 9.138124910903775e-07,
+                "ci_lo": 0.9999594669213572,
+                "ci_hi": 0.9999631985846289,
+                "n_finite": 1000
+            },
+            "precision": {
+                "mean": 0.9861011783335009,
+                "std": 0.0005403900292463243,
+                "ci_lo": 0.9849953102922219,
+                "ci_hi": 0.9871091764459428,
+                "n_finite": 1000
+            },
+            "recall": {
+                "mean": 0.958120280641089,
+                "std": 0.0010045777655575115,
+                "ci_lo": 0.9561651170053962,
+                "ci_hi": 0.9601983937998966,
+                "n_finite": 1000
+            },
+            "f1": {
+                "mean": 0.9719091539873723,
+                "std": 0.0006674352644147219,
+                "ci_lo": 0.9705782873371045,
+                "ci_hi": 0.9733084241063877,
+                "n_finite": 1000
+            },
+            "auroc": {
+                "mean": 0.9986504451577491,
+                "std": 0.00012125790177525833,
+                "ci_lo": 0.9984227511933293,
+                "ci_hi": 0.9989000696831738,
+                "n_finite": 1000
+            },
+            "auprc": {
+                "mean": 0.9895334544548566,
+                "std": 0.0005075561719751915,
+                "ci_lo": 0.9885690764310967,
+                "ci_hi": 0.9905401720883902,
+                "n_finite": 1000
+            }
+        }
+    }
+}

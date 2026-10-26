@@ -1,3 +1,70 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:87d1b99cf637c5da87d8549d97076cb2f38f7b52503b36be79b6a87e2db46147
-size 2348
+{
+    "test": {
+        "split": "test",
+        "task_type": "classification",
+        "n": 3449564,
+        "accuracy": 0.9977324670596052,
+        "precision": 0.8355023425299323,
+        "recall": 0.6669634906500446,
+        "f1": 0.7417800079228838,
+        "auroc": 0.981650836744387,
+        "auprc": 0.8118144330749405,
+        "ranking_source": "proba"
+    },
+    "test_bootstrap": {
+        "n_replicates": 1000,
+        "confidence_level": 0.95,
+        "primary_metric": "f1",
+        "task_type": "classification",
+        "seed": 1205218162,
+        "n_units": 8975,
+        "sample_identity_status": "verified",
+        "sample_identity_sha256": "23e419ea3b8da7dca737e83722f80ea93e4abd61b6a91b53656bd50aae242806",
+        "paired_by_sample_id": true,
+        "paired_by_position": true,
+        "metrics": {
+            "accuracy": {
+                "mean": 0.9977334389951061,
+                "std": 2.501740232925578e-05,
+                "ci_lo": 0.9976847142735392,
+                "ci_hi": 0.9977807566869002,
+                "n_finite": 1000
+            },
+            "precision": {
+                "mean": 0.8356366397791529,
+                "std": 0.004235730604510654,
+                "ci_lo": 0.8269569489791246,
+                "ci_hi": 0.8440257303563201,
+                "n_finite": 1000
+            },
+            "recall": {
+                "mean": 0.6670162919277051,
+                "std": 0.003839833553140042,
+                "ci_lo": 0.6597859971397109,
+                "ci_hi": 0.6744743254369274,
+                "n_finite": 1000
+            },
+            "f1": {
+                "mean": 0.7418588337707808,
+                "std": 0.0033771799356320537,
+                "ci_lo": 0.7352840117571546,
+                "ci_hi": 0.7486370308624251,
+                "n_finite": 1000
+            },
+            "auroc": {
+                "mean": 0.9816666110745735,
+                "std": 0.0007161613126929018,
+                "ci_lo": 0.9802464671706808,
+                "ci_hi": 0.982953053805382,
+                "n_finite": 1000
+            },
+            "auprc": {
+                "mean": 0.8119342959828753,
+                "std": 0.0035154641752304537,
+                "ci_lo": 0.8047446630110454,
+                "ci_hi": 0.8190616996492089,
+                "n_finite": 1000
+            }
+        }
+    }
+}

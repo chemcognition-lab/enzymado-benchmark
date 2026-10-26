@@ -1,3 +1,58 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:ac2bc8bca62ef81f7ee5e8476bd13c8a09808ccc481e075a1971b20f6f679d86
-size 2012
+{
+    "schema_version": 1,
+    "task_name": "ph_opt",
+    "embedding_model": "esm3_open",
+    "model_name": "mlp_regressor",
+    "split_variant": "similarity",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ph_opt",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "phopt_median_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ph_opt/brenda_phopt_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ph_opt/brenda_phopt_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 8902,
+            "ordered_sha256": "e807d9297613fa408bbd537af339897b3363db2891f7cdf2b2d98dcab26eb78d"
+        },
+        "val": {
+            "count": 1112,
+            "ordered_sha256": "d32826c3466ade0b9e62e3225a06939155760750c4cae8267ffccdaf9cb06b64"
+        },
+        "test": {
+            "count": 1099,
+            "ordered_sha256": "8af84291ba2149f97ce78bac4735c16448d0ac31e47c8da53a1af445a1e9ac95"
+        }
+    }
+}

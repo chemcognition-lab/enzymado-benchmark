@@ -1,3 +1,51 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:6df494e17f15f3f781fa3c7c21399472c21bfc5860b719618b4029693d6bbc0c
-size 1662
+{
+    "schema_version": 1,
+    "task_name": "align_glucosidase_melting",
+    "embedding_model": "noplm",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_glucosidase_melting",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "melting_point_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111712/chemist/enzymado-benchmark/data/processed/real_case/align_glucosidase_melting/b_glucosidase__melting_point_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 86,
+            "ordered_sha256": "18e4f94e338436522064204fb88cbaedb59a3517e388caeae96417d34c8a668a"
+        },
+        "val": {
+            "count": 10,
+            "ordered_sha256": "69ffaf66c21e523db0a6c5a0c8113d1250ec17e7d7fc9bcef815d7ccbde77cda"
+        },
+        "test": {
+            "count": 10,
+            "ordered_sha256": "eec461fe24fbb824d189f326be200006307321cadbbb49c8c0593b50d731b877"
+        }
+    }
+}

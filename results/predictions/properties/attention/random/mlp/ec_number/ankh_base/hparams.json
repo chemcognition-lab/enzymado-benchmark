@@ -1,3 +1,59 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:914115b20f295193a18b6e3952e3c9def40457f5925a38c79ad12c3f9f1616bb
-size 2068
+{
+    "schema_version": 1,
+    "task_name": "ec_number",
+    "embedding_model": "ankh_base",
+    "model_name": "attention_mlp_classification",
+    "split_variant": "random",
+    "wrapper": "AttentionECMultiHeadClassifierTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "auprc",
+        "objective": "negative_auprc",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ec_number",
+        "batch_kind": "protein_global",
+        "label_kind": "multilabel_ec",
+        "target_column": "ec_number",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ec_number/swissprot_ec_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ec_number/swissprot_ec_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 186846,
+            "ordered_sha256": "af0c05510ebaebe0037700c6ef512b00ecb05b92a392706aa70e2e288e6cf0fd"
+        },
+        "val": {
+            "count": 23366,
+            "ordered_sha256": "23d5069ece3cee0b941908446252486c30660516c1b9dd1b875b11ceb81beeb2"
+        },
+        "test": {
+            "count": 23374,
+            "ordered_sha256": "7d1e927b373b4ab477fd716f27701613c899c81b3cda37ba5ec7640d061053ad"
+        }
+    }
+}

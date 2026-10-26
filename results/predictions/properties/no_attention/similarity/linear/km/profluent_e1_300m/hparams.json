@@ -1,3 +1,56 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:8d6e2f7ff7b44d264372b37e10367d58d187da51824806cb8f4abb65e4dac319
-size 1975
+{
+    "schema_version": 1,
+    "task_name": "km",
+    "embedding_model": "profluent_e1_300m",
+    "model_name": "linear_regressor",
+    "split_variant": "similarity",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "batch_size": 256
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "km",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "km_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/km/catpred_km_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/km/catpred_km_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 31953,
+            "ordered_sha256": "e58d46f6f80112f07d5ab341f232d5a2698ad826e6b2ac1810be000255f0d5ba"
+        },
+        "val": {
+            "count": 4063,
+            "ordered_sha256": "6cfbf3b1f05b8257f134688903f91e2ebd73d3b315e90a4a36ce7816c9870649"
+        },
+        "test": {
+            "count": 4072,
+            "ordered_sha256": "f563d13c9ba61c1dfe96654a276a4d31de6f21a89ec3fe8a2608ba01b32f598f"
+        }
+    }
+}

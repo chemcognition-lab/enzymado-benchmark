@@ -1,3 +1,52 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:0c872ba0a89167ad334f8d4759ead6e6c1b7780bffe353b26489b8d401abe286
-size 1759
+{
+    "schema_version": 1,
+    "task_name": "ph_opt",
+    "embedding_model": "noplm",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ph_opt",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "phopt_median_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111712/chemist/enzymado-benchmark/data/processed/properties/ph_opt/brenda_phopt_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111712/chemist/enzymado-benchmark/data/processed/properties/ph_opt/brenda_phopt_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 8887,
+            "ordered_sha256": "9238f52880e950566f206d8e2f0dab6ccad0c8d0957511db92e5a8eea83fd61b"
+        },
+        "val": {
+            "count": 1118,
+            "ordered_sha256": "6bbbd31b5a577be991abb27d89bfc05f08760beb0eb32bc5fc2a358975557bec"
+        },
+        "test": {
+            "count": 1108,
+            "ordered_sha256": "130024c1d34d32b77d66dbf2a96bf2ebcbb6c2fc16f6ab84fdfafa4f3ec6a113"
+        }
+    }
+}

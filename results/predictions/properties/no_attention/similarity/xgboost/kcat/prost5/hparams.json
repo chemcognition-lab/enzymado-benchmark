@@ -1,3 +1,52 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:1f6935d940aff3e90b800fe9fe501684b9d599eba2e92dba227c7cdfd23b0622
-size 1774
+{
+    "schema_version": 1,
+    "task_name": "kcat",
+    "embedding_model": "prost5",
+    "model_name": "xgb_regression",
+    "split_variant": "similarity",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "kcat",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "kcat_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/kcat/catpred_kcat_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/kcat/catpred_kcat_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 18114,
+            "ordered_sha256": "897a1544bb7eb0ebbb2942bbf5462813e76eb8cc2eb41adc6fe8c633d550ece9"
+        },
+        "val": {
+            "count": 2294,
+            "ordered_sha256": "36fcc074aaebc4237573b26ce6f9db8b483128e8975bfe946e9b1d2a7d2e9ff4"
+        },
+        "test": {
+            "count": 2285,
+            "ordered_sha256": "d83ce040ee53fb37ace9a41fc3717df62d561156453cc1392945348fc4a85df0"
+        }
+    }
+}

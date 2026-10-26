@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a341a2b9488119924d375dffb6099dc915f4637791180cdb5ded9e1201a51ce8
-size 1949
+{
+    "schema_version": 1,
+    "task_name": "align_glucosidase_activity",
+    "embedding_model": "profluent_e1_300m",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_glucosidase_activity",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/align_glucosidase_activity/b_glucosidase__activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 284,
+            "ordered_sha256": "d7c6fdf9e3dcd56b5728704c20cdb9b5e1947d1a2eaefc9871328d1cfea33420"
+        },
+        "val": {
+            "count": 34,
+            "ordered_sha256": "f6c8c119fefd24407dd700a80d0359c460c5f663dca2e82345072b5f9e4c2226"
+        },
+        "test": {
+            "count": 36,
+            "ordered_sha256": "842311a4e46434e234abab75ee192f6729d191714de479bfdf6e5e1c9b20981d"
+        }
+    }
+}

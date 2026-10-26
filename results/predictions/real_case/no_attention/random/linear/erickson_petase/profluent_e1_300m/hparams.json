@@ -1,3 +1,63 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:bcfa59cfeb3be696ef631ef5a1df09860f164e1aa79f430dc9186944410c9deb
-size 2042
+{
+    "schema_version": 1,
+    "task_name": "erickson_petase",
+    "embedding_model": "profluent_e1_300m",
+    "model_name": "linear_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "batch_size": 256
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "erickson_petase",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_sum_aromatic_products_plus_one_standardized",
+        "numeric_feature_columns": [
+            "temperature",
+            "ph",
+            "buffer_c",
+            "buffer_np",
+            "buffer_h",
+            "buffer_b",
+            "buffer_g"
+        ],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/erickson_petase/erickson_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 456,
+            "ordered_sha256": "82c2c3234635a126aa7246e79ef3463ac1f32efaa9f5b6665913c83c1c814360"
+        },
+        "val": {
+            "count": 57,
+            "ordered_sha256": "ee3b693060d619a7b4c96368d6b8dbbaf7f4096bf19979c724fb5323e60fc4bd"
+        },
+        "test": {
+            "count": 57,
+            "ordered_sha256": "dc0c147a590f7e1112cb36d0439e533bcb6196331d28d20ff68cdfcbd14c2a88"
+        }
+    }
+}

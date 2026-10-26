@@ -1,3 +1,58 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:f661476b9acf8811332dbb7568a4e6fca11d801d78b3d9150492a237ed54e8df
-size 2034
+{
+    "schema_version": 1,
+    "task_name": "kcat",
+    "embedding_model": "ankh3_large",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "kcat",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "kcat_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/kcat/catpred_kcat_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/kcat/catpred_kcat_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 18163,
+            "ordered_sha256": "d2bf565023de1878b023f5c7675acc12e1c8471f69cc0dc62a70928c58079509"
+        },
+        "val": {
+            "count": 2257,
+            "ordered_sha256": "aec560d2fe1476bab419a14b5abb20ddcef024a526f18d6ed86da1d9ddbfa21b"
+        },
+        "test": {
+            "count": 2273,
+            "ordered_sha256": "ba8ea8bebddcad969d2e4c3e6ef0450e2d9be0d95f5cbef3e84a487e651b68e4"
+        }
+    }
+}

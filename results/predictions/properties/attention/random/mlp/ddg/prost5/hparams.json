@@ -1,3 +1,58 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:92b11dfa303d22a9d042c4da2c0845100263c8fe5d9a7c03ddba1c1beca4a24e
-size 2033
+{
+    "schema_version": 1,
+    "task_name": "ddg",
+    "embedding_model": "prost5",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ddg",
+        "batch_kind": "mutation_delta_global",
+        "label_kind": "scalar_regression",
+        "target_column": "ddg_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ddg_mut/fireprotdb_ddg_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/ddg_mut/fireprotdb_ddg_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 3010,
+            "ordered_sha256": "97abc609db6a9d4f006002354a6f5b883bee6716ebbe06ee86ee1391f2fbaa86"
+        },
+        "val": {
+            "count": 375,
+            "ordered_sha256": "227fb4e513879fb4e5492a648be9b7819290c82699cc6703016e738acb26b67d"
+        },
+        "test": {
+            "count": 375,
+            "ordered_sha256": "0c3684af4b64dcf210d536d9a09d50f5dc6ad1e87301db6a46e3b9c81b997854"
+        }
+    }
+}

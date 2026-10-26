@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:856f1ba8b18fa778abf775c27f4ed6b0b0bb4466aff5f0d64393f0a76772b057
-size 1949
+{
+    "schema_version": 1,
+    "task_name": "align_amylase_stability",
+    "embedding_model": "esmc_600m",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_amylase_stability",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_thermostability_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/align_amylase_stability/alpha_amylase__thermostability_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 6990,
+            "ordered_sha256": "f26855452627c11aee9c5861b047ef414facf018638204d4cb7be1305bc020b4"
+        },
+        "val": {
+            "count": 875,
+            "ordered_sha256": "6821cccdaaab35cb2b9333fb6f1243ca001c8aba8d0a865b0314e8c10c222c07"
+        },
+        "test": {
+            "count": 871,
+            "ordered_sha256": "710c9295f9ec54b4db184a745d67c4434801c09e56362f970110960bc7e51a56"
+        }
+    }
+}

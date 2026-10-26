@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:ae2a2196057ae6790dec8636f75b8571919c3a51c91461f0ac97ecb414d2ec28
-size 2024
+{
+    "schema_version": 1,
+    "task_name": "active_sites",
+    "embedding_model": "esmc_300m",
+    "model_name": "mlp_classification",
+    "split_variant": "similarity",
+    "wrapper": "ResidueBinaryClassifierTorch",
+    "params": {
+        "hidden_dims": [
+            256
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "validation_loss",
+        "objective": "validation_loss",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "active_sites",
+        "batch_kind": "protein_residue",
+        "label_kind": "residue_binary_vector",
+        "target_column": null,
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/active_sites/swissprot_active_site_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/active_sites/swissprot_active_site_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 71365,
+            "ordered_sha256": "d4d84acba5ca83ba9bf292706b2e47e835b1a333b8bca02d2b278db8085789dd"
+        },
+        "val": {
+            "count": 8989,
+            "ordered_sha256": "e9223c3ef8c585584087ba89251c47e499a002b130b067f5837be35b97aabf33"
+        },
+        "test": {
+            "count": 8975,
+            "ordered_sha256": "23e419ea3b8da7dca737e83722f80ea93e4abd61b6a91b53656bd50aae242806"
+        }
+    }
+}

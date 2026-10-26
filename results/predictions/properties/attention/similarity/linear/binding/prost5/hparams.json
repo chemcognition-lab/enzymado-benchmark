@@ -1,3 +1,56 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:8f05bd42a334f182d5bec9a7860ef931bbad2ae8144aca6cee9530bd16f96abe
-size 2005
+{
+    "schema_version": 1,
+    "task_name": "binding",
+    "embedding_model": "prost5",
+    "model_name": "attention_linear_classification",
+    "split_variant": "similarity",
+    "wrapper": "AttentionBinaryClassifierTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "auprc",
+        "objective": "negative_auprc",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "binding",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "binary",
+        "target_column": "binding",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/binding/biolip_binding_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/binding/biolip_binding_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 22644,
+            "ordered_sha256": "d1982bf405bf49e5a8e85c69d5559a0e63b61672ec53969efbd7f98ddb76722f"
+        },
+        "val": {
+            "count": 2840,
+            "ordered_sha256": "239a88455d3c7ab13e4ab1eb30b74d6d9978d3862e49674039203c5011b49585"
+        },
+        "test": {
+            "count": 2832,
+            "ordered_sha256": "c33c333367d7d65021c7296a1ddd1e2a66bafaa0167e0a045e7cdf1f3883a7ea"
+        }
+    }
+}

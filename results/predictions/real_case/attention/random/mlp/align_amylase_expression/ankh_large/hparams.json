@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:119f69a99e07822f4deed61119e78710ffb2c54514fef5dadb798628e08d0de1
-size 1930
+{
+    "schema_version": 1,
+    "task_name": "align_amylase_expression",
+    "embedding_model": "ankh_large",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_amylase_expression",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "expression_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/real_case/align_amylase_expression/alpha_amylase__expression_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 7541,
+            "ordered_sha256": "0736bc4ace55c8aa50fc45c64d014140463c5db22cf3724861ccf8de2aaaf341"
+        },
+        "val": {
+            "count": 940,
+            "ordered_sha256": "b5ba99864c6db28f1bf3cb1baabb94382f27273f6b28a84df66eac6abdff74ef"
+        },
+        "test": {
+            "count": 940,
+            "ordered_sha256": "f2566faecc12d9d118a2f16d80c314272afa740ad02ec95b3d81373541ae8768"
+        }
+    }
+}

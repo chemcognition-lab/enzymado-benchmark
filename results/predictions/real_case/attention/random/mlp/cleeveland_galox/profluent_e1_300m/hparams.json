@@ -1,3 +1,59 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:c4d8a96af25a5f51ae86a5256ca9c3236ac43691d6867905417c4d8c00f385c5
-size 1969
+{
+    "schema_version": 1,
+    "task_name": "cleeveland_galox",
+    "embedding_model": "profluent_e1_300m",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "cleeveland_galox",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_specific_activity_standardized",
+        "numeric_feature_columns": [
+            "substrate_concentration"
+        ],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 316,
+            "ordered_sha256": "59375034cd3961671a84023b6f2a781c24f67392147e22afa80cce3bac7eb8eb"
+        },
+        "val": {
+            "count": 34,
+            "ordered_sha256": "ef74fb895e489bdba4f4062e4522064c281894d948dcb8ea4071e8b72def2025"
+        },
+        "test": {
+            "count": 35,
+            "ordered_sha256": "49b579420327359303c64b76c6eced11d80a011dc720fe050e361f5f6ec6ad2b"
+        }
+    }
+}

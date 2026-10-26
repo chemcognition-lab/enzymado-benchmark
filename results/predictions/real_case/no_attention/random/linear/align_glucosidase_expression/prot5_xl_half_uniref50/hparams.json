@@ -1,3 +1,55 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:ff883f708ce0199c2f18b88b79a114e957a8c11c7ac4792ba4425d0f2010dbc1
-size 1909
+{
+    "schema_version": 1,
+    "task_name": "align_glucosidase_expression",
+    "embedding_model": "prot5_xl_half_uniref50",
+    "model_name": "linear_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "batch_size": 256
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_glucosidase_expression",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_expression_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark-petase/data/processed/real_case/align_glucosidase_expression/b_glucosidase__expression_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 264,
+            "ordered_sha256": "52d3bb4eb8e9d9c83143761933ee92e38c35f3ff56e012c427fd0c7840d6b092"
+        },
+        "val": {
+            "count": 30,
+            "ordered_sha256": "34d3ecfce9f632829375a3a4a298bc93869e27a518a750236a572aa2e8351f1f"
+        },
+        "test": {
+            "count": 30,
+            "ordered_sha256": "30c9cabb14909c30209ca828a16fb1f83d7cd7cd0ba412c1e6b7859342fa997d"
+        }
+    }
+}

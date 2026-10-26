@@ -1,3 +1,56 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:27c9ca07e7a63c0854344e7801366ec575e308bbaa6bddb326c48613ab1057d9
-size 1943
+{
+    "schema_version": 1,
+    "task_name": "active_sites",
+    "embedding_model": "esm2_3B",
+    "model_name": "xgb_classification",
+    "split_variant": "random",
+    "wrapper": "XGBResidueBinaryClassifier",
+    "params": {
+        "n_estimators": 40,
+        "max_depth": 3,
+        "learning_rate": 0.1,
+        "subsample": 0.5,
+        "colsample_bytree": 0.25,
+        "max_bin": 64,
+        "n_jobs": 4,
+        "device": "cpu",
+        "random_state": 42,
+        "eval_metric": "logloss",
+        "early_stopping_rounds": 10,
+        "external_memory": "auto"
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "logloss",
+        "mode": "min",
+        "early_stopping_rounds": 10,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "active_sites",
+        "batch_kind": "protein_residue",
+        "label_kind": "residue_binary_vector",
+        "target_column": null,
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/active_sites/swissprot_active_site_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/active_sites/swissprot_active_site_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 71803,
+            "ordered_sha256": "6fa7312c9598ec46fcac828e049a06b9f8cd956d92a1b344b7f0453c3467094f"
+        },
+        "val": {
+            "count": 8758,
+            "ordered_sha256": "25d29a06fc38c49b7f5c2c1f0a290947c26276e1b02cab00c8e75985505e3d4b"
+        },
+        "test": {
+            "count": 8768,
+            "ordered_sha256": "f1c835272dd00518862341f5c8fa90b17335c154ff27f450cdd5966b7a56d232"
+        }
+    }
+}

@@ -1,3 +1,57 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:753181e430c766d307c9e86fd27d202d243696b90eb6f97f2ed6321e63e85e83
-size 1932
+{
+    "schema_version": 1,
+    "task_name": "align_glucosidase_melting",
+    "embedding_model": "esm2_3B",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "align_glucosidase_melting",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "melting_point_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/real_case/align_glucosidase_melting/b_glucosidase__melting_point_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 86,
+            "ordered_sha256": "18e4f94e338436522064204fb88cbaedb59a3517e388caeae96417d34c8a668a"
+        },
+        "val": {
+            "count": 10,
+            "ordered_sha256": "69ffaf66c21e523db0a6c5a0c8113d1250ec17e7d7fc9bcef815d7ccbde77cda"
+        },
+        "test": {
+            "count": 10,
+            "ordered_sha256": "eec461fe24fbb824d189f326be200006307321cadbbb49c8c0593b50d731b877"
+        }
+    }
+}

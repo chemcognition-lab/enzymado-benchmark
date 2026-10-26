@@ -1,3 +1,52 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d6cc3c106005c2e257f17406072f52b9f0d021fd7d190ce4d57d1921da9a8272
-size 1757
+{
+    "schema_version": 1,
+    "task_name": "binding",
+    "embedding_model": "noplm",
+    "model_name": "xgb_classification",
+    "split_variant": "similarity",
+    "wrapper": "XGBClassifier",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "aucpr",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "aucpr",
+        "mode": "max",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "binding",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "binary",
+        "target_column": "binding",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111712/chemist/enzymado-benchmark/data/processed/properties/binding/biolip_binding_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111712/chemist/enzymado-benchmark/data/processed/properties/binding/biolip_binding_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 22644,
+            "ordered_sha256": "d1982bf405bf49e5a8e85c69d5559a0e63b61672ec53969efbd7f98ddb76722f"
+        },
+        "val": {
+            "count": 2840,
+            "ordered_sha256": "239a88455d3c7ab13e4ab1eb30b74d6d9978d3862e49674039203c5011b49585"
+        },
+        "test": {
+            "count": 2832,
+            "ordered_sha256": "c33c333367d7d65021c7296a1ddd1e2a66bafaa0167e0a045e7cdf1f3883a7ea"
+        }
+    }
+}

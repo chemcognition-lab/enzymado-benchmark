@@ -1,3 +1,52 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:9a695a1bd0bcd95f61dd62ddd386b20eca80a82b725d0ff391f66b3ffb8cf68e
-size 1769
+{
+    "schema_version": 1,
+    "task_name": "dtm",
+    "embedding_model": "esm2_650M",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "dtm",
+        "batch_kind": "mutation_delta_global",
+        "label_kind": "scalar_regression",
+        "target_column": "dtm_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/dtm/fireprotdb_dtm_random_80_10_10_standardized.csv",
+            "similarity": "/project/6111759/chemist/enzymado/enzymado-benchmark/data/processed/properties/dtm/fireprotdb_dtm_similarity_mmseqs2_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 2670,
+            "ordered_sha256": "a3f8760c6cc8762ae164db6fd00f98cf8a82eb57543e966d4c81576a362ceab9"
+        },
+        "val": {
+            "count": 335,
+            "ordered_sha256": "b93961b9ad346f385f58a3da70f6e3dfb0c5eef019035e6bb1d1f51e6836bcf3"
+        },
+        "test": {
+            "count": 333,
+            "ordered_sha256": "372cc7c965a65e5acceb04f2f973fdf686805555bedd1221dfe8b65f18e47ab4"
+        }
+    }
+}

@@ -1,3 +1,74 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:50b22b5860567c1f3fc773e3a056fe2401e58e19191afbdbea9ed6a0821e6f47
-size 2337
+{
+    "train": {
+        "split": "train",
+        "task_type": "regression",
+        "n": 8902,
+        "ranking_source": "hard_labels",
+        "mae": 0.5378494382199525,
+        "rmse": 0.7269268749212576,
+        "r2": 0.47166160673338475,
+        "kendall_tau": 0.42711836826427474
+    },
+    "val": {
+        "split": "val",
+        "task_type": "regression",
+        "n": 1112,
+        "ranking_source": "hard_labels",
+        "mae": 0.6221195990487719,
+        "rmse": 0.8346942011742151,
+        "r2": 0.4488210229195114,
+        "kendall_tau": 0.4659050553372128
+    },
+    "test": {
+        "split": "test",
+        "task_type": "regression",
+        "n": 1099,
+        "ranking_source": "hard_labels",
+        "mae": 0.7454389339301047,
+        "rmse": 0.9933070090827223,
+        "r2": 0.4089820410241497,
+        "kendall_tau": 0.4081078629703987
+    },
+    "test_bootstrap": {
+        "n_replicates": 1000,
+        "confidence_level": 0.95,
+        "primary_metric": "mae",
+        "task_type": "regression",
+        "seed": 1668741362,
+        "n_units": 1099,
+        "sample_identity_status": "verified",
+        "sample_identity_sha256": "8af84291ba2149f97ce78bac4735c16448d0ac31e47c8da53a1af445a1e9ac95",
+        "paired_by_sample_id": true,
+        "paired_by_position": true,
+        "metrics": {
+            "mae": {
+                "mean": 0.7439464473481034,
+                "std": 0.019606101014625316,
+                "ci_lo": 0.7067082375297119,
+                "ci_hi": 0.7830021947858731,
+                "n_finite": 1000
+            },
+            "rmse": {
+                "mean": 0.9909773730132908,
+                "std": 0.030245844821390096,
+                "ci_lo": 0.9339870886623919,
+                "ci_hi": 1.0531088857717574,
+                "n_finite": 1000
+            },
+            "r2": {
+                "mean": 0.40936893098541066,
+                "std": 0.026532432385084653,
+                "ci_lo": 0.3552768249704182,
+                "ci_hi": 0.4575242627792656,
+                "n_finite": 1000
+            },
+            "kendall_tau": {
+                "mean": 0.4083278517398342,
+                "std": 0.017212468000280864,
+                "ci_lo": 0.3739033427568398,
+                "ci_hi": 0.4436374539413725,
+                "n_finite": 1000
+            }
+        }
+    }
+}
