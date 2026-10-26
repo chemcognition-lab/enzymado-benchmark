@@ -91,3 +91,4 @@ embeddings_models_output_mean_pooled.json
 
 # Figure fonts (Archivo, IBM Plex Mono) live here locally; they are not redistributed.
 scripts/figures/fonts/
+data/interim/swissprot/
