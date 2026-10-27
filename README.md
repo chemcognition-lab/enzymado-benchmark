@@ -1,4 +1,6 @@
-# Enzymado
+<h1 align="center">
+  <img src="assets/letter_logo.png" alt="Enzymado Benchmark" width="640">
+</h1>
 
 **A reproducible benchmark for protein language model embeddings on enzyme property prediction.**
 
@@ -8,8 +10,8 @@ tasks?* It answers it the same way for every model, on every dataset, with every
 the numbers are comparable.
 
 <p align="center">
-  <img src="assets/enzymado_evaluation_diagram.png"
-       alt="Enzymado evaluation design: 10 property datasets and 8 real-case datasets, crossed with 14 protein language models, 2 split types, and 5 baselines, for 1,960 model-dataset evaluations."
+  <img src="assets/representation_question_enzymado_palette.png"
+       alt="One enzyme has many properties, from optimal pH, kcat and Km to EC number, binding, active and binding sites, ddG and solubility. Enzymado asks whether a PLM embedding can predict all of them."
        width="820">
 </p>
 
