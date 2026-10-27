@@ -25,17 +25,17 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-import numpy as np
-import scipy.stats
-import sklearn.metrics
+import numpy as np  # noqa: E402
+import scipy.stats  # noqa: E402
+import sklearn.metrics  # noqa: E402
 
-from enzymado import paths_and_constants, types
-from enzymado.data_loading import stores, task_data
-from enzymado.models import common
-from enzymado.training import model_registry, torch_standard_wrappers
+from enzymado import paths_and_constants, types  # noqa: E402
+from enzymado.data_loading import stores, task_data  # noqa: E402
+from enzymado.models import common  # noqa: E402
+from enzymado.training import model_registry, torch_standard_wrappers  # noqa: E402
 
 DEFAULT_CONFIG_FILE = Path(__file__).with_name("configs_400_lhs.json")
-DEFAULT_OUTPUT_DIR = paths_and_constants.Paths.project_root / "mlp_hpo_runs"
+DEFAULT_OUTPUT_DIR = paths_and_constants.Paths.project_root / "results" / "mlp_hpo"
 TASK_NAME = "km"
 EMBEDDING_NAME = "esmc_300m"
 SPLIT_VARIANT = "similarity"

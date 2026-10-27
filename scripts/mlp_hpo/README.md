@@ -35,7 +35,7 @@ Run a single configuration locally, optionally adding `--device cpu`:
 uv run --extra train python scripts/mlp_hpo/run_hpo.py \
   --config-index 0 \
   --embeddings-json embeddings_models_output_mean_pooled.json \
-  --output-dir mlp_hpo_runs
+  --output-dir results/mlp_hpo
 ```
 
 Submit the full search as 400 array tasks, with at most ten running at once:
@@ -43,15 +43,17 @@ Submit the full search as 400 array tasks, with at most ten running at once:
 ```bash
 uv run --extra train python scripts/mlp_hpo/hpo_job_submitter.py \
   --account aip-bensl --n-configs 400 --max-concurrent 10 \
+  --gpus l40s:1 --exclude kn051,kn092,kn116,kn117 \
   --embeddings-json embeddings_models_output_mean_pooled.json \
-  --output-dir mlp_hpo_runs
+  --output-dir results/mlp_hpo
 ```
 
 Add `--dry-run` to inspect the exact `sbatch` command without submitting or
 creating directories. The default cluster executable is `.venv/bin/python`;
 override it with `--python /path/to/environment/bin/python`. The SLURM launcher
 loads Python 3.13.2 when environment modules are available. GPU, CPU, memory and
-time allocations are CLI options. Submission itself needs only Python's
+time allocations are CLI options; the default GPU is one L40S. Pass
+`--exclude` with the nodes currently known to fall back to CPU. Submission itself needs only Python's
 standard library, so it can also run with `python` from the cluster login node.
 To resubmit a subset, use `--start-index 100 --n-configs 25`, for example.
 There is no hidden last-submitted-index file. A rerun replaces that config's
@@ -79,8 +81,8 @@ Aggregate the completed runs and select the winner by validation R²:
 
 ```bash
 uv run --extra train python scripts/mlp_hpo/aggregate_hpo_results.py \
-  --hpo-dir mlp_hpo_runs/hpo_metrics \
-  --output mlp_hpo_runs/hpo_final_results.csv
+  --hpo-dir results/mlp_hpo/hpo_metrics \
+  --output results/mlp_hpo/hpo_final_results.csv
 ```
 
 The CSV is sorted by decreasing `val_R2`, and also includes `val_MAE`,
@@ -89,7 +91,7 @@ Kendall tau is stored as JSON null. Aggregation requires 400 distinct completed
 runs by default. Use `--expected-count N` only when intentionally reviewing a
 partial search. No test-set predictions enter selection. Output consists of
 isolated metrics JSON files and SLURM logs, without full model checkpoints or
-benchmark prediction artifacts. Default outputs go to `mlp_hpo_runs/`.
+benchmark prediction artifacts. Default outputs go to `results/mlp_hpo/`, which git ignores like other reruns.
 
 Run the laptop checks without embeddings or a GPU:
 

@@ -5,7 +5,8 @@ Require 400 completed runs by default so a partial array cannot claim a winner
 for the full search. Use --expected-count explicitly for a partial study.
 
 Example:
-    python scripts/mlp_hpo/aggregate_hpo_results.py --hpo-dir mlp_hpo_runs/hpo_metrics
+    python scripts/mlp_hpo/aggregate_hpo_results.py \
+        --hpo-dir results/mlp_hpo/hpo_metrics
 """
 
 from __future__ import annotations
@@ -44,9 +45,13 @@ def main() -> None:
     """Write the full ranking and print its top three configurations."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--hpo-dir", type=Path, default=Path("mlp_hpo_runs/hpo_metrics")
+        "--hpo-dir", type=Path, default=Path("results/mlp_hpo/hpo_metrics")
     )
-    parser.add_argument("--output", type=Path, default=Path("hpo_final_results.csv"))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("results/mlp_hpo/hpo_final_results.csv"),
+    )
     parser.add_argument("--expected-count", type=int, default=400)
     args = parser.parse_args()
     frame = aggregate(args.hpo_dir, expected_count=args.expected_count)

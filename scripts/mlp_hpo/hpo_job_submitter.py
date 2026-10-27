@@ -31,13 +31,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=REPO_ROOT / "embeddings_models_output_mean_pooled.json",
     )
-    parser.add_argument("--output-dir", type=Path, default=REPO_ROOT / "mlp_hpo_runs")
+    parser.add_argument(
+        "--output-dir", type=Path, default=REPO_ROOT / "results" / "mlp_hpo"
+    )
     parser.add_argument("--python", type=Path, default=REPO_ROOT / ".venv/bin/python")
     parser.add_argument("--account", default="aip-bensl")
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--n-configs", type=int, default=400)
     parser.add_argument("--max-concurrent", type=int, default=10)
-    parser.add_argument("--gpus", default="h100_1g.10gb:1")
+    parser.add_argument("--gpus", default="l40s:1", help="GPU type:count for --gres.")
+    parser.add_argument(
+        "--exclude", default="", help="Nodes to avoid, e.g. kn051,kn092."
+    )
     parser.add_argument("--cpus-per-task", type=int, default=1)
     parser.add_argument("--mem", default="8G")
     parser.add_argument("--time", default="00:10:00")
@@ -55,7 +60,9 @@ def build_command(args: argparse.Namespace) -> list[str]:
     if any(config.get("config_index") != i for i, config in enumerate(configs)):
         raise ValueError("Configuration indices must match their list positions.")
     training_command = [
-        str(args.python.resolve()),
+        # absolute(), not resolve(): a venv's python is a symlink to the base
+        # interpreter, and resolving it would drop the venv's packages.
+        str(args.python.absolute()),
         "-u",
         str(SCRIPT_DIR / "run_hpo.py"),
         "--config-file",
@@ -84,10 +91,11 @@ def build_command(args: argparse.Namespace) -> list[str]:
         f"--chdir={REPO_ROOT}",
         "--job-name=enzymado_mlp_hpo",
         f"--array={args.start_index}-{stop - 1}%{args.max_concurrent}",
-        f"--gpus={args.gpus}",
+        f"--gres=gpu:{args.gpus}",
         f"--cpus-per-task={args.cpus_per_task}",
         f"--mem={args.mem}",
         f"--time={args.time}",
+        *([f"--exclude={args.exclude}"] if args.exclude else []),
         f"--output={logs}/%A_%a.out",
         f"--error={logs}/%A_%a.err",
         str(SCRIPT_DIR / "run_hpo.slurm"),
