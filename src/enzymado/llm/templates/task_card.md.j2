@@ -1,0 +1,107 @@
+---
+id: {{ card_id }}
+type: task
+title: "{{ content.display_name or task_name }}"
+task_name: {{ task_name }}
+task_scope: {{ task_scope }}
+task_type: {{ task_type }}
+level: {{ level_slug }}
+source_dataset: "{{ content.source_dataset or 'n/a' }}"
+tags: [dataset, task, {{ task_scope }}, {{ task_type }}, {{ level_slug }}]
+aliases: ["{{ task_name }}"]
+---
+
+# {{ content.display_name or task_name }}: task card
+
+> {{ content.summary or 'n/a' }}
+
+## Definition (generated)
+
+| Field | Value |
+|---|---|
+| Registry name | `{{ task_name }}` |
+| Scope | {{ task_scope }} |
+| Prediction level | {{ level }} |
+| Task type | {{ task_type }} |
+| Label kind | `{{ label_kind }}` |
+| Target column | `{{ target_column }}` |
+| Label units | {{ label_units or 'n/a' }} |
+| Primary metric | `{{ primary_metric }}` |
+| Splits | {{ splits_available|join(', ') }} |
+{% if ligand_column %}
+| Ligand column | `{{ ligand_column }}` |
+{% endif %}
+{% if wildtype_column %}
+| Wild-type sequence column | `{{ wildtype_column }}` |
+{% endif %}
+{% if numeric_features %}
+| Extra numeric features | {{ numeric_features|join(', ') }} |
+{% endif %}
+
+{% if description %}> Benchmark-card description: {{ description }}{% endif %}
+
+## Source & provenance
+
+- **Source dataset:** {{ content.source_dataset or 'n/a' }}
+
+{{ content.what_it_measures or '' }}
+
+{% if content.assay_method %}
+**Assay / measurement:** {{ content.assay_method }}
+
+{% endif %}
+{% if content.provenance %}
+**Provenance & construction:** {{ content.provenance }}
+
+{% endif %}
+
+## Featurization
+
+{{ content.featurization_notes or featurization_default }}
+
+## Dataset statistics (generated from `dataset_card.json`)
+
+{% if stats %}
+- **Rows used in the runs:** {{ stats.datapoints }} ({{ stats.proteins }} distinct proteins)
+{% if stats.label_balance_str %}
+- **Label balance:** {{ stats.label_balance_str }}
+{% endif %}
+{% if stats.split_sizes_str %}
+- **Split sizes in the dataset file (train/val/test, before the unembeddable sequences are removed):** {{ stats.split_sizes_str }}
+{% endif %}
+{% if stats.seq_len_str %}
+- **Sequence length:** {{ stats.seq_len_str }}
+{% endif %}
+{% if stats.clustering_str %}
+- **MMseqs2 clustering of the whole pool (a diagnostic, not the split threshold):** {{ stats.clustering_str }}
+{% endif %}
+{% else %}
+_No `dataset_card.json` statistics for this task._
+{% endif %}
+
+## Best score per representation (generated)
+
+Each representation's best baseline on this task. `~` marks a gap to the leader
+within the noise threshold, which the leaderboards count as a tie. Scalar XGBoost
+heads give identical predictions for every seed, so their noise SD is 0 and a gap
+between two of them is never a tie.
+{% for split_id, rows in leaderboards.items() %}
+
+### {{ split_id }} split
+
+| Rank | Representation | {{ rows[0].metric }} | Gap to leader | Baseline |
+|---|---|---|---|---|
+{% for r in rows %}
+| {{ r.rank }} | `{{ r.emb }}` | {{ r.value }} | {% if r.rank == 1 %}leader{% else %}{{ r.gap }}{% if r.within_noise %} ~{% endif %}{% endif %} | {{ r.config }} |
+{% endfor %}
+{% endfor %}
+
+## When to use
+
+{{ content.when_to_use or 'n/a' }}
+
+## Caveats
+
+{{ content.caveats or 'n/a' }}
+
+{% with no_references='No references.' %}{% include '_references.md.j2' %}{% endwith %}

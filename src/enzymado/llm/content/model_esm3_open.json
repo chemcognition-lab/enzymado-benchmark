@@ -1,0 +1,27 @@
+{
+  "display_name": "ESM3 (open, small)",
+  "family": "ESM3",
+  "developer": "EvolutionaryScale",
+  "context_length": "Up to a few thousand residues",
+  "hf_repo": "EvolutionaryScale/esm3-sm-open-v1",
+  "summary": "The open 1.4B-parameter ESM3; a multimodal generative model over sequence, structure, and function. Here it is used purely as a sequence encoder (1536-dim per-residue embeddings).",
+  "architecture": "Multimodal transformer that jointly tokenizes sequence, 3D structure, and function into discrete tracks; the smallest 'open' variant. This benchmark consumes only its per-residue sequence-track representations (1536-dim).",
+  "pretraining_data": "≈2.78B natural proteins (≈3.15B with synthetic augmentation; 236M structures and 539M function-annotated proteins), ≈771B tokens.",
+  "pretraining_objective": "Masked generative modeling across the sequence, structure, and function tracks.",
+  "key_innovations": [
+    "First natively multimodal, generative ESM (sequence + structure + function)",
+    "Demonstrated de novo design (esmGFP), an order of magnitude larger training than ESM-2"
+  ],
+  "when_to_use": "When structure/function-aware pretraining might benefit a property, or to compare a generative multimodal model against masked encoders; while still using single-sequence embeddings.",
+  "caveats": "Designed as a generative multimodal model; using it only as an embedding encoder ignores its structure/function inputs. Heavier tokenization pipeline than plain PLMs. In this benchmark ESM3 could not embed the 620 sequences of 2,645 residues or more; they are left out of every run, for every model.",
+  "needs_verification": false,
+  "citations": [
+    {
+      "authors": "Hayes, T. et al.",
+      "year": 2025,
+      "title": "Simulating 500 million years of evolution with a language model (ESM3)",
+      "venue": "Science 387:850–858",
+      "url": "https://doi.org/10.1126/science.ads0018"
+    }
+  ]
+}

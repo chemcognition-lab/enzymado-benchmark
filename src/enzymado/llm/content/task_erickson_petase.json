@@ -1,0 +1,19 @@
+{
+  "display_name": "PETase aromatic-product release (Erickson, real-case)",
+  "source_dataset": "Erickson et al. thermotolerant PET hydrolases (natural diversity)",
+  "summary": "Real-case regression of PET-hydrolysis activity (sum of aromatic products) across natural PET-hydrolase enzymes.",
+  "what_it_measures": "Standardized sum of aromatic products (`sum_aromatic_products_standardized`) released from PET film; total BHET + MHET + TPA quantified by UHPLC; as a measure of depolymerization activity.",
+  "assay_method": "PET-film hydrolysis assays across a panel of natural thermotolerant PET hydrolases over ranges of temperature (30–70 °C) and pH (4.5–9.0), with products quantified by UHPLC.",
+  "provenance": "A 'real_case' dataset derived from Erickson et al. (2022), which mined and assayed PET hydrolases from natural diversity. Sequence + measured product release; random split only.",
+  "when_to_use": "A realistic biocatalysis screening target (plastic degradation); tests whether embeddings rank diverse natural enzymes by a practical activity readout.",
+  "caveats": "The assay temperature, pH and buffer vary and enter the model as features. One enzyme is measured under several conditions, so rows of the same enzyme fall on both sides of the split and a tree model can match a test row to training rows of that enzyme; this favours XGBoost here. Small, specialized panel; random split, stratified on the target.",
+  "citations": [
+    {
+      "authors": "Erickson, E. et al.",
+      "year": 2022,
+      "title": "Sourcing thermotolerant poly(ethylene terephthalate) hydrolase scaffolds from natural diversity",
+      "venue": "Nature Communications 13 (2022)",
+      "url": "https://doi.org/10.1038/s41467-022-35237-x"
+    }
+  ]
+}

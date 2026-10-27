@@ -1,0 +1,70 @@
+---
+id: {{ card_id }}
+type: baseline
+title: "{{ content.display_name or title }}"
+pool: {{ pool }}
+head: {{ head }}
+tags: [baseline, prediction-head, {{ pool|replace('_', '-') }}, {{ head }}]
+aliases: ["{{ baseline_id }}"]
+---
+
+# {{ content.display_name or title }}: baseline card
+
+> {{ content.summary or 'n/a' }}
+
+- **Pooling:** `{{ pool }}` ({{ 'learned attention pooling' if pool == 'attention' else 'mean over residues' }})
+- **Head:** `{{ head }}`
+
+## What it is
+
+{{ content.algorithm or 'n/a' }}
+
+- **Loss:** {{ content.loss or 'n/a' }}
+- **Pooling of residue embeddings:** {{ content.pooling or 'n/a' }}
+
+## Settings (generated from the runs' `hparams.json`)
+
+The exact parameters recorded for the runs of this baseline. EC number and the
+per-residue tasks use their own variants.
+
+{% for v in param_variants %}
+**`{{ v.model_name }}`**: {{ v.note }} _(e.g. {{ v.example_task }})_
+
+```json
+{{ v.params_json }}
+```
+
+{% else %}
+_No runs found for this baseline._
+{% endfor %}
+{% if content.hyperparameter_notes %}
+{{ content.hyperparameter_notes }}
+{% endif %}
+{% if content.doc_refs %}
+
+## Documentation
+
+{% for d in content.doc_refs %}
+- [{{ d.name }}]({{ d.url }})
+{% endfor %}
+{% endif %}
+{% for split_id, rows in tables.items() %}
+
+## Scores on the {{ split_id }} split (mean and best over the {{ n_plms }} PLMs)
+
+| Task | Metric | Mean | Best | Best PLM |
+|---|---|---|---|---|
+{% for r in rows %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.mean }} | {{ r.best }} | `{{ r.best_emb }}` |
+{% endfor %}
+{% endfor %}
+
+## When to use
+
+{{ content.when_to_use or 'n/a' }}
+
+## Caveats
+
+{{ content.caveats or 'n/a' }}
+
+{% with no_references='No references.' %}{% include '_references.md.j2' %}{% endwith %}

@@ -1,0 +1,27 @@
+{
+  "display_name": "ESM Cambrian (ESM-C 600M)",
+  "family": "ESM-C",
+  "developer": "EvolutionaryScale",
+  "context_length": "Trained on sequences of up to about 2,048 residues; longer sequences are embedded whole here",
+  "hf_repo": "EvolutionaryScale/esmc-600m-2024-12",
+  "summary": "The 600M ESM Cambrian encoder; reportedly rivals ESM-2 3B while being far smaller, producing 1152-dim embeddings.",
+  "architecture": "Encoder-only masked transformer in the ESM-C representation line; 1152-dim per-residue embeddings.",
+  "pretraining_data": "Large-scale natural protein sequence corpora (EvolutionaryScale; see the ESM-C release).",
+  "pretraining_objective": "Masked language modeling.",
+  "key_innovations": [
+    "600M reportedly matches ESM-2 3B and approaches the 15B model at a fraction of the size",
+    "Open-weight, representation-focused counterpart to ESM3"
+  ],
+  "when_to_use": "When you want near-ESM-2-3B quality without the 3B footprint; a strong modern default in the mid-size range (1152-dim).",
+  "caveats": "Documented mainly via the EvolutionaryScale release/blog and independent evaluations rather than a peer-reviewed paper; verify specifics before relying on exact numbers.",
+  "needs_verification": true,
+  "citations": [
+    {
+      "authors": "EvolutionaryScale Team",
+      "year": 2024,
+      "title": "ESM Cambrian: Revealing the mysteries of proteins with unsupervised learning",
+      "venue": "EvolutionaryScale (release note)",
+      "url": "https://www.evolutionaryscale.ai/blog/esm-cambrian"
+    }
+  ]
+}

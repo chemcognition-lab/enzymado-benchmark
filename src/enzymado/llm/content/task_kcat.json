@@ -1,0 +1,19 @@
+{
+  "display_name": "kcat (turnover number)",
+  "source_dataset": "CatPred",
+  "summary": "Regression of an enzyme's turnover number (kcat) for a given substrate, from the protein sequence and the substrate SMILES.",
+  "what_it_measures": "log10(kcat) in s⁻¹ for an enzyme–substrate pair, standardized (`kcat_standardized`). This is a protein+ligand task: the model sees both the sequence and the reaction's substrate.",
+  "assay_method": "In-vitro steady-state kinetics compiled and cleaned by CatPred (drawing on BRENDA/SABIO-RK-style sources), with careful de-duplication and out-of-distribution splits.",
+  "provenance": "From the CatPred kcat benchmark; substrate SMILES are canonicalized and described by the 200 normalized RDKit 2D descriptors of descriptastorus (RDKit2DNormalized), concatenated with the protein embedding.",
+  "when_to_use": "A core enzyme-kinetics regression testing whether embeddings (plus ligand descriptors) capture catalytic efficiency; central to enzyme selection and engineering.",
+  "caveats": "kcat spans orders of magnitude and is measurement-noisy; targets are log10 values standardized on the training split, so MAE is in standardized units. Kendall's tau is the primary metric.",
+  "citations": [
+    {
+      "authors": "Boorla, V. S. & Maranas, C. D.",
+      "year": 2025,
+      "title": "CatPred: a comprehensive framework for deep learning in vitro enzyme kinetic parameters",
+      "venue": "Nature Communications 16 (2025)",
+      "url": "https://doi.org/10.1038/s41467-025-57215-9"
+    }
+  ]
+}

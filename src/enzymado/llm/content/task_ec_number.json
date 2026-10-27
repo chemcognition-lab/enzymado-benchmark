@@ -1,0 +1,19 @@
+{
+  "display_name": "EC number (enzyme commission classification)",
+  "source_dataset": "UniProt / Swiss-Prot",
+  "summary": "Hierarchical multi-label prediction of Enzyme Commission (EC) numbers from sequence; which reaction class(es) an enzyme catalyzes.",
+  "what_it_measures": "Each protein is labeled with one or more EC numbers (four-level hierarchy, e.g. 3.1.1.101). The benchmark treats this as multi-label classification over the EC hierarchy (models use per-level heads or flat blocks).",
+  "assay_method": "Manually curated functional annotation in Swiss-Prot (the reviewed section of UniProtKB), derived from experimental and expert-reviewed evidence.",
+  "provenance": "Downloaded via the UniProt REST API (`reviewed:true AND ec:*`); EC numbers are split on `;` into multi-labels.",
+  "when_to_use": "A protein-level functional-classification task probing whether embeddings organize enzymes by catalyzed reaction; a strong signal for many models.",
+  "caveats": "Label frequencies are highly imbalanced across EC classes: 0.07% of the scored label positions are positive, so predicting no class scores 0.9993 accuracy. AUPRC is the primary metric. Annotation completeness varies.",
+  "citations": [
+    {
+      "authors": "The UniProt Consortium",
+      "year": 2025,
+      "title": "UniProt: the Universal Protein Knowledgebase in 2025",
+      "venue": "Nucleic Acids Research 53(D1):D609–D617",
+      "url": "https://doi.org/10.1093/nar/gkae1010"
+    }
+  ]
+}

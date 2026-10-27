@@ -1,0 +1,29 @@
+{
+  "display_name": "MLP head, mean pooling",
+  "summary": "A one-hidden-layer MLP (2,048 SiLU units, dropout 0.1) on the mean-pooled embedding: the head that leads the property leaderboard.",
+  "algorithm": "Residues are averaged into one vector, concatenated with the ligand descriptors when there are any, and passed through `Linear -> SiLU -> Dropout -> Linear`. EC number uses a shared backbone with one output group per EC level; the residue tasks use a 256-unit hidden layer. The architecture was chosen once, by a search of 400 configurations on Km with `esmc_300m`, and reused everywhere so that differences come from the representation. On the mutation tasks mean pooling subtracts the pooled wild-type vector from the pooled mutant vector, and attention pooling pools the per-residue difference.",
+  "loss": "MSE for regression and binary cross-entropy with logits for binary tasks; masked per-level binary cross-entropy for EC number and per-residue binary cross-entropy for the residue tasks.",
+  "pooling": "Mean over residues.",
+  "doc_refs": [
+    {
+      "name": "scikit-learn; Multi-layer Perceptron (conceptual reference)",
+      "url": "https://scikit-learn.org/stable/modules/neural_networks_supervised.html"
+    },
+    {
+      "name": "PyTorch nn.SiLU activation",
+      "url": "https://pytorch.org/docs/stable/generated/torch.nn.SiLU.html"
+    }
+  ],
+  "hyperparameter_notes": "AdamW, lr 1e-3, weight decay 0.1, dropout 0.1, up to 100 epochs, patience 20, batch 256. Neural heads are scored on the validation split after every epoch, stop after 20 epochs without improvement and restore the best checkpoint. The score is Kendall's tau for regression and AUPRC for binding, solubility and EC number; the residue tasks, with millions of validation residues, select on binary cross-entropy.",
+  "when_to_use": "The strongest single default in this benchmark: all ten leading models of the property leaderboard use it.",
+  "caveats": "Discards residue-level structure because of mean pooling, and it can overfit the small real-case datasets.",
+  "citations": [
+    {
+      "authors": "Elfwing, S., Uchibe, E. & Doya, K.",
+      "year": 2018,
+      "title": "Sigmoid-weighted linear units for neural network function approximation in reinforcement learning (SiLU)",
+      "venue": "Neural Networks 107:3–11",
+      "url": "https://doi.org/10.1016/j.neunet.2017.12.012"
+    }
+  ]
+}

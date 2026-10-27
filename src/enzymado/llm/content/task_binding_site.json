@@ -1,0 +1,19 @@
+{
+  "display_name": "Binding site (ligand-binding-residue prediction)",
+  "source_dataset": "UniProt / Swiss-Prot",
+  "summary": "Per-residue binary prediction of which residues form ligand/cofactor binding sites.",
+  "what_it_measures": "For each residue, a 0/1 label for whether it is an annotated binding-site residue. Labels come from Swiss-Prot 'Binding site' sequence features (positions expanded to a per-residue binary vector).",
+  "assay_method": "Expert-curated binding-site annotations in Swiss-Prot (substrate/cofactor/metal contacts), from experimental and homology evidence.",
+  "provenance": "Parsed from the Swiss-Prot `binding_positions` feature column into residue-position vectors; the full per-residue embedding tensor is retained by the model.",
+  "when_to_use": "A residue-level localization task probing whether embeddings identify binding pockets; useful for functional-site annotation and engineering.",
+  "caveats": "Imbalanced: 2.51% of the residues in the dataset are annotated. AUPRC is the primary metric. Distinct from BioLiP binding, which classifies protein and ligand pairs rather than residues. Annotation coverage is incomplete.",
+  "citations": [
+    {
+      "authors": "The UniProt Consortium",
+      "year": 2025,
+      "title": "UniProt: the Universal Protein Knowledgebase in 2025",
+      "venue": "Nucleic Acids Research 53(D1):D609–D617",
+      "url": "https://doi.org/10.1093/nar/gkae1010"
+    }
+  ]
+}

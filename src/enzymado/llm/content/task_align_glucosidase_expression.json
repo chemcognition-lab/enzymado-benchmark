@@ -1,0 +1,19 @@
+{
+  "display_name": "β-Glucosidase expression (Align tournament)",
+  "source_dataset": "Protein Engineering Tournament (Align to Innovate)",
+  "summary": "Real-case regression of expression level for engineered β-glucosidase variants.",
+  "what_it_measures": "Standardized expression level (`expression_standardized`) across β-glucosidase B variants.",
+  "assay_method": "Experimental expression measurements on β-glucosidase variants in the Protein Engineering Tournament.",
+  "provenance": "A 'real_case' β-glucosidase dataset from the Align Foundation tournament; one random split, stratified on the target.",
+  "when_to_use": "Applied expressibility ranking within one enzyme family; pre-screening variants for producibility.",
+  "caveats": "Small, single-scaffold campaign; one random split, stratified on the target. Standardized target (MAE in standardized units).",
+  "citations": [
+    {
+      "authors": "The Protein Engineering Tournament (Align to Innovate)",
+      "year": 2025,
+      "title": "Results of the Protein Engineering Tournament: An Open Science Benchmark for Protein Modeling and Design",
+      "venue": "Proteins: Structure, Function, and Bioinformatics",
+      "url": "https://doi.org/10.1002/prot.70008"
+    }
+  ]
+}

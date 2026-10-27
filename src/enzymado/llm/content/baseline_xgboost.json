@@ -1,0 +1,29 @@
+{
+  "display_name": "XGBoost head, mean pooling",
+  "summary": "Gradient-boosted trees (XGBoost) on the mean-pooled embedding, or on each residue's vector for the residue tasks.",
+  "algorithm": "The mean-pooled vector, concatenated with the ligand descriptors or formed as the mutant minus wild-type difference, is fed to `XGBRegressor` or `XGBClassifier` with histogram binning. EC number is predicted as one concatenated multi-label vector over the four EC levels; the residue tasks stream residues into an external-memory quantile matrix. There is no attention variant.",
+  "loss": "`reg:squarederror` for regression and `binary:logistic` for binary tasks; per-column logistic objectives for EC number.",
+  "pooling": "Mean over residues.",
+  "doc_refs": [
+    {
+      "name": "XGBoost documentation",
+      "url": "https://xgboost.readthedocs.io/"
+    },
+    {
+      "name": "XGBoost parameters reference",
+      "url": "https://xgboost.readthedocs.io/en/stable/parameter.html"
+    }
+  ],
+  "hyperparameter_notes": "Scalar tasks: 100 trees, depth 6, learning rate 0.1, early stopping after 20 rounds. EC number: 50 trees, depth 4, row and column subsampling 0.8 and 0.1. Residue tasks: 40 trees, depth 3, subsampling 0.5 and 0.25, early stopping after 10 rounds, on CPU with 4 threads and an on-disk cache. It stops early on the validation split, monitoring AUPRC for binary tasks, RMSE for regression and log-loss for EC number and the residue tasks. The scalar trees are deterministic, so their training-noise SD is 0.",
+  "when_to_use": "Competitive on the protein and ligand tasks (on average it leads kcat, Km and binding) and on the real-case datasets, where it holds eight of the top ten places.",
+  "caveats": "Its real-case lead comes from PETase and galactose oxidase, where rows of one enzyme fall on both sides of the split and a tree can match a test row to training rows of the same enzyme. It falls far behind on EC number (0.511 against 0.845 AUPRC for the MLP) and the residue tasks.",
+  "citations": [
+    {
+      "authors": "Chen, T. & Guestrin, C.",
+      "year": 2016,
+      "title": "XGBoost: A Scalable Tree Boosting System",
+      "venue": "KDD 2016",
+      "url": "https://doi.org/10.1145/2939672.2939785"
+    }
+  ]
+}

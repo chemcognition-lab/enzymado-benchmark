@@ -1,0 +1,27 @@
+{
+  "display_name": "ESM-2 (3B)",
+  "family": "ESM-2",
+  "developer": "Meta AI (FAIR)",
+  "context_length": "Trained on crops of up to 1,024 residues; longer sequences are embedded whole here",
+  "hf_repo": "facebook/esm2_t36_3B_UR50D",
+  "summary": "The 3B-parameter ESM-2 variant; larger capacity than the 650M model, with 2560-dim embeddings that often improve structure- and function-related tasks at higher compute cost.",
+  "architecture": "Encoder-only BERT-style transformer (36 layers, 2560 hidden) with rotary position embeddings. Per-residue final hidden states are pooled by this benchmark.",
+  "pretraining_data": "UniRef50 representative sequences, sampled from UniRef90 during training.",
+  "pretraining_objective": "Masked language modeling (~15% token masking).",
+  "key_innovations": [
+    "Scaling ESM-2 to 3B improves contact/structure recovery over 650M",
+    "Same MLM recipe as the family; larger hidden size (2560-dim embeddings)"
+  ],
+  "when_to_use": "When extra representational capacity helps and the ~4× cost over the 650M model is acceptable; a strong upper-mid baseline in the ESM-2 line.",
+  "caveats": "Substantially heavier than 650M for often-marginal gains on easy tasks; single-sequence only.",
+  "needs_verification": false,
+  "citations": [
+    {
+      "authors": "Lin, Z. et al.",
+      "year": 2023,
+      "title": "Evolutionary-scale prediction of atomic-level protein structure with a language model",
+      "venue": "Science 379:1123–1130",
+      "url": "https://doi.org/10.1126/science.ade2574"
+    }
+  ]
+}

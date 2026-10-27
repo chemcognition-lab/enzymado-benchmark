@@ -1,0 +1,19 @@
+{
+  "display_name": "α-Amylase expression (Align tournament)",
+  "source_dataset": "Protein Engineering Tournament (Align to Innovate)",
+  "summary": "Real-case regression of expression level for engineered α-amylase variants.",
+  "what_it_measures": "Standardized expression level (`expression_standardized`) across α-amylase variants; how well each variant is produced.",
+  "assay_method": "Experimental expression measurements on α-amylase variants in the Protein Engineering Tournament.",
+  "provenance": "A 'real_case' α-amylase dataset from the Align Foundation tournament; one random split, stratified on the target.",
+  "when_to_use": "Applied expressibility ranking within one enzyme family; useful for pre-screening variants for producibility.",
+  "caveats": "Small, single-scaffold campaign; the tournament noted expression-control comparability issues. one random split, stratified on the target; standardized target.",
+  "citations": [
+    {
+      "authors": "The Protein Engineering Tournament (Align to Innovate)",
+      "year": 2025,
+      "title": "Results of the Protein Engineering Tournament: An Open Science Benchmark for Protein Modeling and Design",
+      "venue": "Proteins: Structure, Function, and Bioinformatics",
+      "url": "https://doi.org/10.1002/prot.70008"
+    }
+  ]
+}

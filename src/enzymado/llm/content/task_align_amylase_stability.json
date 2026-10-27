@@ -1,0 +1,19 @@
+{
+  "display_name": "α-Amylase thermostability (Align tournament)",
+  "source_dataset": "Protein Engineering Tournament (Align to Innovate)",
+  "summary": "Real-case regression of thermostability for engineered α-amylase variants.",
+  "what_it_measures": "Standardized thermostability (`thermostability_standardized`) across α-amylase variants.",
+  "assay_method": "Experimental thermostability measurements on α-amylase variants in the Protein Engineering Tournament.",
+  "provenance": "A 'real_case' α-amylase dataset from the Align Foundation tournament; one random split, stratified on the target.",
+  "when_to_use": "Applied stability ranking within one enzyme family; the practical target when engineering more robust α-amylases.",
+  "caveats": "Small, single-scaffold; one random split, stratified on the target (no similarity split). Standardized target (MAE in standardized units).",
+  "citations": [
+    {
+      "authors": "The Protein Engineering Tournament (Align to Innovate)",
+      "year": 2025,
+      "title": "Results of the Protein Engineering Tournament: An Open Science Benchmark for Protein Modeling and Design",
+      "venue": "Proteins: Structure, Function, and Bioinformatics",
+      "url": "https://doi.org/10.1002/prot.70008"
+    }
+  ]
+}

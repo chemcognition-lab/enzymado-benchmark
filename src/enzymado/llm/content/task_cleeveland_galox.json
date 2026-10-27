@@ -1,0 +1,19 @@
+{
+  "display_name": "Galactose oxidase activity (GalOx, real-case)",
+  "source_dataset": "Galactose oxidase engineering campaign (GalOx)",
+  "summary": "Real-case protein+ligand regression of galactose oxidase (GOase) variant activity toward specific alcohol substrates.",
+  "what_it_measures": "Standardized specific activity (`specific_activity_standardized`) for engineered GOase variants paired with a substrate (SMILES); i.e. variant × substrate catalytic activity.",
+  "assay_method": "Experimental activity of engineered galactose oxidase variants on benzylic/secondary-alcohol substrates, from a machine-learning-guided directed-evolution campaign.",
+  "provenance": "From the galactose oxidase engineering campaign of Cleveland et al. (2021): variants of one enzyme assayed against several alcohol substrates. The substrate SMILES and its concentration enter the model as features; random split, stratified on the target.",
+  "when_to_use": "A realistic enzyme+substrate engineering scenario with a genuine ligand axis; tests joint reasoning over variant sequence and substrate structure.",
+  "caveats": "One enzyme measured under several conditions, so rows of the same enzyme fall on both sides of the split and a tree model can match a test row to training rows of that enzyme; this favours XGBoost here. Substrates are described by the 200 normalized RDKit 2D descriptors of descriptastorus (RDKit2DNormalized).",
+  "citations": [
+    {
+      "authors": "e.g. Galactose oxidase machine-learning engineering studies",
+      "year": 2024,
+      "title": "A Machine Learning-Guided Approach to Navigate the Substrate Activity Scope of Galactose Oxidase",
+      "venue": "ACS Catalysis 14",
+      "url": "https://doi.org/10.1021/acscatal.4c04660"
+    }
+  ]
+}

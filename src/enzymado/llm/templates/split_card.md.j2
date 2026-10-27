@@ -1,0 +1,40 @@
+---
+id: {{ card_id }}
+type: split
+title: "{{ content.display_name or title }}"
+tags: [data-split, {{ split_id }}, generalization]
+aliases: ["{{ split_id }}"]
+---
+
+# {{ content.display_name or title }}: split card
+
+> {{ content.summary or 'n/a' }}
+
+## How this split is built
+
+{{ content.methodology or 'n/a' }}
+
+## Random against similarity split (generated, property tasks)
+
+Mean test score of the primary metric over every PLM, head and pooling. The
+similarity split holds out clusters of related sequences, so it estimates how
+models do on enzymes unlike those they were trained on.
+
+| Task | Metric | Random | Similarity | Drop |
+|---|---|---|---|---|
+{% for r in gap_rows %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.random }} | {{ r.similarity }} | {{ r.harder_by }} |
+{% endfor %}
+
+_A positive drop means the similarity split scores lower. The real-case datasets
+have a random split only and are not listed._
+
+## When to use
+
+{{ content.when_to_use or 'n/a' }}
+
+## Caveats
+
+{{ content.caveats or 'n/a' }}
+
+{% with no_references='No external reference: the splits are defined in `src/enzymado/dataset_splitting.py`.' %}{% include '_references.md.j2' %}{% endwith %}

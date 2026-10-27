@@ -1,0 +1,19 @@
+{
+  "display_name": "α-Amylase specific activity (Align tournament)",
+  "source_dataset": "Protein Engineering Tournament (Align to Innovate)",
+  "summary": "Real-case regression of the specific activity of engineered α-amylase variants.",
+  "what_it_measures": "Standardized specific activity (`specific_activity_standardized`) across α-amylase sequence variants; a single-family, applied engineering target.",
+  "assay_method": "Experimental enzyme activity measured on α-amylase variants in the Protein Engineering Tournament's supervised α-amylase event.",
+  "provenance": "One of the 'real_case' applied datasets; α-amylase variant measurements from the Align Foundation tournament. one random split, stratified on the target (no similarity split).",
+  "when_to_use": "A realistic low-n, single-enzyme engineering scenario; tests whether embeddings rank variants of one scaffold, the setting that matters for directed evolution.",
+  "caveats": "Small and single-campaign; variants share a scaffold so generalization is narrow; one random split, stratified on the target. Standardized target (MAE in standardized units).",
+  "citations": [
+    {
+      "authors": "The Protein Engineering Tournament (Align to Innovate)",
+      "year": 2025,
+      "title": "Results of the Protein Engineering Tournament: An Open Science Benchmark for Protein Modeling and Design",
+      "venue": "Proteins: Structure, Function, and Bioinformatics",
+      "url": "https://doi.org/10.1002/prot.70008"
+    }
+  ]
+}

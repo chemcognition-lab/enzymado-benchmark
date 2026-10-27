@@ -1,0 +1,8 @@
+{
+  "display_name": "Random split (80/10/10)",
+  "summary": "Proteins are assigned at random so that train, validation and test hold 80, 10 and 10% of the rows, keeping all measurements of one enzyme in one split.",
+  "methodology": "Proteins are assigned in a seeded, deterministic order and balanced on rows, so the 80/10/10 proportions hold for rows and only approximately for proteins. In the mutation tasks the unit is the mutant sequence. The real-case datasets use one random split by row, stratified on the target; in PETase and galactose oxidase one enzyme is measured under several conditions and its rows can fall on both sides. Regression targets are standardized with the mean and scale of the training split.",
+  "when_to_use": "For in-distribution performance, and the only split of the real-case datasets. Read it next to the similarity split.",
+  "caveats": "Close homologs land in both training and test: up to 44.2% of random-split test proteins have a training hit at 90% identity or more. Scores are therefore optimistic for new enzyme families.",
+  "citations": []
+}

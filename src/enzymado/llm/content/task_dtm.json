@@ -1,0 +1,13 @@
+{
+  "display_name": "ΔTm (melting-temperature change on mutation)",
+  "source_dataset": "FireProtDB",
+  "summary": "Regression of the change in thermal melting temperature (ΔTm) caused by a single-point mutation.",
+  "what_it_measures": "ΔTm (°C) of a point mutant relative to wild type, standardized (`dtm_standardized`). This is a mutation-delta task: the feature is the mutant-minus-wild-type embedding.",
+  "assay_method": "Experimentally measured thermostability (Tm) of single-point mutants, manually curated in FireProtDB from literature and lab data.",
+  "provenance": "FireProtDB split into ΔTm and ΔΔG subsets by non-null field; mutant sequences are built by applying the substitution to the wild-type sequence.",
+  "when_to_use": "Protein-engineering task for stabilizing mutations; tests whether embedding deltas capture the effect of point mutations on thermal stability.",
+  "caveats": "Small, imbalanced, and family-biased; single-point only. Mutant−WT deltas require equal-length sequences. Standardized target (MAE in standardized units).",
+  "citations": [
+    {"authors": "Stourac, J. et al.", "year": 2021, "title": "FireProtDB: database of manually curated protein stability data", "venue": "Nucleic Acids Research 49(D1):D319–D324", "url": "https://doi.org/10.1093/nar/gkaa981"}
+  ]
+}

@@ -1,0 +1,9 @@
+## References
+{% if content.citations %}
+{% for c in content.citations %}
+- {{ c.authors }} ({{ c.year }}). *{{ c.title }}*.{% if c.venue %} {{ c.venue }}.{% endif %}{% if c.url %} <{{ c.url }}>{% endif %}
+
+{% endfor %}
+{% else %}
+{{ no_references }}
+{% endif %}

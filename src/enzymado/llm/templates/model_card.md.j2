@@ -1,0 +1,90 @@
+---
+id: {{ card_id }}
+type: foundation_model
+title: "{{ content.display_name or emb }}"
+family: "{{ content.family or 'n/a' }}"
+embedding_dim: {{ facts.dim }}
+tags: [foundation-model, protein-language-model{% if content.family %}, {{ content.family|lower|replace(' ', '-') }}{% endif %}]
+aliases: ["{{ emb }}"]
+---
+
+# {{ content.display_name or emb }}: model card
+
+> {{ content.summary or 'n/a' }}
+{% if content.needs_verification %}
+>
+> **Needs verification:** some specifics below are best-effort for this recent model.
+{% endif %}
+
+## At a glance
+
+| Field | Value |
+|---|---|
+| Benchmark key | `{{ emb }}` |
+| Family | {{ content.family or 'n/a' }} |
+| Developer | {{ content.developer or 'n/a' }} |
+| Parameters | {{ params }}{% if facts.arch and 'enc-dec' in facts.arch %} (encoder only){% endif %} |
+| Embedding width | **{{ facts.dim }}** |
+| Architecture | {{ facts.arch }} |
+| Training objective | {{ facts.objective }} |
+| Context length | {{ content.context_length or 'n/a' }} |
+| HuggingFace | {% if content.hf_repo %}`{{ content.hf_repo }}`{% else %}n/a{% endif %} |
+
+## Architecture & pretraining
+
+{{ content.architecture or 'n/a' }}
+
+- **Pretraining data:** {{ content.pretraining_data or 'n/a' }}
+- **Pretraining objective:** {{ content.pretraining_objective or facts.objective }}
+{% if content.key_innovations %}
+
+**Key ideas:**
+{% for k in content.key_innovations %}
+- {{ k }}
+{% endfor %}
+{% endif %}
+
+## How its embeddings are used in this benchmark
+
+{{ usage }}
+
+## Leaderboard standing (generated from the published ratings)
+
+Bradley-Terry rating of each of its five baselines with the 95% bootstrap
+interval, and the baseline's rank among all competitors. A rating of 1500 is the
+mean competitor.
+{% for leaderboard, entry in standing.items() %}
+
+### {{ leaderboard|replace('_', '-') }} leaderboard ({{ entry.n_competitors }} competitors)
+
+| Baseline | Rating [95% CI] | Rank |
+|---|---|---|
+{% for r in entry.rows %}
+| {{ r.config }} | {{ r.rating }} [{{ r.ci_lo }}, {{ r.ci_hi }}] | {{ r.rank }} |
+{% endfor %}
+
+Mean rating of its baselines: {{ entry.mean }}.
+{% else %}
+
+_Not on the published leaderboards._
+{% endfor %}
+{% for split_id, rows in best_by_split.items() %}
+
+### Best test score per task: {{ split_id }} split
+
+| Task | Metric | Best score | Baseline |
+|---|---|---|---|
+{% for r in rows %}
+| `{{ r.task }}` | {{ r.metric }} | {{ r.value }} | {{ r.config }} |
+{% endfor %}
+{% endfor %}
+
+## When to use
+
+{{ content.when_to_use or 'n/a' }}
+
+## Caveats
+
+{{ content.caveats or 'n/a' }}
+
+{% with no_references='No references.' %}{% include '_references.md.j2' %}{% endwith %}

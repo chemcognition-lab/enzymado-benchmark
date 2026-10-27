@@ -1,0 +1,29 @@
+{
+  "display_name": "Linear head, mean pooling",
+  "summary": "One linear layer on the mean-pooled embedding: the simplest baseline, which shows how much of a property is linearly readable from a representation.",
+  "algorithm": "Residues are averaged into one vector, optionally concatenated with the ligand descriptors, and one `nn.Linear` maps it to the target. It has no hidden layer, dropout or normalization, and is trained with AdamW in minibatches in the same PyTorch loop as the MLP. On the mutation tasks mean pooling subtracts the pooled wild-type vector from the pooled mutant vector, and attention pooling pools the per-residue difference.",
+  "loss": "MSE for regression and binary cross-entropy with logits for binary tasks; EC number uses one output group per EC level, and the residue tasks a per-residue binary cross-entropy.",
+  "pooling": "Mean over residues (no learned pooling).",
+  "doc_refs": [
+    {
+      "name": "scikit-learn; Linear models (conceptual reference)",
+      "url": "https://scikit-learn.org/stable/modules/linear_model.html"
+    },
+    {
+      "name": "PyTorch nn.Linear",
+      "url": "https://pytorch.org/docs/stable/generated/torch.nn.Linear.html"
+    }
+  ],
+  "hyperparameter_notes": "Scalar tasks: lr 1e-3, weight decay 0.1, up to 200 epochs, patience 20, batch 256. EC number: lr 1e-2, weight decay 0, up to 200 epochs. Residue tasks: lr 1e-3, weight decay 0, up to 200 epochs, loader batch 128. Neural heads are scored on the validation split after every epoch, stop after 20 epochs without improvement and restore the best checkpoint. The score is Kendall's tau for regression and AUPRC for binding, solubility and EC number; the residue tasks, with millions of validation residues, select on binary cross-entropy.",
+  "when_to_use": "As a floor and a probe of representation quality: if a representation needs a nonlinear head to separate a property, the gap between its linear and MLP scores shows it.",
+  "caveats": "Cannot model feature interactions, so it trails the MLP on EC number and the residue tasks.",
+  "citations": [
+    {
+      "authors": "Pedregosa, F. et al.",
+      "year": 2011,
+      "title": "Scikit-learn: Machine Learning in Python",
+      "venue": "JMLR 12:2825–2830",
+      "url": "https://jmlr.org/papers/v12/pedregosa11a.html"
+    }
+  ]
+}

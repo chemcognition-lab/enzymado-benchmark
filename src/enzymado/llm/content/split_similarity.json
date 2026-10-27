@@ -1,0 +1,16 @@
+{
+  "display_name": "Similarity split (MMseqs2, 30% identity)",
+  "summary": "Sequences are clustered with MMseqs2 at 30% identity and 80% coverage, and whole clusters are assigned to train, validation or test (80/10/10).",
+  "methodology": "This removes close homologs from the test set but not every distant one, because each sequence joins a single cluster representative. Searched against their training sets, at most 0.1% of similarity-split test proteins have a hit at 90% identity or more and at most 9.3% at 50% or more. Regression targets are standardized on the training split. The ten property tasks have it; the real-case datasets do not.",
+  "when_to_use": "For performance on enzymes unlike those seen in training, the setting of discovery and engineering. It lowers every PLM's score and reorders them, so rank representations on it.",
+  "caveats": "Distant homologs remain: 7.9 to 54.6% of test proteins keep a training hit at 30% identity or more. The 30% threshold is a design choice.",
+  "citations": [
+    {
+      "authors": "Steinegger, M. & Söding, J.",
+      "year": 2017,
+      "title": "MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets",
+      "venue": "Nature Biotechnology 35:1026–1028",
+      "url": "https://doi.org/10.1038/nbt.3988"
+    }
+  ]
+}

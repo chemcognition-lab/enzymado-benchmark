@@ -14,3 +14,5 @@ embeddings_models_output_mean_pooled.example.json -filter -diff -merge text
 
 results/**/metrics.json -filter -diff -merge text
 results/**/hparams.json -filter -diff -merge text
+# The assistant's authored card content is small JSON that stays readable in git.
+src/enzymado/llm/content/*.json !filter !diff !merge text

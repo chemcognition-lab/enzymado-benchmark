@@ -1,0 +1,32 @@
+{
+  "display_name": "MLP head, attention pooling",
+  "summary": "Learned attention pooling followed by the same MLP as mean pooling (2,048 SiLU units, dropout 0.1; 256 units on the residue tasks): tests whether weighting residues by relevance beats the plain mean.",
+  "algorithm": "On whole-protein tasks the residues are layer-normalized, their mean is the single query of a one-head attention over the residues, and the attended vector is added back to the mean, so a silent attention branch returns mean pooling exactly. On the residue tasks it is one self-attention layer over the residues with LayerNorm and a residual, without pooling. The pooled vector, concatenated with any ligand descriptors, goes to the same MLP as mean pooling (2,048 SiLU units, dropout 0.1; 256 units on the residue tasks). On the mutation tasks mean pooling subtracts the pooled wild-type vector from the pooled mutant vector, and attention pooling pools the per-residue difference.",
+  "loss": "As for the mean-pooled head: MSE or binary cross-entropy with logits; per-level binary cross-entropy for EC number and per-residue binary cross-entropy for the residue tasks.",
+  "pooling": "Residual attention pooling: the mean of the layer-normalized residues attends over the residues and the result is added to the mean.",
+  "doc_refs": [
+    {
+      "name": "PyTorch nn.MultiheadAttention",
+      "url": "https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html"
+    }
+  ],
+  "hyperparameter_notes": "The forward pass runs under bfloat16 autocast with the loss in 32-bit floats. A loader batch holds 16 proteins; on the scalar tasks and EC number gradients are accumulated over 16 batches to reach the effective batch of 256 used with mean pooling, while the residue attention runs do not accumulate. Its parameters are learned per run, so an attention baseline has more capacity than its mean-pooling counterpart. Neural heads are scored on the validation split after every epoch, stop after 20 epochs without improvement and restore the best checkpoint. The score is Kendall's tau for regression and AUPRC for binding, solubility and EC number; the residue tasks, with millions of validation residues, select on binary cross-entropy.",
+  "when_to_use": "When a few residues, such as catalytic or binding residues, may carry the signal that a mean dilutes.",
+  "caveats": "Did not help on average: over the linear and MLP heads it averages 0.544 against 0.572 for mean pooling and loses on nine of the ten property tasks, most on the two 2,560-wide embeddings; its one gain is on binding sites (+0.018). Its runs also vary two to four times more between seeds than mean pooling.",
+  "citations": [
+    {
+      "authors": "Vaswani, A. et al.",
+      "year": 2017,
+      "title": "Attention Is All You Need",
+      "venue": "NeurIPS 2017",
+      "url": "https://arxiv.org/abs/1706.03762"
+    },
+    {
+      "authors": "Elfwing, S., Uchibe, E. & Doya, K.",
+      "year": 2018,
+      "title": "Sigmoid-weighted linear units (SiLU)",
+      "venue": "Neural Networks 107:3–11",
+      "url": "https://doi.org/10.1016/j.neunet.2017.12.012"
+    }
+  ]
+}

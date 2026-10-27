@@ -1,0 +1,27 @@
+{
+  "display_name": "Ankh3 (XL)",
+  "family": "Ankh3",
+  "developer": "ElnaggarLab (Proteinea / TU Munich)",
+  "context_length": "T5 relative position bias",
+  "hf_repo": "ElnaggarLab/ankh3-xl",
+  "summary": "The XL Ankh3 model; the largest Ankh3 variant, with 2560-dim embeddings, trained with the same multi-task denoising + sequence-completion recipe.",
+  "architecture": "T5-style encoder–decoder (Ankh line); 2560-dim per-residue encoder embeddings; task-prefix conditioning for representation vs. generation.",
+  "pretraining_data": "≈59M sequences from UniRef50 (JAX/T5x on TPU-v4).",
+  "pretraining_objective": "Multi-task: masked language modeling at multiple masking probabilities plus protein sequence completion (sequence-only).",
+  "key_innovations": [
+    "Largest Ankh3 variant; highest embedding dimension (2560) in this benchmark's Ankh line",
+    "Multi-task sequence-only pretraining aimed at richer, more generalizable representations"
+  ],
+  "when_to_use": "When maximum Ankh3 capacity / high-dimensional embeddings are desired and the extra compute is acceptable.",
+  "caveats": "Very recent (2025); parameter counts and full training details are not clearly published; verify before quoting. High embedding dim increases downstream head cost.",
+  "needs_verification": true,
+  "citations": [
+    {
+      "authors": "Elnaggar, A. et al.",
+      "year": 2025,
+      "title": "Ankh3: Multi-Task Pretraining with Sequence Denoising and Completion Enhances Protein Representations",
+      "venue": "arXiv:2505.20052",
+      "url": "https://arxiv.org/abs/2505.20052"
+    }
+  ]
+}

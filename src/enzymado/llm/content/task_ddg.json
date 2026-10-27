@@ -1,0 +1,13 @@
+{
+  "display_name": "ΔΔG (folding free-energy change on mutation)",
+  "source_dataset": "FireProtDB",
+  "summary": "Regression of the change in folding free energy (ΔΔG) caused by a single-point mutation.",
+  "what_it_measures": "ΔΔG (kcal/mol) of a point mutant relative to wild type, standardized (`ddg_standardized`). A mutation-delta task using the mutant-minus-wild-type embedding.",
+  "assay_method": "Experimentally derived stability changes (ΔΔG) for single-point mutants, manually curated in FireProtDB.",
+  "provenance": "The ΔΔG subset of FireProtDB (data dir `ddg_mut`); mutant sequences built by applying substitutions to the wild type.",
+  "when_to_use": "The canonical stability-prediction regression for engineering; tests sensitivity of embedding deltas to destabilizing/stabilizing point mutations.",
+  "caveats": "Sign convention and measurement noise matter; small and family-biased; single-point only. Standardized target (MAE in standardized units).",
+  "citations": [
+    {"authors": "Stourac, J. et al.", "year": 2021, "title": "FireProtDB: database of manually curated protein stability data", "venue": "Nucleic Acids Research 49(D1):D319–D324", "url": "https://doi.org/10.1093/nar/gkaa981"}
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "display_name": "Km (Michaelis constant)",
+  "source_dataset": "CatPred",
+  "summary": "Regression of an enzyme's Michaelis constant (Km) for a substrate, from the protein sequence and substrate SMILES.",
+  "what_it_measures": "log10(Km) in M for an enzyme–substrate pair, standardized (`km_standardized`); the substrate concentration at half-maximal rate, i.e. apparent substrate affinity. A protein+ligand task.",
+  "assay_method": "In-vitro steady-state kinetics compiled and cleaned by CatPred, with de-duplication and sequence-identity-aware evaluation splits.",
+  "provenance": "From the CatPred Km benchmark; substrate SMILES are canonicalized and described by the 200 normalized RDKit 2D descriptors of descriptastorus (RDKit2DNormalized), concatenated with the protein embedding.",
+  "when_to_use": "Complements kcat: tests whether representations capture substrate-binding affinity. Useful when ranking models for enzyme–substrate specificity prediction.",
+  "caveats": "Km is noisy and assay-dependent; log10 targets standardized on the training split (MAE in standardized units). Much of the signal comes from the substrate descriptors: the no-PLM baseline comes within 0.04 of the best PLM here.",
+  "citations": [
+    {
+      "authors": "Boorla, V. S. & Maranas, C. D.",
+      "year": 2025,
+      "title": "CatPred: a comprehensive framework for deep learning in vitro enzyme kinetic parameters",
+      "venue": "Nature Communications 16 (2025)",
+      "url": "https://doi.org/10.1038/s41467-025-57215-9"
+    }
+  ]
+}

@@ -66,6 +66,13 @@ profluent = [
     "flash-attn",
     "torch==2.7.0",
 ]
+# Assistant over the results (src/enzymado/llm): card templates, the Gemini SDK
+# and the Streamlit chatbot. Card generation needs only jinja2.
+llm = [
+    "google-genai",
+    "jinja2",
+    "streamlit",
+]
 
 [tool.uv.sources]
 torch = [

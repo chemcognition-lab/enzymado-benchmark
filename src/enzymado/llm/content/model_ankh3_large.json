@@ -1,0 +1,27 @@
+{
+  "display_name": "Ankh3 (large)",
+  "family": "Ankh3",
+  "developer": "ElnaggarLab (Proteinea / TU Munich)",
+  "context_length": "T5 relative position bias",
+  "hf_repo": "ElnaggarLab/ankh3-large",
+  "summary": "The large Ankh3 model; a next-generation Ankh trained with multi-task denoising plus sequence completion, showing that sequence-only multi-task pretraining can rival multimodal models.",
+  "architecture": "T5-style encoder–decoder (Ankh line); 1536-dim per-residue encoder embeddings. Uses task-prefix conditioning for representation vs. generation.",
+  "pretraining_data": "≈59M sequences from UniRef50 (JAX/T5x on TPU-v4).",
+  "pretraining_objective": "Joint multi-task pretraining: masked language modeling at multiple masking probabilities plus protein sequence completion (sequence-only).",
+  "key_innovations": [
+    "Combines MLM (multi-probability) with sequence-completion objectives",
+    "Shows unimodal, sequence-only multi-task design can match or surpass multimodal PLMs on downstream tasks"
+  ],
+  "when_to_use": "When you want a recent, sequence-only model with strong reported downstream performance at a 1536-dim embedding size.",
+  "caveats": "Very recent (2025); exact parameter counts and training details are thin in public sources; verify before quoting specifics.",
+  "needs_verification": true,
+  "citations": [
+    {
+      "authors": "Elnaggar, A. et al.",
+      "year": 2025,
+      "title": "Ankh3: Multi-Task Pretraining with Sequence Denoising and Completion Enhances Protein Representations",
+      "venue": "arXiv:2505.20052",
+      "url": "https://arxiv.org/abs/2505.20052"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "display_name": "Profluent E1 (300M)",
+  "family": "Profluent E1",
+  "developer": "Profluent Bio",
+  "context_length": "Single-sequence in this benchmark (E1 also supports retrieval-augmented multi-sequence context)",
+  "hf_repo": "Profluent-Bio/E1-300m",
+  "summary": "The 300M Profluent E1 encoder; a retrieval-augmented protein LM positioned as a drop-in ESM replacement. Here it is used single-sequence, producing 1024-dim embeddings.",
+  "architecture": "Protein encoder that can condition on retrieved homologous sequences via block-causal multi-sequence attention; in this benchmark it is run single-sequence to produce 1024-dim per-residue embeddings.",
+  "pretraining_data": "≈4 trillion tokens from the Profluent Protein Atlas.",
+  "pretraining_objective": "Encoder pretraining with retrieval augmentation (conditioning on homologous sequences).",
+  "key_innovations": [
+    "Explicit retrieval augmentation: integrates evolutionary context at inference via multi-sequence attention",
+    "Reported state-of-the-art zero-shot fitness and unsupervised contact prediction; drop-in ESM replacement"
+  ],
+  "when_to_use": "As a modern ESM-style encoder; note that its headline retrieval-augmentation advantage is not exercised here (single-sequence embeddings only).",
+  "caveats": "Very recent (2025 preprint); much of its benefit comes from retrieval context that this benchmark does not supply. Verify per-size architecture details before quoting.",
+  "needs_verification": true,
+  "citations": [
+    {
+      "authors": "Profluent Bio",
+      "year": 2025,
+      "title": "E1: Retrieval-Augmented Protein Encoder Models",
+      "venue": "bioRxiv 2025.11.12.688125",
+      "url": "https://doi.org/10.1101/2025.11.12.688125"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "display_name": "ESM-2 (650M)",
+  "family": "ESM-2",
+  "developer": "Meta AI (FAIR)",
+  "context_length": "Trained on crops of up to 1,024 residues; longer sequences are embedded whole here",
+  "hf_repo": "facebook/esm2_t33_650M_UR50D",
+  "summary": "Meta's 650M-parameter masked protein language model; the most widely used general-purpose PLM and a strong, well-validated baseline for embedding quality.",
+  "architecture": "Encoder-only BERT-style transformer (33 layers, 1280 hidden, 20 attention heads) with rotary position embeddings. Per-residue outputs are the final hidden states; this benchmark mean- or attention-pools them.",
+  "pretraining_data": "UniRef50 representative sequences (~65M clusters), sampled during training from the broader UniRef90.",
+  "pretraining_objective": "Masked language modeling (BERT-style, ~15% token masking).",
+  "key_innovations": [
+    "Evolutionary-scale masked LM whose attention maps recover residue–residue contacts",
+    "Backbone of ESMFold for single-sequence structure prediction",
+    "Family spans 8M–15B params; 650M is the standard quality/cost sweet spot"
+  ],
+  "when_to_use": "A reliable default and comparison anchor: strong single-sequence embeddings at moderate cost, extensively benchmarked across function and structure tasks.",
+  "caveats": "Single-sequence only (no MSA/retrieval), no explicit structure or function conditioning.",
+  "needs_verification": false,
+  "citations": [
+    {
+      "authors": "Lin, Z. et al.",
+      "year": 2023,
+      "title": "Evolutionary-scale prediction of atomic-level protein structure with a language model",
+      "venue": "Science 379:1123–1130",
+      "url": "https://doi.org/10.1126/science.ade2574"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "display_name": "ProtT5-XL-UniRef50",
+  "family": "ProtT5 (ProtTrans)",
+  "developer": "Rostlab (TU Munich) et al.",
+  "context_length": "Effectively unbounded via T5 relative position bias",
+  "hf_repo": "Rostlab/prot_t5_xl_uniref50",
+  "summary": "A T5-3B protein language model from ProtTrans whose 1024-dim encoder embeddings are a long-standing strong baseline for per-residue and per-protein tasks.",
+  "architecture": "T5 encoder–decoder (T5-3B) with relative position bias; only the encoder is used to produce 1024-dim per-residue embeddings, mean/attention-pooled here.",
+  "pretraining_data": "Pretrained on BFD (Big Fantastic Database) then fine-tuned on UniRef50 (~45M sequences).",
+  "pretraining_objective": "Span-corruption / masked span reconstruction (T5-style denoising, adapted for proteins).",
+  "key_innovations": [
+    "Encoder embeddings capture secondary structure, localization and membrane signal without supervision",
+    "Established that large PLMs rival evolutionary (MSA) features for many tasks"
+  ],
+  "when_to_use": "A dependable, well-studied 1024-dim baseline; frequently competitive on the enzyme regression tasks in this benchmark. Encoder-only inference keeps it practical.",
+  "caveats": "Large model; the full checkpoint stores decoder weights that are unused for embedding. Single-sequence; older recipe than ESM-2/ESM-C.",
+  "needs_verification": false,
+  "citations": [
+    {
+      "authors": "Elnaggar, A. et al.",
+      "year": 2022,
+      "title": "ProtTrans: Toward Understanding the Language of Life Through Self-Supervised Learning",
+      "venue": "IEEE TPAMI 44(10):7112–7127",
+      "url": "https://doi.org/10.1109/TPAMI.2021.3095381"
+    }
+  ]
+}

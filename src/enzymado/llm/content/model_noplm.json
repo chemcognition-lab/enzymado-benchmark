@@ -1,0 +1,22 @@
+{
+  "display_name": "No-PLM reference (sequence descriptors)",
+  "family": "none (no language model)",
+  "developer": "Enzymado benchmark",
+  "context_length": "Any length",
+  "summary": "The same five baselines trained on descriptors computed without a language model, which shows what the PLMs add.",
+  "architecture": "No neural representation. Each protein gets 36 Biopython ProtParam descriptors; attention pooling and the residue tasks use a 20-letter one-hot per residue instead.",
+  "pretraining_data": "None.",
+  "pretraining_objective": "None.",
+  "when_to_use": "As the reference every PLM should beat. It ranks last on the property leaderboard, but comes within 0.03 to 0.04 of the best PLM on Km and binding under both splits and on random-split kcat, where the 200 substrate descriptors carry much of the signal.",
+  "caveats": "Far behind on tasks decided by the protein alone: 0.65 against 0.99 AUPRC on random-split EC number, and below 0.08 AUPRC on the residue tasks.",
+  "needs_verification": false,
+  "citations": [
+    {
+      "authors": "Cock, P. J. A. et al.",
+      "year": 2009,
+      "title": "Biopython: freely available Python tools for computational molecular biology and bioinformatics",
+      "venue": "Bioinformatics 25(11):1422-1423",
+      "url": "https://doi.org/10.1093/bioinformatics/btp163"
+    }
+  ]
+}

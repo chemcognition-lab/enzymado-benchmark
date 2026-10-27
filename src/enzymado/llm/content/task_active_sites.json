@@ -1,0 +1,19 @@
+{
+  "display_name": "Active sites (catalytic-residue prediction)",
+  "source_dataset": "UniProt / Swiss-Prot",
+  "summary": "Per-residue binary prediction of which residues are catalytic active-site residues.",
+  "what_it_measures": "For each residue in a protein, a 0/1 label for whether it is an annotated active site. Labels come from Swiss-Prot 'Active site' sequence features (1-based positions expanded to a per-residue binary vector).",
+  "assay_method": "Expert-curated active-site annotations in Swiss-Prot, based on experimental and homology evidence.",
+  "provenance": "Parsed from the Swiss-Prot `active_site` feature column into residue-position vectors; the model keeps the full per-residue embedding tensor.",
+  "when_to_use": "A residue-level localization task testing whether embeddings pinpoint catalytic machinery; relevant to mechanism annotation and active-site design.",
+  "caveats": "Extremely imbalanced: 0.39% of the residues in the dataset are annotated, so a model that predicts no site anywhere scores above 99% accuracy. AUPRC is the primary metric for that reason. Swiss-Prot annotation coverage is incomplete and many annotations were propagated by homology.",
+  "citations": [
+    {
+      "authors": "The UniProt Consortium",
+      "year": 2025,
+      "title": "UniProt: the Universal Protein Knowledgebase in 2025",
+      "venue": "Nucleic Acids Research 53(D1):D609–D617",
+      "url": "https://doi.org/10.1093/nar/gkae1010"
+    }
+  ]
+}

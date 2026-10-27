@@ -1,0 +1,13 @@
+{
+  "display_name": "pH optimum (optimal pH of activity)",
+  "source_dataset": "BRENDA",
+  "summary": "Regression of an enzyme's optimal pH from sequence, aggregated per protein from BRENDA measurements.",
+  "what_it_measures": "The pH at which an enzyme shows maximal activity. Multiple BRENDA measurements per protein are aggregated to a median (pH ranges are averaged), then z-standardized (`phopt_median_standardized`).",
+  "assay_method": "Literature-curated enzyme activity-vs-pH optima collected in BRENDA, the comprehensive enzyme-function database.",
+  "provenance": "Parsed from the BRENDA JSON release (`ph_optimum` field), aggregated to a per-protein median with measurement counts recorded.",
+  "when_to_use": "A protein-level regression testing whether embeddings encode the physicochemical environment an enzyme is adapted to; relevant to enzyme selection for a target pH.",
+  "caveats": "pH optima are condition- and assay-dependent and sparsely measured; aggregating to a median discards spread. Values are standardized, so MAE is in standardized units.",
+  "citations": [
+    {"authors": "Chang, A. et al.", "year": 2021, "title": "BRENDA, the ELIXIR core data resource in 2021: new developments and updates", "venue": "Nucleic Acids Research 49(D1):D498–D508", "url": "https://doi.org/10.1093/nar/gkaa1025"}
+  ]
+}

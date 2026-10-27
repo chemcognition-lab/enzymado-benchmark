@@ -1,0 +1,13 @@
+{
+  "display_name": "Solubility (protein solubility classification)",
+  "source_dataset": "ProteinEA solubility (DeepSol lineage)",
+  "summary": "Binary prediction of whether a protein is soluble when expressed, from sequence alone.",
+  "what_it_measures": "Each protein carries a 0/1 label for insoluble vs. soluble expression. The labels trace to the DeepSol resource (E. coli expression solubility), distributed via the `proteinea/solubility` dataset.",
+  "assay_method": "Experimental solubility upon heterologous (E. coli) expression, aggregated from prior solubility datasets; the original DeepSol split excludes test sequences ≥30% identical to training.",
+  "provenance": "Downloaded from the ProteinEA Hugging Face dataset; the fluorescence sibling dataset is intentionally excluded from this enzyme benchmark.",
+  "when_to_use": "A protein-level classification probe of how well an embedding captures expressibility/solubility determinants; useful for expression-risk screening.",
+  "caveats": "Solubility labels are noisy and host/condition dependent (largely E. coli); not enzyme-specific, so it tests general representation quality rather than catalysis.",
+  "citations": [
+    {"authors": "Khurana, S. et al.", "year": 2018, "title": "DeepSol: a deep learning framework for sequence-based protein solubility prediction", "venue": "Bioinformatics 34(15):2605–2613", "url": "https://doi.org/10.1093/bioinformatics/bty166"}
+  ]
+}

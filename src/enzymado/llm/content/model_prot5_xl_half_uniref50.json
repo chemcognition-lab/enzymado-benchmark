@@ -1,0 +1,27 @@
+{
+  "display_name": "ProtT5-XL-UniRef50 (half precision, encoder-only)",
+  "family": "ProtT5 (ProtTrans)",
+  "developer": "Rostlab (TU Munich) et al.",
+  "context_length": "Effectively unbounded via T5 relative position bias",
+  "hf_repo": "Rostlab/prot_t5_xl_half_uniref50-enc",
+  "summary": "A half-precision, encoder-only distribution of ProtT5-XL-UniRef50; the same 1024-dim representations at roughly half the memory/compute of the full model.",
+  "architecture": "Identical T5-3B encoder to ProtT5-XL-UniRef50, shipped as encoder-only float16 weights; produces 1024-dim per-residue embeddings.",
+  "pretraining_data": "BFD then UniRef50 (same as the full ProtT5-XL-UniRef50).",
+  "pretraining_objective": "T5-style span-corruption denoising.",
+  "key_innovations": [
+    "fp16 encoder-only packaging removes the unused decoder and halves memory",
+    "Near-identical embeddings to the full-precision model at lower cost"
+  ],
+  "when_to_use": "Prefer over the full ProtT5-XL when memory/throughput matters; expect essentially the same embedding quality. Useful for large-scale embedding of the protein pool.",
+  "caveats": "fp16 can introduce tiny numerical differences vs full precision; still a single-sequence model with the older ProtTrans recipe.",
+  "needs_verification": false,
+  "citations": [
+    {
+      "authors": "Elnaggar, A. et al.",
+      "year": 2022,
+      "title": "ProtTrans: Toward Understanding the Language of Life Through Self-Supervised Learning",
+      "venue": "IEEE TPAMI 44(10):7112–7127",
+      "url": "https://doi.org/10.1109/TPAMI.2021.3095381"
+    }
+  ]
+}
