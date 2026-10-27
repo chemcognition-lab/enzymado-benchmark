@@ -15,6 +15,12 @@ the numbers are comparable.
        width="820">
 </p>
 
+<p align="center">
+  <b><a href="https://huggingface.co/spaces/Enzymado/Enzymado">Explore the results in the browser</a></b>
+  — leaderboards, per-dataset comparisons, label distributions and UMAP projections,
+  recomputed from the published numbers in this repository.
+</p>
+
 ---
 
 ## What it evaluates
@@ -389,6 +395,38 @@ Only the numbers are published. Prediction tensors, model weights and per-epoch 
 local: they are gigabytes of LFS, and every figure and leaderboard is recomputable from the
 tracked `metrics.json`, `hparams.json` and bootstrap distributions. Per-dataset cards live
 next to the data, at `data/processed/properties/<task>/dataset_card.json`.
+
+---
+
+## Citing Enzymado
+
+The paper is in preparation. Until it appears, cite the software:
+
+```bibtex
+@software{enzymado,
+  title    = {Enzymado: Holistic Benchmark for Enzyme Representations},
+  author   = {Barraza-Chavez, Jose Manuel and Almada-Monter, Ricardo and
+              Chau, William and Barghout, Rana A. and Abdur Rakib, Aziz and
+              Kirby, Maxim and Mahadevan, Radhakrishnan and Jinich, Adrian and
+              Sanchez-Lengeling, Benjamin},
+  year     = {2026},
+  version  = {0.0.1},
+  url      = {https://github.com/chemcognition-lab/enzymado-benchmark},
+  note     = {Interactive results: https://huggingface.co/spaces/Enzymado/Enzymado}
+}
+```
+
+Please also cite the datasets you use: each one's source is recorded in its dataset card
+(`data/processed/<scope>/<task>/dataset_card.json`) and in the [Datasets](#datasets)
+section above.
+
+## Contact
+
+Questions, bug reports and dataset proposals belong in
+[GitHub Issues](https://github.com/chemcognition-lab/enzymado-benchmark/issues), so the
+answers stay findable. For anything else, write to Jose Manuel Barraza-Chavez
+(<jose.barrazachavez@mail.utoronto.ca>). The benchmark is developed by
+[chemcognition-lab](https://github.com/chemcognition-lab).
 
 ---
 
