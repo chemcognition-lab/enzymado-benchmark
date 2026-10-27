@@ -11,7 +11,13 @@ try:
     import xgboost as xgb
     from xgboost import XGBClassifier, XGBRegressor
     from xgboost.core import XGBoostError
-except ModuleNotFoundError:
+except Exception:  # noqa: BLE001 - see below
+    # Deliberately broad. An absent package raises ModuleNotFoundError, but an
+    # *installed* xgboost whose native library cannot load raises XGBoostError
+    # (e.g. missing libomp.dylib on macOS), and XGBoostError is only importable
+    # from inside this try, so it cannot be named here. Catching just
+    # ModuleNotFoundError let that case propagate and break the import of every
+    # module that reaches model_registry, taking run_benchmark.py down with it.
     xgb = None
     XGBClassifier = None
     XGBRegressor = None

@@ -1,0 +1,110 @@
+{
+  "task_name": "enzyarena_kcat",
+  "dataset_id": "enzyarena_kcat",
+  "task_scope": "real_case",
+  "origin_of_data": {
+    "source_name": "EnzyArena (BRENDA and SABIO-RK campaigns)",
+    "source_version": "2026-04-18",
+    "citation": "10.64898/2026.03.29.715152"
+  },
+  "schema": {
+    "protein_id_col": "dataset_id",
+    "sequence_col": "protein_sequence",
+    "ligand_smiles_col": "smiles",
+    "condition_cols": [
+      "ph",
+      "temperature"
+    ],
+    "target_col": "log10_kcat"
+  },
+  "amount_of_removed_data": {
+    "datapoints_after_cleaning": 1571
+  },
+  "statistics": {
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "temperature": 0,
+        "ph": 0,
+        "log10_kcat": 0,
+        "mutation": 0,
+        "uniprot_id": 0,
+        "wt_group": 0,
+        "campaign_id": 0,
+        "source_db": 0
+      },
+      "duplicate_rows_full": 0,
+      "duplicate_rows_by_key": 0
+    },
+    "unique_proteins": 1190,
+    "unique_ligands": 104,
+    "label_distribution": {
+      "overall": {
+        "total_valid_labels": 1571,
+        "mean": 0.0982,
+        "std": 1.534,
+        "min": -4.0757,
+        "max": 5.5232,
+        "median": 0.2095
+      },
+      "train": {
+        "enzyarena_kcat_similarity_mmseqs2_80_10_10_standardized": {
+          "total_valid_labels": 1264,
+          "mean": 0.0512,
+          "std": 1.5842,
+          "min": -4.0757,
+          "max": 5.5232,
+          "median": 0.2014
+        }
+      },
+      "validation": {
+        "enzyarena_kcat_similarity_mmseqs2_80_10_10_standardized": {
+          "total_valid_labels": 156,
+          "mean": 0.4156,
+          "std": 1.2581,
+          "min": -2.1761,
+          "max": 2.8751,
+          "median": 0.3116
+        }
+      },
+      "test": {
+        "enzyarena_kcat_similarity_mmseqs2_80_10_10_standardized": {
+          "total_valid_labels": 151,
+          "mean": 0.1636,
+          "std": 1.3174,
+          "min": -3.1549,
+          "max": 2.3324,
+          "median": 0.2041
+        }
+      }
+    },
+    "split_sizes": {
+      "enzyarena_kcat_similarity_mmseqs2_80_10_10_standardized": {
+        "train": 1264,
+        "val": 156,
+        "test": 151
+      }
+    }
+  },
+  "additional_important": {
+    "sequence_length_summary": {
+      "min": 140,
+      "max": 774,
+      "mean": 388.26,
+      "median": 342.0,
+      "p95": 739.0
+    },
+    "quality_checks": {
+      "schema_validated": true,
+      "split_leakage_checked": {
+        "enzyarena_kcat_similarity_mmseqs2_80_10_10_standardized": false
+      },
+      "label_format_validated": true,
+      "small_dataset_warning": null
+    },
+    "notes": null,
+    "last_updated": "2026-10-25 15:44:52"
+  }
+}

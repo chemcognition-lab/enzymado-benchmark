@@ -43,6 +43,7 @@ class BaseComposableDataset(TorchDataset):
         self.label_builder = label_builder
         self.missing_policy = missing_policy
         self.skipped_rows = 0
+        self.skipped_reasons: list[str] = []
         self.rows = self._apply_missing_policy(rows)
 
     def __len__(self) -> int:
@@ -68,6 +69,11 @@ class BaseComposableDataset(TorchDataset):
                 errors.append(error)
         return errors
 
+    # Number of distinct skip reasons retained for logging; skipping is silent
+    # otherwise, and a caller that never sees why rows vanished trains on a
+    # quietly smaller dataset.
+    _MAX_SKIPPED_REASONS = 5
+
     def _apply_missing_policy(self, rows: list[dict[str, str]]) -> list[dict[str, str]]:
         """Either keep, skip, or reject rows with missing features or labels."""
         if self.missing_policy not in {"raise", "skip"}:
@@ -82,6 +88,10 @@ class BaseComposableDataset(TorchDataset):
                 continue
             if self.missing_policy == "skip":
                 self.skipped_rows += 1
+                if len(self.skipped_reasons) < self._MAX_SKIPPED_REASONS:
+                    self.skipped_reasons.append(
+                        f"sample_id={row.get('sample_id', '')}: " + "; ".join(errors)
+                    )
                 continue
             validation_errors.append(
                 f"sample_id={row.get('sample_id', '')}: " + "; ".join(errors)

@@ -199,13 +199,23 @@ fi
 # shellcheck disable=SC1091
 source "${REPO}/${VENV_PATH}/bin/activate"
 
-CSV_PATH="${REPO}/data/processed/protein_pool.csv"
-FASTA_PATH="${REPO}/data/fastas/protein_pool.fasta"
+# `SEQUENCE_SET` names the sequence collection being embedded and namespaces the
+# output, so a single-task subset built by
+# `scripts/data_prep/subset_sequence_index_for_task.py` never collides with the
+# full-pool shards. Unset, the full pool is embedded under its historical name.
+if [[ -n "${SEQUENCE_SET:-}" ]]; then
+    : "${CSV_PATH:=${REPO}/data/processed/${SEQUENCE_SET}.csv}"
+    : "${FASTA_PATH:=${REPO}/data/fastas/${SEQUENCE_SET}.fasta}"
+else
+    SEQUENCE_SET="protein_sequences_unique"
+    : "${CSV_PATH:=${REPO}/data/processed/protein_pool.csv}"
+    : "${FASTA_PATH:=${REPO}/data/fastas/protein_pool.fasta}"
+fi
 
 if [[ "${PER_PROTEIN}" == "1" ]]; then
-    OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings_mean_pooled/protein_sequences_unique"
+    OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings_mean_pooled/${SEQUENCE_SET}"
 else
-    OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings/protein_sequences_unique"
+    OUT_DIR="${EMBED_OUTPUT_ROOT}/embeddings/${SEQUENCE_SET}"
 fi
 
 OUT_PATH="${OUT_DIR}/${MODEL_NAME}_shards"
@@ -243,7 +253,7 @@ echo "Save mean-pooled: ${SAVE_MEAN_POOLED}"
 
 EXTRA_ARGS=()
 if [[ "${SAVE_MEAN_POOLED}" == "1" ]]; then
-    MEAN_POOLED_OUT="${MEAN_POOLED_ROOT}/protein_sequences_unique/${MODEL_NAME}.safetensors"
+    MEAN_POOLED_OUT="${MEAN_POOLED_ROOT}/${SEQUENCE_SET}/${MODEL_NAME}.safetensors"
     mkdir -p "$(dirname "${MEAN_POOLED_OUT}")"
     EXTRA_ARGS+=(--mean_pooled_output "${MEAN_POOLED_OUT}")
     echo "Mean-pooled output: ${MEAN_POOLED_OUT}"

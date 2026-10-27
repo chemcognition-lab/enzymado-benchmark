@@ -57,8 +57,8 @@ Every model competes on the **same proteins**. The embedding stores do not cover
 sequence index identically, so `scripts/embeddings/build_embedding_intersection.py`
 computes their intersection once and every run is restricted to it via `--allowed_ids`.
 The published runs use **269,409 shared sequence IDs**: of the 270,029 sequences in
-`data/processed/protein_pool.csv`, the 620 left out are all longer than 2,644 residues,
-which ESM3 could not embed. (`excluded_ids.txt` also lists IDs of an earlier, larger index
+`data/processed/protein_pool.csv`, the 620 left out are 2,645 residues or longer
+and ran out of GPU memory in ESM3. (`excluded_ids.txt` also lists IDs of an earlier, larger index
 that no dataset uses any more.) `results/embedding_intersection/report.tsv` records the
 per-model coverage.
 
@@ -104,7 +104,7 @@ data_loading  →  training  →  prediction  →  evaluation
 
 1. **`data_loading`** turns a task name into a ready-to-train bundle: rows from the dataset
    CSV, embeddings pulled from safetensors shards, labels built per task type, and the
-   split assignment. Residue-level tasks stream embeddings lazily so that a ~390 GB store
+   split assignment. Residue-level tasks stream embeddings lazily so that a 4.6 TB store
    never has to fit in RAM.
 2. **`training`** takes that bundle plus an architecture from `models`, trains it with early
    stopping on the validation split, and returns a fitted estimator.
@@ -232,6 +232,9 @@ uv sync --extra train
 
 ### Reproduce the leaderboards
 
+[REPRODUCE.md](REPRODUCE.md) walks through three levels of reproduction, from these
+commands to retraining one task or the whole grid.
+
 The tracked results are enough to recompute both leaderboards on a CPU in a few minutes:
 
 ```bash
@@ -306,7 +309,7 @@ embedding models; pass your own `--account`.
 
 ### Computing the embeddings
 
-The embedding stores are not distributed: they are ~390 GB at residue level. To rebuild
+The embedding stores are not distributed: they are about 4.6 TB at residue level. To rebuild
 them:
 
 ```bash
@@ -340,12 +343,13 @@ and the evaluation and ranking statistics.
 
 ## Extending it
 
-**Add a dataset.** Register it in `benchmark_card.json` with its task type and paths, give
-it a weight in the card's `rating.task_weights` if it is a property task, then add a
-`TaskConfig` in `src/enzymado/data_loading/data_registry.py` describing its columns, label
-kind, and batch kind. Splits, training, prediction, and evaluation all dispatch on that
-config. `scripts/ci/check_registry_card_parity.py` checks that the registry and the card
-stay in sync.
+**Add a dataset.** [add_data.md](add_data.md) goes step by step from a CSV to scored
+runs. A `TaskConfig` in `src/enzymado/data_loading/data_registry.py` describes its
+columns, label kind and batch kind, and splits, training, prediction and evaluation all
+dispatch on it. A dataset that joins the leaderboards also needs an entry in
+`benchmark_card.json`, a weight in the card's `rating.task_weights` if it is a property
+task, and results for all 75 competitors; `scripts/ci/check_registry_card_parity.py`
+checks that the registry and the card stay in sync.
 
 **Add a model.** Implement the estimator in `src/enzymado/training/`, exposing `fit` /
 `predict` (or `fit_loader` / `predict_loader` for residue-level tasks), and register it in

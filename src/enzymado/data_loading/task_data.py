@@ -31,6 +31,28 @@ from .stores import (
 )
 
 
+def _log_skipped_rows(split_name: str, bundle: TaskDatasetBundle) -> None:
+    """Report rows dropped by ``missing_policy="skip"`` so shrinkage is never silent.
+
+    Rows failing validation (unresolvable embedding, missing or unparseable
+    SMILES, unusable label) are dropped rather than raised on. Without this
+    log a typo'd SMILES or a sequence missing from the embedding store simply
+    yields a smaller dataset and a plausible-looking metric.
+    """
+    skipped = getattr(bundle.dataset, "skipped_rows", 0)
+    if not skipped:
+        return
+    loaded = len(bundle.rows)
+    log(
+        f"    WARNING: {split_name} dropped {skipped:,} of {loaded:,} rows"
+        f" failing validation ({len(bundle.dataset):,} kept)."
+    )
+    for reason in getattr(bundle.dataset, "skipped_reasons", []):
+        log(f"      - {reason}")
+    if skipped > len(getattr(bundle.dataset, "skipped_reasons", [])):
+        log("      - (further reasons not shown)")
+
+
 @dataclass
 class PooledTaskData:
     """Output for global route (MLP/Linear/XGB). Arrays ready for .fit(x, y)."""
@@ -303,6 +325,16 @@ def _build_pooled_data(
         missing_policy="skip",
         rows=rows.test_rows,
     )
+    for split_name, bundle in (
+        ("train", train_bundle),
+        ("val", val_bundle),
+        ("test", test_bundle),
+    ):
+        _log_skipped_rows(split_name, bundle)
+    log(
+        f"    Row validation done: train={len(train_bundle.dataset):,}"
+        f" val={len(val_bundle.dataset):,} test={len(test_bundle.dataset):,}"
+    )
     log(f"    Pooling embeddings ({config.batch_kind})...")
     x_tr2, y_tr2 = build_xy_pooled(train_bundle, config.batch_kind)
     x_va2: torch.Tensor | None = None
@@ -547,6 +579,12 @@ def _build_loader_data(
         ec_vocabulary=rows.ec_vocabulary,
         rows=rows.test_rows,
     )
+    for split_name, bundle in (
+        ("train", train_bundle),
+        ("val", raw_val_bundle),
+        ("test", test_bundle),
+    ):
+        _log_skipped_rows(split_name, bundle)
     n_train = len(train_bundle.dataset)
     n_val = len(val_bundle.dataset) if val_bundle is not None else 0
     n_test = len(test_bundle.dataset)
