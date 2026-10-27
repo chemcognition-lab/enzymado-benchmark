@@ -2,7 +2,7 @@
   <img src="assets/letter_logo.png" alt="Enzymado Benchmark" width="640">
 </h1>
 
-**A reproducible benchmark for protein language model embeddings on enzyme property prediction.**
+**An enzyme benchmark for protein representations.**
 
 Enzymado asks a narrow, practical question: *if you take a frozen protein language model
 and train a simple head on top of its embeddings, how well does that work for enzyme
