@@ -2,19 +2,19 @@
   "display_name": "ESM Cambrian (ESM-C 600M)",
   "family": "ESM-C",
   "developer": "EvolutionaryScale",
-  "context_length": "Trained on sequences of up to about 2,048 residues; longer sequences are embedded whole here",
+  "context_length": "Trained at 512 residues, then 2,048 for the last 500k steps; longer sequences are embedded whole here",
   "hf_repo": "EvolutionaryScale/esmc-600m-2024-12",
-  "summary": "The 600M ESM Cambrian encoder; reportedly rivals ESM-2 3B while being far smaller, producing 1152-dim embeddings.",
-  "architecture": "Encoder-only masked transformer in the ESM-C representation line; 1152-dim per-residue embeddings.",
-  "pretraining_data": "Large-scale natural protein sequence corpora (EvolutionaryScale; see the ESM-C release).",
+  "summary": "The 600M ESM Cambrian encoder: its developers report that it rivals ESM-2 3B and approaches ESM-2 15B, producing 1152-dim embeddings.",
+  "architecture": "Encoder-only transformer, 36 layers and width 1152, with pre-LayerNorm, rotary embeddings, SwiGLU and no biases. Companion to the generative ESM3.",
+  "pretraining_data": "UniRef plus metagenomic sequences from MGnify and the Joint Genome Institute, clustered at 70% identity (83M, 372M and 2B clusters).",
   "pretraining_objective": "Masked language modeling.",
   "key_innovations": [
-    "600M reportedly matches ESM-2 3B and approaches the 15B model at a fraction of the size",
-    "Open-weight, representation-focused counterpart to ESM3"
+    "Reported to rival ESM-2 3B and approach ESM-2 15B at a fraction of the size",
+    "Representation-focused companion to ESM3, released as open weights"
   ],
   "when_to_use": "When you want near-ESM-2-3B quality without the 3B footprint; a strong modern default in the mid-size range (1152-dim).",
-  "caveats": "Documented mainly via the EvolutionaryScale release/blog and independent evaluations rather than a peer-reviewed paper; verify specifics before relying on exact numbers.",
-  "needs_verification": true,
+  "caveats": "Documented in a release note rather than a peer-reviewed paper.",
+  "needs_verification": false,
   "citations": [
     {
       "authors": "EvolutionaryScale Team",

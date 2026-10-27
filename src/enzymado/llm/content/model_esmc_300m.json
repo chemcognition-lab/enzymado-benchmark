@@ -2,19 +2,19 @@
   "display_name": "ESM Cambrian (ESM-C 300M)",
   "family": "ESM-C",
   "developer": "EvolutionaryScale",
-  "context_length": "Trained on sequences of up to about 2,048 residues; longer sequences are embedded whole here",
+  "context_length": "Trained at 512 residues, then 2,048 for the last 500k steps; longer sequences are embedded whole here",
   "hf_repo": "EvolutionaryScale/esmc-300m-2024-12",
-  "summary": "The 300M ESM Cambrian encoder; a representation-focused masked PLM that reportedly matches ESM-2 650M at lower cost, producing 960-dim embeddings.",
-  "architecture": "Encoder-only masked transformer in the ESM-C representation line (parallel to the generative ESM3); 960-dim per-residue embeddings.",
-  "pretraining_data": "Large-scale natural protein sequence corpora (EvolutionaryScale; see the ESM-C release).",
+  "summary": "The 300M ESM Cambrian encoder: a representation-focused masked PLM that its developers report performs similarly to ESM-2 650M with less memory and faster inference, producing 960-dim embeddings.",
+  "architecture": "Encoder-only transformer, 30 layers and width 960, with pre-LayerNorm, rotary embeddings, SwiGLU and no biases. Companion to the generative ESM3.",
+  "pretraining_data": "UniRef plus metagenomic sequences from MGnify and the Joint Genome Institute, clustered at 70% identity (83M, 372M and 2B clusters).",
   "pretraining_objective": "Masked language modeling.",
   "key_innovations": [
-    "Representation-optimized companion to ESM3, released as open weights",
-    "300M reportedly rivals ESM-2 650M with reduced memory and faster inference"
+    "Representation-focused companion to ESM3, released as open weights",
+    "Reported to perform similarly to ESM-2 650M with less memory and faster inference"
   ],
   "when_to_use": "A cost-efficient modern encoder: good when you want ESM-2-650M-level quality at smaller size / 960-dim embeddings.",
-  "caveats": "Primarily documented via the EvolutionaryScale release/blog rather than a peer-reviewed paper; verify exact architecture and training details before citing specifics.",
-  "needs_verification": true,
+  "caveats": "Documented in a release note rather than a peer-reviewed paper.",
+  "needs_verification": false,
   "citations": [
     {
       "authors": "EvolutionaryScale Team",

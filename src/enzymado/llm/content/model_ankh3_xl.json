@@ -1,23 +1,23 @@
 {
   "display_name": "Ankh3 (XL)",
   "family": "Ankh3",
-  "developer": "ElnaggarLab (Proteinea / TU Munich)",
-  "context_length": "T5 relative position bias",
+  "developer": "Proteinea (weights published by ElnaggarLab)",
+  "context_length": "Trained on sequences of up to 512 tokens, with T5 relative position bias; longer sequences are embedded whole here",
   "hf_repo": "ElnaggarLab/ankh3-xl",
-  "summary": "The XL Ankh3 model; the largest Ankh3 variant, with 2560-dim embeddings, trained with the same multi-task denoising + sequence-completion recipe.",
-  "architecture": "T5-style encoder–decoder (Ankh line); 2560-dim per-residue encoder embeddings; task-prefix conditioning for representation vs. generation.",
-  "pretraining_data": "≈59M sequences from UniRef50 (JAX/T5x on TPU-v4).",
-  "pretraining_objective": "Multi-task: masked language modeling at multiple masking probabilities plus protein sequence completion (sequence-only).",
+  "summary": "The XL Ankh3 model: the largest Ankh3 variant, with 2560-dim embeddings, trained with the same span denoising and sequence completion recipe.",
+  "architecture": "T5 encoder-decoder with 48 encoder and 24 decoder layers. Only the encoder is used here (3.48B parameters), giving 2560-dim per-residue embeddings. A task prefix, [NLU] for denoising or [S2S] for completion, selects the objective.",
+  "pretraining_data": "59.1M sequences from UniRef50, trained with T5x (JAX) on 64 TPUv4 chips.",
+  "pretraining_objective": "Two objectives, one drawn per sequence: span denoising with 15, 20 or 30% of residues masked by sentinel tokens, and sequence completion, where the encoder reads the first part of a sequence and the decoder generates the rest.",
   "key_innovations": [
-    "Largest Ankh3 variant; highest embedding dimension (2560) in this benchmark's Ankh line",
-    "Multi-task sequence-only pretraining aimed at richer, more generalizable representations"
+    "Largest Ankh3 variant, with the highest embedding dimension (2560) in this benchmark's Ankh line",
+    "Its paper finds the completion prefix [S2S] better than [NLU] on GB1 and fluorescence, and calls the best prefix task-dependent"
   ],
-  "when_to_use": "When maximum Ankh3 capacity / high-dimensional embeddings are desired and the extra compute is acceptable.",
-  "caveats": "Very recent (2025); parameter counts and full training details are not clearly published; verify before quoting. High embedding dim increases downstream head cost.",
-  "needs_verification": true,
+  "when_to_use": "When you want the largest Ankh3 and can afford 2560-dim embeddings.",
+  "caveats": "2025 preprint; weights under CC BY-NC-SA 4.0 (non-commercial). The 2560-dim embeddings make downstream heads more expensive. Sequences were embedded here without a task prefix; the model card prepends [NLU], and the paper evaluates both [NLU] and [S2S], so these embeddings differ from the authors' setting.",
+  "needs_verification": false,
   "citations": [
     {
-      "authors": "Elnaggar, A. et al.",
+      "authors": "Alsamkary, H., Elshaffei, M., Elkerdawy, M., Elnaggar, A.",
       "year": 2025,
       "title": "Ankh3: Multi-Task Pretraining with Sequence Denoising and Completion Enhances Protein Representations",
       "venue": "arXiv:2505.20052",

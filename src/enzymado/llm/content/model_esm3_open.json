@@ -2,7 +2,7 @@
   "display_name": "ESM3 (open, small)",
   "family": "ESM3",
   "developer": "EvolutionaryScale",
-  "context_length": "Up to a few thousand residues",
+  "context_length": "Embedded whole up to 2,644 residues here; longer sequences failed and are left out of every run",
   "hf_repo": "EvolutionaryScale/esm3-sm-open-v1",
   "summary": "The open 1.4B-parameter ESM3; a multimodal generative model over sequence, structure, and function. Here it is used purely as a sequence encoder (1536-dim per-residue embeddings).",
   "architecture": "Multimodal transformer that jointly tokenizes sequence, 3D structure, and function into discrete tracks; the smallest 'open' variant. This benchmark consumes only its per-residue sequence-track representations (1536-dim).",

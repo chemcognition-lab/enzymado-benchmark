@@ -6,11 +6,11 @@
   "hf_repo": "facebook/esm2_t36_3B_UR50D",
   "summary": "The 3B-parameter ESM-2 variant; larger capacity than the 650M model, with 2560-dim embeddings that often improve structure- and function-related tasks at higher compute cost.",
   "architecture": "Encoder-only BERT-style transformer (36 layers, 2560 hidden) with rotary position embeddings. Per-residue final hidden states are pooled by this benchmark.",
-  "pretraining_data": "UniRef50 representative sequences, sampled from UniRef90 during training.",
+  "pretraining_data": "UniRef50 (2021_04 release), with each training sequence sampled from a cluster's UniRef90 members.",
   "pretraining_objective": "Masked language modeling (~15% token masking).",
   "key_innovations": [
     "Scaling ESM-2 to 3B improves contact/structure recovery over 650M",
-    "Same MLM recipe as the family; larger hidden size (2560-dim embeddings)"
+    "Language-model backbone of ESMFold; same MLM recipe as the family, with 2560-dim embeddings"
   ],
   "when_to_use": "When extra representational capacity helps and the ~4× cost over the 650M model is acceptable; a strong upper-mid baseline in the ESM-2 line.",
   "caveats": "Substantially heavier than 650M for often-marginal gains on easy tasks; single-sequence only.",

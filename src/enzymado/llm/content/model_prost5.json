@@ -6,20 +6,20 @@
   "hf_repo": "Rostlab/ProstT5",
   "summary": "A bilingual sequence-and-structure T5 that fine-tunes ProtT5-XL on translating between amino acids and Foldseek 3Di structure tokens; its 1024-dim encoder embeddings carry structure-aware signal.",
   "architecture": "T5 encoder–decoder initialized from ProtT5-XL-UniRef50 and trained to translate between amino-acid sequences and 3Di structural tokens; the encoder yields 1024-dim per-residue embeddings used here.",
-  "pretraining_data": "~17M proteins with high-quality predicted structures from the AlphaFold Protein Structure Database (3Di tokens via Foldseek).",
-  "pretraining_objective": "Bidirectional translation between amino-acid and 3Di (Foldseek) alphabets ('folding' and 'inverse folding'), on top of the ProtT5 base.",
+  "pretraining_data": "17M non-redundant proteins with high-quality predicted structures from the AlphaFold Protein Structure Database, converted to 3Di tokens with Foldseek.",
+  "pretraining_objective": "Two steps on top of ProtT5-XL-UniRef50: continued span denoising on both amino-acid and 3Di sequences, then translation between them in both directions ('folding' and 'inverse folding').",
   "key_innovations": [
     "Injects structural information into a sequence PLM via the 3Di structural alphabet",
     "Enables fast structure-aware remote-homology search and structure/inverse-folding generation"
   ],
   "when_to_use": "When structure-aware sequence representations may help (e.g. binding/active-site or fold-dependent properties) while keeping sequence-only inference.",
-  "caveats": "Structure signal is distilled from predicted (AlphaFold) structures, not experimental; for embedding we use only the amino-acid encoder path.",
+  "caveats": "The structure signal is distilled from predicted (AlphaFold) structures, not experimental ones. Embeddings here come from the amino-acid path with the <AA2fold> prefix, as the model card recommends.",
   "needs_verification": false,
   "citations": [
     {
-      "authors": "Heinzinger, M. et al.",
+      "authors": "Heinzinger, M., Weissenow, K., Gomez Sanchez, J., Henkel, A., Mirdita, M., Steinegger, M., Rost, B.",
       "year": 2024,
-      "title": "Bilingual language model for protein sequence and structure (ProstT5)",
+      "title": "Bilingual language model for protein sequence and structure",
       "venue": "NAR Genomics and Bioinformatics 6(4):lqae150",
       "url": "https://doi.org/10.1093/nargab/lqae150"
     }

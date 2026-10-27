@@ -57,8 +57,9 @@ def test_standing_comes_from_the_leaderboards(records):
 
 def test_attribute_diff_uses_the_attribute_table():
     diff = compare.attribute_diff("ankh3_xl", "esm2_650m")
-    assert diff["flags"]["ankh3_xl"]["needs_verification"] is True
-    assert diff["flags"]["esm2_650M"]["needs_verification"] is False
+    for key in ("ankh3_xl", "esm2_650M"):
+        flagged = bool(compare.load_model_content(key).get("needs_verification"))
+        assert diff["flags"][key]["needs_verification"] is flagged
     differing = {d["field"]: d for d in diff["differing"]}
     assert differing["embedding_dim"]["x"] == 2560
     assert differing["parameters"]["x"] == "3.48B"

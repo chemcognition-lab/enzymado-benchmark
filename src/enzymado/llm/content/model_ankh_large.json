@@ -2,15 +2,15 @@
   "display_name": "Ankh (large)",
   "family": "Ankh",
   "developer": "ElnaggarLab (Proteinea / TU Munich)",
-  "context_length": "T5 relative position bias",
+  "context_length": "T5 relative position bias; longer sequences are embedded whole here",
   "hf_repo": "ElnaggarLab/ankh-large",
-  "summary": "The full-size Ankh model; 1.15B-parameter T5 with 1536-dim embeddings that reached general-purpose state of the art with far fewer parameters than contemporaries.",
-  "architecture": "T5 encoder–decoder with relative position bias (larger embedding dim, more attention heads and feed-forward layers than Ankh-base); 1536-dim per-residue encoder embeddings.",
-  "pretraining_data": "UniRef50 (~45M sequences).",
-  "pretraining_objective": "T5-style masked-span denoising (1-gram masking ~20%, full reconstruction).",
+  "summary": "The full-size Ankh model: a T5 with a 1.15B-parameter encoder and 1536-dim embeddings, reported to outperform larger PLMs of its time with far fewer parameters.",
+  "architecture": "T5 encoder-decoder with relative position bias, 48 encoder and 24 decoder layers, wider than Ankh-base (1536 vs 768 dims, 16 heads). Only the encoder is used here (1.15B parameters), giving 1536-dim per-residue embeddings.",
+  "pretraining_data": "UniRef50, trained with JAX/Flax on Google TPU v4 pods.",
+  "pretraining_objective": "T5-style denoising with 20% of residues masked as single-residue spans, reconstructed by the decoder with the paper's partial demasking.",
   "key_innovations": [
-    "State-of-the-art general-purpose PLM performance at <10% of prior training params",
-    "Ablation-optimized recipe; TPU-v4 pretraining"
+    "Reported state-of-the-art general-purpose performance with under 10% of the pretraining parameters of prior PLMs",
+    "Recipe chosen through more than twenty pretraining experiments on masking, depth and width"
   ],
   "when_to_use": "A strong, efficient alternative to ProtT5/ESM-2 for enzyme property prediction; 1536-dim embeddings balance quality and cost.",
   "caveats": "Encoder–decoder checkpoint carries unused decoder weights for embedding use; single-sequence, sequence-only.",
