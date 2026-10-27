@@ -1,25 +1,22 @@
-"""Regression implementations for standard PyTorch benchmark models."""
+"""Regression implementations for standard PyTorch benchmark models.
+
+Example:
+    model = torch_standard_wrappers.MLPRegressorTorch(activation="relu")
+"""
 
 from __future__ import annotations
 
+import collections.abc
+
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
-from enzymado.models.common import (
-    batch_to_input,
-    make_optimizer,
-    maybe_resume_torch_wrapper,
-    mean_losses,
-    prepare_inputs,
-    restore_torch_training_state,
-)
-from enzymado.models.nn_blocks import LinearModel, MLPModel
-import enzymado.models.training_protocol
-from enzymado.training.torch_wrapper_base import BaseStandardWrapper
+from enzymado.models import common, nn_blocks, training_protocol
+from enzymado.training import torch_wrapper_base
 
 
-class LinearRegressorImplementation(BaseStandardWrapper):
+class LinearRegressorImplementation(torch_wrapper_base.BaseStandardWrapper):
     """Implement full-batch linear regression for the public wrapper."""
 
     validation_metric = "kendall_tau"
@@ -54,23 +51,23 @@ class LinearRegressorImplementation(BaseStandardWrapper):
         unscaled_columns=None,
     ):
         x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
-        x_t, mask_t, input_dim = prepare_inputs(x, mask, self.device)
+        x_t, mask_t, input_dim = common.prepare_inputs(x, mask, self.device)
         y_t = (
             torch.from_numpy(np.asarray(y, dtype=np.float32))
             .unsqueeze(1)
             .to(self.device)
         )
-        self.model = LinearModel(input_dim, output_dim=1).to(self.device)
-        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = make_optimizer(
+        self.model = nn_blocks.LinearModel(input_dim, output_dim=1).to(self.device)
+        start_epoch = common.maybe_resume_torch_wrapper(self, checkpoint_path)
+        optimizer = common.make_optimizer(
             self.model.parameters(), self.optimizer_name, self.lr
         )
-        restore_torch_training_state(self, optimizer)
+        common.restore_torch_training_state(self, optimizer)
         criterion = nn.MSELoss()
 
         val_payload = None
         if x_val is not None and y_val is not None:
-            x_val_t, mask_val_t, _ = prepare_inputs(x_val, mask_val, self.device)
+            x_val_t, mask_val_t, _ = common.prepare_inputs(x_val, mask_val, self.device)
             y_val_t = (
                 torch.from_numpy(np.asarray(y_val, dtype=np.float32))
                 .unsqueeze(1)
@@ -82,7 +79,7 @@ class LinearRegressorImplementation(BaseStandardWrapper):
             self.model.train()
             optimizer.zero_grad()
             loss = criterion(self._forward(x_t, mask_t), y_t)
-            enzymado.models.training_protocol.backward_checked(loss)
+            training_protocol.backward_checked(loss)
             optimizer.step()
 
         def val_loss():
@@ -105,7 +102,7 @@ class LinearRegressorImplementation(BaseStandardWrapper):
 
     def predict(self, x, mask=None):
         x = self._apply_scaler(x)
-        x_t, mask_t, _ = prepare_inputs(x, mask, self.device)
+        x_t, mask_t, _ = common.prepare_inputs(x, mask, self.device)
         self.model.eval()
         with torch.no_grad():
             return self._forward(x_t, mask_t).squeeze(1).cpu().numpy()
@@ -118,26 +115,28 @@ class LinearRegressorImplementation(BaseStandardWrapper):
         checkpoint_path=None,
     ):
         first_batch = next(iter(dataloader))
-        x_t, _, _ = batch_to_input(first_batch, batch_kind, self.device)
+        x_t, _, _ = common.batch_to_input(first_batch, batch_kind, self.device)
         input_dim = x_t.shape[2]
-        self.model = LinearModel(input_dim, output_dim=1).to(self.device)
-        start_epoch = maybe_resume_torch_wrapper(
+        self.model = nn_blocks.LinearModel(input_dim, output_dim=1).to(self.device)
+        start_epoch = common.maybe_resume_torch_wrapper(
             self, checkpoint_path, dataloader=dataloader
         )
-        optimizer = make_optimizer(
+        optimizer = common.make_optimizer(
             self.model.parameters(), self.optimizer_name, self.lr
         )
-        restore_torch_training_state(self, optimizer)
+        common.restore_torch_training_state(self, optimizer)
         criterion = nn.MSELoss()
 
         def train_epoch():
             self.model.train()
             for batch in dataloader:
-                x_t, mask_t, y_np = batch_to_input(batch, batch_kind, self.device)
+                x_t, mask_t, y_np = common.batch_to_input(
+                    batch, batch_kind, self.device
+                )
                 y_t = torch.from_numpy(y_np).unsqueeze(1).to(self.device)
                 optimizer.zero_grad()
                 loss = criterion(self._forward(x_t, mask_t), y_t)
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
@@ -148,7 +147,7 @@ class LinearRegressorImplementation(BaseStandardWrapper):
             label_chunks = []
             with torch.no_grad():
                 for batch in val_dataloader:
-                    x_t, mask_t, y_np = batch_to_input(
+                    x_t, mask_t, y_np = common.batch_to_input(
                         batch,
                         batch_kind,
                         self.device,
@@ -164,7 +163,7 @@ class LinearRegressorImplementation(BaseStandardWrapper):
                 return self._selection_objective(
                     torch.cat(pred_chunks, dim=0), torch.cat(label_chunks, dim=0)
                 )
-            return mean_losses(losses)
+            return common.mean_losses(losses)
 
         self._run_training(
             train_epoch,
@@ -181,29 +180,33 @@ class LinearRegressorImplementation(BaseStandardWrapper):
         preds = []
         with torch.no_grad():
             for batch in dataloader:
-                x_t, mask_t, _ = batch_to_input(batch, batch_kind, self.device)
+                x_t, mask_t, _ = common.batch_to_input(batch, batch_kind, self.device)
                 preds.append(self._forward(x_t, mask_t).squeeze(1).cpu().numpy())
         return np.concatenate(preds)
 
 
-class MLPRegressorImplementation(BaseStandardWrapper):
+class MLPRegressorImplementation(torch_wrapper_base.BaseStandardWrapper):
     """Implement minibatch MLP regression for the public wrapper."""
 
     validation_metric = "kendall_tau"
 
     def __init__(
         self,
-        hidden_dims=(2048,),
-        lr=1e-3,
-        epochs=100,
-        optimizer_name="adamw",
-        weight_decay=0.0,
-        dropout=0.0,
-        batch_size=256,
-        early_stopping_patience=None,
-        early_stopping_min_delta=0.0,
-        device=None,
-    ):
+        hidden_dims: collections.abc.Sequence[int] = (2048,),
+        lr: float = 1e-3,
+        epochs: int = 100,
+        optimizer_name: str = "adamw",
+        weight_decay: float = 0.0,
+        dropout: float = 0.0,
+        batch_size: int = 256,
+        early_stopping_patience: int | None = None,
+        early_stopping_min_delta: float = 0.0,
+        device: str | torch.device | None = None,
+        *,
+        activation: str = "silu",
+        normalize: bool = False,
+        standardize_features: bool = True,
+    ) -> None:
         super().__init__(
             lr,
             epochs,
@@ -216,6 +219,15 @@ class MLPRegressorImplementation(BaseStandardWrapper):
         self.weight_decay = weight_decay
         self.dropout = dropout
         self.batch_size = batch_size
+        # Store only overrides so default resume contracts and old pickled
+        # wrappers retain the same constructor state as before these options.
+        if activation != "silu":
+            self.activation = activation
+        if normalize:
+            self.normalize = normalize
+        # The historical HPO used raw pooled features, before main added scaling.
+        if not standardize_features:
+            self.standardize_features = standardize_features
 
     def fit(
         self,
@@ -228,32 +240,35 @@ class MLPRegressorImplementation(BaseStandardWrapper):
         checkpoint_path=None,
         unscaled_columns=None,
     ):
-        x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
-        x_t, mask_t, input_dim = prepare_inputs(x, mask, self.device)
+        if getattr(self, "standardize_features", True):
+            x, x_val = self._fit_and_apply_scaler(x, mask, x_val, unscaled_columns)
+        x_t, mask_t, input_dim = common.prepare_inputs(x, mask, self.device)
         y_t = (
             torch.from_numpy(np.asarray(y, dtype=np.float32))
             .unsqueeze(1)
             .to(self.device)
         )
-        self.model = MLPModel(
+        self.model = nn_blocks.MLPModel(
             input_dim,
             self.hidden_dims,
             output_dim=1,
             dropout=self.dropout,
+            activation=getattr(self, "activation", "silu"),
+            normalize=getattr(self, "normalize", False),
         ).to(self.device)
-        start_epoch = maybe_resume_torch_wrapper(self, checkpoint_path)
-        optimizer = make_optimizer(
+        start_epoch = common.maybe_resume_torch_wrapper(self, checkpoint_path)
+        optimizer = common.make_optimizer(
             self.model.parameters(),
             self.optimizer_name,
             self.lr,
             self.weight_decay,
         )
-        restore_torch_training_state(self, optimizer)
+        common.restore_torch_training_state(self, optimizer)
         criterion = nn.MSELoss()
 
         val_payload = None
         if x_val is not None and y_val is not None:
-            x_val_t, mask_val_t, _ = prepare_inputs(x_val, mask_val, self.device)
+            x_val_t, mask_val_t, _ = common.prepare_inputs(x_val, mask_val, self.device)
             y_val_t = (
                 torch.from_numpy(np.asarray(y_val, dtype=np.float32))
                 .unsqueeze(1)
@@ -273,7 +288,7 @@ class MLPRegressorImplementation(BaseStandardWrapper):
                 yb = y_t[idx]
                 optimizer.zero_grad()
                 loss = criterion(self._forward(xb, mb), yb)
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
@@ -297,7 +312,7 @@ class MLPRegressorImplementation(BaseStandardWrapper):
                         )
             if use_metric:
                 return self._selection_objective(torch.cat(chunks, dim=0), y_val_t)
-            return mean_losses(losses)
+            return common.mean_losses(losses)
 
         self._run_training(
             train_epoch,
@@ -310,7 +325,7 @@ class MLPRegressorImplementation(BaseStandardWrapper):
 
     def predict(self, x, mask=None):
         x = self._apply_scaler(x)
-        x_t, mask_t, _ = prepare_inputs(x, mask, self.device)
+        x_t, mask_t, _ = common.prepare_inputs(x, mask, self.device)
         self.model.eval()
         n = x_t.shape[0]
         chunks = []
@@ -330,34 +345,38 @@ class MLPRegressorImplementation(BaseStandardWrapper):
         checkpoint_path=None,
     ):
         first_batch = next(iter(dataloader))
-        x_t, _, _ = batch_to_input(first_batch, batch_kind, self.device)
+        x_t, _, _ = common.batch_to_input(first_batch, batch_kind, self.device)
         input_dim = x_t.shape[2]
-        self.model = MLPModel(
+        self.model = nn_blocks.MLPModel(
             input_dim,
             self.hidden_dims,
             output_dim=1,
             dropout=self.dropout,
+            activation=getattr(self, "activation", "silu"),
+            normalize=getattr(self, "normalize", False),
         ).to(self.device)
-        start_epoch = maybe_resume_torch_wrapper(
+        start_epoch = common.maybe_resume_torch_wrapper(
             self, checkpoint_path, dataloader=dataloader
         )
-        optimizer = make_optimizer(
+        optimizer = common.make_optimizer(
             self.model.parameters(),
             self.optimizer_name,
             self.lr,
             self.weight_decay,
         )
-        restore_torch_training_state(self, optimizer)
+        common.restore_torch_training_state(self, optimizer)
         criterion = nn.MSELoss()
 
         def train_epoch():
             self.model.train()
             for batch in dataloader:
-                x_t, mask_t, y_np = batch_to_input(batch, batch_kind, self.device)
+                x_t, mask_t, y_np = common.batch_to_input(
+                    batch, batch_kind, self.device
+                )
                 y_t = torch.from_numpy(y_np).unsqueeze(1).to(self.device)
                 optimizer.zero_grad()
                 loss = criterion(self._forward(x_t, mask_t), y_t)
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
@@ -368,7 +387,7 @@ class MLPRegressorImplementation(BaseStandardWrapper):
             label_chunks = []
             with torch.no_grad():
                 for batch in val_dataloader:
-                    x_t, mask_t, y_np = batch_to_input(
+                    x_t, mask_t, y_np = common.batch_to_input(
                         batch,
                         batch_kind,
                         self.device,
@@ -384,7 +403,7 @@ class MLPRegressorImplementation(BaseStandardWrapper):
                 return self._selection_objective(
                     torch.cat(pred_chunks, dim=0), torch.cat(label_chunks, dim=0)
                 )
-            return mean_losses(losses)
+            return common.mean_losses(losses)
 
         self._run_training(
             train_epoch,
@@ -401,7 +420,7 @@ class MLPRegressorImplementation(BaseStandardWrapper):
         preds = []
         with torch.no_grad():
             for batch in dataloader:
-                x_t, mask_t, _ = batch_to_input(batch, batch_kind, self.device)
+                x_t, mask_t, _ = common.batch_to_input(batch, batch_kind, self.device)
                 preds.append(self._forward(x_t, mask_t).squeeze(1).cpu().numpy())
         return np.concatenate(preds)
 
