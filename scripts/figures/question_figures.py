@@ -7,12 +7,13 @@ Test run: python scripts/figures/question_figures.py --out /tmp/q
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy import stats
 
-from enzymado.paths_and_constants import Paths
-import enzymado.vis as vis
+from enzymado import paths_and_constants, vis
 
-_P = Paths()
+_P = paths_and_constants.Paths()
 RELEASE = pd.to_datetime(
     pd.Series(
         {
@@ -45,6 +46,8 @@ GROUPS = {
     "Masked LM, encoder only": ["esm2_650M", "esm2_3B", "esmc_600m", "esmc_300m"],
     "Masked LM with homologs": ["profluent_e1_300m", "profluent_e1_600m"],
 }
+NOPLM = {"No PLM, sequence descriptors": ["noplm"]}
+NOPLM_DIM = 36  # ProtParam descriptors of the pooled vector
 HEADS = {
     "mlp/no_attention": "MLP",
     "xgboost/no_attention": "XGBoost",
@@ -53,7 +56,7 @@ HEADS = {
     "linear/attention": "linear + attn",
 }
 M_LEFT = 132
-ATTR = pd.read_csv(Path(__file__).with_name("plm_attributes.csv"), index_col="emb")
+ATTRIBUTES = Path(__file__).with_name("plm_attributes.csv")
 
 
 def _plm_ratings(leaderboard: str) -> pd.DataFrame:
@@ -91,13 +94,166 @@ def over_time(out: Path) -> None:
     c.save(out, "q2_over_time")
 
 
-def attributes(out: Path) -> None:
-    lb = _plm_ratings("properties").groupby("embedding_model").rating
+# Display names for the points labelled on the release-date scatter.
+LABEL = {
+    "prot5_xl_half_uniref50": "ProtT5",
+    "prost5": "ProstT5",
+    "ankh_large": "Ankh large",
+    "esmc_300m": "ESM C 300M",
+    "esmc_600m": "ESM C 600M",
+    "ankh3_large": "Ankh3 large",
+    "ankh3_xl": "Ankh3 XL",
+    "profluent_e1_300m": "E1 300M",
+    "profluent_e1_600m": "E1 600M",
+}
+# Which points carry a label on each board, and on which side of the dot.
+LABEL_SIDE = {
+    "properties": {
+        "prost5": "r",
+        "prot5_xl_half_uniref50": "r",
+        "esmc_600m": "l",
+        "esmc_300m": "l",
+        "ankh3_large": "r",
+        "ankh3_xl": "r",
+        "profluent_e1_300m": "l",
+        "profluent_e1_600m": "l",
+    },
+    "real_case": {
+        "ankh_large": "r",
+        "prot5_xl_half_uniref50": "r",
+        "esmc_300m": "l",
+        "ankh3_xl": "r",
+        "profluent_e1_600m": "l",
+    },
+}
+# PLMs released on the same day are nudged apart so their intervals do not overlap.
+DODGE = {
+    "prot5_xl_uniref50": -1,
+    "prot5_xl_half_uniref50": 1,
+    "esm2_650M": -1,
+    "esm2_3B": 1,
+    "ankh_base": -1,
+    "ankh_large": 1,
+    "esmc_300m": -1,
+    "esmc_600m": 1,
+    "ankh3_large": -1,
+    "ankh3_xl": 1,
+    "profluent_e1_300m": -1,
+    "profluent_e1_600m": 1,
+}
+
+
+def over_time_scatter(out: Path) -> None:
+    """Rating of each PLM with the MLP head and mean pooling by release date."""
+    boards = {
+        "properties": "Property leaderboard",
+        "real_case": "Real-case leaderboard",
+    }
+    panel_h, top, left, gap = 300, 84, 64, 76
+    c = vis.Canvas(vis.CANVAS_W, top + panel_h + 58)
+    c.title("Rating of each PLM by release date")
+    panel_w = (c.w - left - gap - 8) / 2
+    t0, t1 = pd.Timestamp("2020-01-01"), pd.Timestamp("2026-07-01")
+    for k, (board, name) in enumerate(boards.items()):
+        lb = _plm_ratings(board).query(
+            "model_family == 'mlp' and pool_type == 'no_attention'"
+        )
+        d = lb.set_index("embedding_model")[["rating", "ci_lo", "ci_hi"]]
+        d["release"] = RELEASE[d.index]
+        x0 = left + k * (panel_w + gap)
+        lo, hi = vis.padded(list(d.ci_lo) + list(d.ci_hi), 0.06)
+
+        def x_of(t: pd.Timestamp, x0: float = x0) -> float:
+            return x0 + (t - t0) / (t1 - t0) * panel_w
+
+        def y_of(v: float, lo: float = lo, hi: float = hi) -> float:
+            return top + panel_h - (v - lo) / (hi - lo) * panel_h
+
+        rho = stats.spearmanr(d.release.map(pd.Timestamp.toordinal), d.rating)
+        c.text(
+            x0, vis.Y_AXIS, name, "label", ha="left", va="baseline", fontweight="bold"
+        )
+        c.text(
+            x0,
+            vis.Y_TICKS + 2,
+            f"Spearman $\\rho$ = {rho.statistic:+.2f}, p = {rho.pvalue:.2f}",
+            "tick",
+            ha="left",
+            va="baseline",
+        )
+        for v in np.arange(np.ceil(lo / 50) * 50, hi, 50):
+            c.line(
+                [x0, x0 + panel_w],
+                [y_of(v)] * 2,
+                color=vis.RULE_2,
+                linewidth=1,
+                zorder=1,
+            )
+            c.text(x0 - 6, y_of(v), f"{v:.0f}", "tick")
+        for year in range(2020, 2027):
+            xt = x_of(pd.Timestamp(f"{year}-01-01"))
+            c.line(
+                [xt] * 2,
+                [top, top + panel_h],
+                color=vis.RULE_2,
+                linewidth=0.6,
+                alpha=0.6,
+                zorder=1,
+            )
+            c.text(
+                xt, top + panel_h + 12, str(year), "tick", ha="center", va="baseline"
+            )
+        colour = vis.TEAL if k == 0 else vis.BROWN
+        for emb, row in d.iterrows():
+            x = x_of(row.release) + 4.5 * DODGE.get(emb, 0)
+            c.line(
+                [x, x],
+                [y_of(row.ci_lo), y_of(row.ci_hi)],
+                color=vis.INK,
+                linewidth=1.0,
+                alpha=0.35,
+                zorder=2,
+            )
+            c.dot(x, y_of(row.rating), colour, r=3.8)
+            side = LABEL_SIDE[board].get(emb)
+            if side:
+                c.text(
+                    x + (8 if side == "r" else -8),
+                    y_of(row.rating),
+                    LABEL[emb],
+                    "row",
+                    ha="left" if side == "r" else "right",
+                )
+        c.text(
+            x0 + panel_w / 2,
+            top + panel_h + 26,
+            "first public release",
+            "axis",
+            ha="center",
+            va="baseline",
+        )
+        if k == 0:
+            c.text(
+                x0 - 50,
+                top + panel_h / 2,
+                "Bradley–Terry rating",
+                "axis",
+                ha="center",
+                va="center",
+                rotation=90,
+            )
+    c.note("MLP head · mean pooling · bars: 95% bootstrap interval · separate fits")
+    c.save(out, "q2_over_time_scatter")
+
+
+def attributes(out: Path, attr: pd.DataFrame) -> None:
+    lb = vis.ratings("properties").groupby("embedding_model").rating
     best, mean = lb.max(), lb.mean()
+    groups = GROUPS | NOPLM
     c_par, c_dim, left = 190, 238, 278
-    n_rows = sum(len(m) for m in GROUPS.values()) + len(GROUPS)
+    n_rows = sum(len(m) for m in groups.values()) + len(groups)
     c = vis.Canvas(vis.CANVAS_W, vis.Y_PLOT + n_rows * vis.ROW_H + vis.M_BOT)
-    c.title("Rating by training approach, size and width")
+    c.title("Comparing the performance of PLM representations")
     x_of = c.axis(
         left,
         c.w - left - 56,
@@ -108,19 +264,19 @@ def attributes(out: Path) -> None:
     for x, s in ((c_par, "params"), (c_dim, "dim"), (c.w - 4, "gap")):
         c.text(x, vis.Y_TICKS, s, "tick", va="baseline")
     i = 0
-    for group, members in GROUPS.items():
+    for group, members in groups.items():
         c.text(16, _row_y(i), group, "label", ha="left")
         for emb in members:
             i += 1
-            p = ATTR.params[emb]
+            if emb in attr.index:
+                p = attr.params[emb]
+                size = f"{p / 1000:.2f}B" if p >= 1000 else f"{p:.0f}M"
+                dim = attr.dim[emb]
+            else:
+                size, dim = "n/a", NOPLM_DIM
             c.text(28, _row_y(i), vis.short(emb), "row", ha="left")
-            c.text(
-                c_par,
-                _row_y(i),
-                f"{p / 1000:.2f}B" if p >= 1000 else f"{p:.0f}M",
-                "tick",
-            )
-            c.text(c_dim, _row_y(i), str(ATTR.dim[emb]), "tick")
+            c.text(c_par, _row_y(i), size, "tick")
+            c.text(c_dim, _row_y(i), str(dim), "tick")
             c.dumbbell(x_of(mean[emb]), x_of(best[emb]), _row_y(i), vis.BROWN, vis.TEAL)
             c.text(c.w - 4, _row_y(i), f"{best[emb] - mean[emb]:.0f}", "value")
         i += 1
@@ -131,14 +287,14 @@ def attributes(out: Path) -> None:
     c.save(out, "q3_representation_attributes")
 
 
-def width_by_head(out: Path) -> None:
+def width_by_head(out: Path, attr: pd.DataFrame) -> None:
     lb = _plm_ratings("properties").assign(
-        dim=lambda d: d.embedding_model.map(ATTR.dim)
+        dim=lambda d: d.embedding_model.map(attr.dim)
     )
     lb["head"] = lb.model_family + "/" + lb.pool_type
     narrow = lb[lb.dim <= 1024].groupby("head").rating.mean()
     wide = lb[lb.dim == 2560].groupby("head").rating.mean()
-    n_narrow, n_wide = (ATTR.dim <= 1024).sum(), (ATTR.dim == 2560).sum()
+    n_narrow, n_wide = (attr.dim <= 1024).sum(), (attr.dim == 2560).sum()
     c = vis.Canvas(vis.CANVAS_W, vis.Y_PLOT + len(HEADS) * vis.ROW_H + 10 + vis.M_BOT)
     c.title("Rating by embedding width and head")
     x_of = c.axis(
@@ -205,9 +361,11 @@ def main() -> None:
     out = parser.parse_args().out
     out.mkdir(parents=True, exist_ok=True)
     vis.setup()
+    attr = pd.read_csv(ATTRIBUTES, index_col="emb")
     over_time(out)
-    attributes(out)
-    width_by_head(out)
+    over_time_scatter(out)
+    attributes(out, attr)
+    width_by_head(out, attr)
     progress(out)
 
 

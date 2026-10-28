@@ -1,5 +1,6 @@
 """Shared style, data loading and drawing primitives for the paper figures."""
 
+import collections.abc
 import json
 from pathlib import Path
 
@@ -11,9 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from enzymado.paths_and_constants import Paths
+from enzymado import paths_and_constants
 
-_P = Paths()
+_P = paths_and_constants.Paths()
 FONT_DIR = _P.scripts_dir / "figures" / "fonts"
 MONO, SANS = "IBM Plex Mono", "Archivo"
 
@@ -79,6 +80,7 @@ TASK_LABEL = {
     "solubility": "Solubility",
 }
 PRIMARY = {"regression": "kendall_tau", "classification": "auprc"}
+Colour = str | tuple[float, ...]
 
 
 def setup() -> None:
@@ -104,7 +106,7 @@ def short(model: str) -> str:
     return SHORT_MODEL.get(model, model)
 
 
-def primary_scores(plm_only: bool = True) -> pd.DataFrame:
+def primary_scores(*, plm_only: bool = True) -> pd.DataFrame:
     """One row per published run with its primary metric on the test split."""
     root = _P.results_dir / "predictions"
     rows = []
@@ -133,7 +135,7 @@ def ratings(leaderboard: str) -> pd.DataFrame:
     path = (
         _P.results_dir / "ratings" / "seed_42_two_leaderboards" / f"{leaderboard}.csv"
     )
-    return pd.read_csv(path)
+    return pd.read_csv(path).copy()
 
 
 def padded(values: list[float], frac: float = 0.08) -> tuple[float, float]:
@@ -160,7 +162,7 @@ class Canvas:
                 card_h,
                 clip_on=False,
                 zorder=0,
-                boxstyle="round,pad=0,rounding_size=%f" % (PANEL_RADIUS * card_w),
+                boxstyle=f"round,pad=0,rounding_size={PANEL_RADIUS * card_w:f}",
                 facecolor=SURFACE,
                 edgecolor="none",
             )
@@ -188,7 +190,9 @@ class Canvas:
     def line(self, xs: list[float], ys: list[float], **kw) -> None:
         self.ax.plot(xs, ys, **kw)
 
-    def dot(self, x: float, y: float, colour, shape: str = "o", r: float = 4.6) -> None:
+    def dot(
+        self, x: float, y: float, colour: Colour, shape: str = "o", r: float = 4.6
+    ) -> None:
         self.ax.plot(
             [x],
             [y],
@@ -200,7 +204,7 @@ class Canvas:
             zorder=3,
         )
 
-    def dumbbell(self, x0: float, x1: float, y: float, c0, c1) -> None:
+    def dumbbell(self, x0: float, x1: float, y: float, c0: Colour, c1: Colour) -> None:
         """A grey bar between two values with a dot at each end."""
         self.line(
             [x0, x1],
@@ -223,8 +227,12 @@ class Canvas:
         name: str,
         fmt: str = "{:.2f}",
         n: int = 4,
-    ):
-        """Vertical rules with tick values and the axis name; returns value -> x."""
+        top: float = 0,
+    ) -> collections.abc.Callable[[float], float]:
+        """Vertical rules with tick values and the axis name; returns value -> x.
+
+        top moves the name, ticks and rules down, leaving room for a panel heading.
+        """
 
         def x_of(v: float) -> float:
             return left + (v - lo) / (hi - lo) * width
@@ -232,16 +240,25 @@ class Canvas:
         bottom = self.h - M_BOT
         for v in np.linspace(lo, hi, n):
             self.line(
-                [x_of(v)] * 2, [Y_PLOT, bottom], color=RULE_2, linewidth=1, zorder=1
+                [x_of(v)] * 2,
+                [Y_PLOT + top, bottom],
+                color=RULE_2,
+                linewidth=1,
+                zorder=1,
             )
             self.text(
-                x_of(v), Y_TICKS, fmt.format(v), "tick", ha="center", va="baseline"
+                x_of(v),
+                Y_TICKS + top,
+                fmt.format(v),
+                "tick",
+                ha="center",
+                va="baseline",
             )
-        self.text(left, Y_AXIS, name, "axis", ha="left", va="baseline")
+        self.text(left, Y_AXIS + top, name, "axis", ha="left", va="baseline")
         return x_of
 
     def legend(
-        self, items: list[tuple[str, str]], x: float = 0, gap: float = 22
+        self, items: list[tuple[Colour, str]], x: float = 0, gap: float = 22
     ) -> None:
         """One row of (colour, label) dots at the foot of the card."""
         y = self.h - 12
