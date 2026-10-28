@@ -66,9 +66,7 @@ def load_embeddings(
     ) as handle:
         available_keys = set(handle.keys())
         for index, (sequence, uniprot_id) in enumerate(zip(sequences, uniprot_ids)):
-            embedding = _pooled_embedding(
-                handle, available_keys, sequence, uniprot_id
-            )
+            embedding = _pooled_embedding(handle, available_keys, sequence, uniprot_id)
             if embedding is None:
                 n_missing += 1
                 continue
@@ -81,7 +79,7 @@ def load_embeddings(
             f"  [UMAP] {n_found} embeddings found, {n_missing} missing in safetensors."
         )
     if n_found < 5:
-        print(f"  [UMAP] Too few embeddings ({n_found}) — skipping UMAP.")
+        print(f"  [UMAP] Too few embeddings ({n_found}), skipping UMAP.")
         return None, []
 
     return np.stack(embeddings, axis=0), valid_indices
@@ -156,7 +154,7 @@ def _plot_labels(
         )
 
     axis.set_title(
-        f"{prop_name} — UMAP ({emb_model})\nColored by: {target_col or 'none'}",
+        f"{prop_name}: UMAP ({emb_model})\nColored by: {target_col or 'none'}",
         fontsize=11,
     )
     axis.set_xlabel("UMAP-1")
@@ -253,7 +251,7 @@ def _plot_splits(
 
     split_name = split_path.stem if split_path else "no split"
     axis.set_title(
-        f"{prop_name} — UMAP ({emb_model})\nColored by: split  [{split_name}]",
+        f"{prop_name}: UMAP ({emb_model})\nColored by: split  [{split_name}]",
         fontsize=11,
     )
     axis.set_xlabel("UMAP-1")
@@ -283,7 +281,7 @@ def generate(
 ) -> dict[str, str] | None:
     """Generate label-colored and split-colored UMAP plots for one property."""
     if umap_lib is None:
-        print("  [UMAP] Missing dependency (umap-learn) — skipping UMAP generation.")
+        print("  [UMAP] Missing dependency (umap-learn), skipping UMAP generation.")
         return None
 
     matplotlib.use("Agg")

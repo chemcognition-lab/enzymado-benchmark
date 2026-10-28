@@ -11,10 +11,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scipy.cluster.hierarchy
-import scipy.spatial.distance
-import sklearn.feature_extraction.text
-import sklearn.metrics.pairwise
 
 from . import statistics
 
@@ -114,7 +110,7 @@ def run(
 ) -> dict[str, typing.Any] | None:
     """Run MMseqs2 easy-cluster on the unique sequences in one dataset."""
     if shutil.which("mmseqs") is None:
-        print("  [Cluster] mmseqs not found in PATH — skipping clustering.")
+        print("  [Cluster] mmseqs not found in PATH, skipping clustering.")
         print(
             "            Hint: run 'module load mmseqs2' before launching this script."
         )
@@ -129,15 +125,14 @@ def run(
         None,
     )
     if seq_col is None:
-        print("  [Cluster] No sequence column found — skipping clustering.")
+        print("  [Cluster] No sequence column found, skipping clustering.")
         return None
 
     sequence_to_id = _sequence_map(base_df, seq_col)
     total_sequences = len(sequence_to_id)
     if total_sequences < 2:
         print(
-            f"  [Cluster] Only {total_sequences} unique sequences — "
-            "skipping clustering."
+            f"  [Cluster] Only {total_sequences} unique sequences, skipping clustering."
         )
         return None
 
@@ -165,14 +160,6 @@ def run(
         f"({n_singletons} singletons, largest={largest})."
     )
 
-    safe_id_to_sequence = {
-        f"seq{index}": sequence for index, sequence in enumerate(sequence_to_id)
-    }
-    representative_sequences = [
-        safe_id_to_sequence[safe_id]
-        for safe_id in cluster_sizes
-        if safe_id in safe_id_to_sequence
-    ]
     return statistics.sanitize(
         {
             "cluster_method": "mmseqs2",
@@ -187,7 +174,6 @@ def run(
             "largest_cluster_size": largest,
             "ratio_unique_variants": round(n_clusters / total_sequences, 4),
             "_cluster_sizes": sizes,
-            "_representative_sequences": representative_sequences[:300],
         }
     )
 
@@ -309,7 +295,7 @@ def plot_diversity(
     output_dir.mkdir(parents=True, exist_ok=True)
     figure, axes = plt.subplots(1, 2, figsize=(13, 5))
     figure.suptitle(
-        f"{prop_name} — Sequence Diversity  "
+        f"{prop_name}: Sequence Diversity  "
         f"(MMSeqs2 identity≥{seq_identity:.0%}, "
         f"{n_clusters} clusters / {total_sequences} sequences)",
         fontsize=11,
@@ -323,58 +309,4 @@ def plot_diversity(
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(figure)
     print(f"  [ClusterDiversity] Saved cluster diversity panel → {output_path}")
-    return str(output_path)
-
-
-def plot_dendrogram(
-    cluster_stats: dict[str, typing.Any],
-    prop_name: str,
-    output_dir: Path,
-) -> str | None:
-    """Cluster representative trigram vectors and save their dendrogram."""
-    representative_sequences = cluster_stats.get("_representative_sequences")
-    if not representative_sequences or len(representative_sequences) < 2:
-        print("  [Dendrogram] Not enough representatives — skipping.")
-        return None
-
-    matplotlib.use("Agg")
-    print(
-        "  [Dendrogram] Building trigram distance matrix for "
-        f"{len(representative_sequences)} representatives..."
-    )
-    vectorizer = sklearn.feature_extraction.text.CountVectorizer(
-        analyzer="char",
-        ngram_range=(3, 3),
-    )
-    trigram_counts = (
-        vectorizer.fit_transform(representative_sequences).toarray().astype(float)
-    )
-    distance_matrix = sklearn.metrics.pairwise.cosine_distances(trigram_counts)
-    np.fill_diagonal(distance_matrix, 0.0)
-    condensed = scipy.spatial.distance.squareform(distance_matrix, checks=False)
-    linkage_matrix = scipy.cluster.hierarchy.linkage(condensed, method="average")
-
-    n_representatives = len(representative_sequences)
-    figure_width = max(10, min(n_representatives * 0.12, 60))
-    figure, axis = plt.subplots(figsize=(figure_width, 6))
-    scipy.cluster.hierarchy.dendrogram(
-        linkage_matrix,
-        ax=axis,
-        no_labels=True,
-        color_threshold=0.7 * float(linkage_matrix[:, 2].max()),
-    )
-    axis.set_title(
-        f"{prop_name} — Cluster Representative Dendrogram\n"
-        f"({n_representatives} representatives, "
-        "UPGMA on trigram cosine distance)"
-    )
-    axis.set_xlabel("Cluster representatives")
-    axis.set_ylabel("Cosine distance")
-    plt.tight_layout()
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{prop_name}_dendrogram.png"
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(figure)
-    print(f"  [Dendrogram] Saved → {output_path}")
     return str(output_path)

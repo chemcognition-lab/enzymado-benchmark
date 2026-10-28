@@ -341,7 +341,6 @@ def test_mmseqs_commands_and_cluster_summary_are_stable(
         "largest_cluster_size": 2,
         "ratio_unique_variants": 0.6667,
         "_cluster_sizes": [2, 1],
-        "_representative_sequences": ["AAAA", "DDDD"],
     }
 
 
@@ -351,23 +350,13 @@ def test_cluster_figures_keep_the_existing_names(tmp_path) -> None:
         tmp_path,
         seq_identity=0.3,
     )
-    cluster_stats = {
-        "_cluster_sizes": [2, 1],
-        "_representative_sequences": ["AAAA", "CCCC"],
-    }
+    cluster_stats = {"_cluster_sizes": [2, 1]}
 
     diversity_path = populator.generate_cluster_diversity_plots(
         cluster_stats,
         "active_sites",
         tmp_path,
     )
-    dendrogram_path = populator.generate_dendrogram(
-        cluster_stats,
-        "active_sites",
-        tmp_path,
-    )
 
     assert diversity_path == str(tmp_path / "active_sites_cluster_diversity.png")
-    assert dendrogram_path == str(tmp_path / "active_sites_dendrogram.png")
     assert Path(diversity_path).is_file()
-    assert Path(dendrogram_path).is_file()

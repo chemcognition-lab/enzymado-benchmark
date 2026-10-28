@@ -26,9 +26,7 @@ import safetensors
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "src"))
 
-from enzymado.data_loading import data_registry  # noqa: E402
-from enzymado.data_loading.stores import load_sequence_to_id_index  # noqa: E402
-from enzymado.data_loading.task_csv import normalize_sequence  # noqa: E402
+from enzymado.data_loading import data_registry, stores, task_csv  # noqa: E402
 
 POOLED_DIR = _REPO / "data" / "embeddings_mean_pooled" / "protein_sequences_unique"
 SEQUENCE_INDEX = _REPO / "data" / "processed" / "protein_pool.csv"
@@ -45,14 +43,26 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def display_label(rows: list[dict[str, str]], config) -> pd.Series:
-    """Label used to colour the points: the raw value, or the site count for residue tasks."""
+def display_label(
+    rows: list[dict[str, str]], config: data_registry.TaskConfig
+) -> pd.Series:
+    """Colour label of each point: the raw value, or the site count on residue tasks."""
     if str(config.label_kind) == "residue_binary_vector":
-        return pd.Series([
-            len([p for p in re.split(r"[\[\],;\s]+", row.get(config.target_column) or "")
-                 if p.strip()])
-            for row in rows
-        ], dtype="float64")
+        return pd.Series(
+            [
+                len(
+                    [
+                        p
+                        for p in re.split(
+                            r"[\[\],;\s]+", row.get(config.target_column) or ""
+                        )
+                        if p.strip()
+                    ]
+                )
+                for row in rows
+            ],
+            dtype="float64",
+        )
     column = config.target_column.removesuffix("_standardized")
     if column not in rows[0]:
         column = config.target_column
@@ -63,11 +73,13 @@ def display_label(rows: list[dict[str, str]], config) -> pd.Series:
     return values
 
 
-def split_by_sequence(rows: list[dict[str, str]], config, name: str) -> dict[str, str]:
+def split_by_sequence(
+    rows: list[dict[str, str]], config: data_registry.TaskConfig, name: str
+) -> dict[str, str]:
     """Map each sequence to its split."""
     mapping: dict[str, str] = {}
     for row in rows:
-        seq = normalize_sequence(row.get(config.sequence_column, ""))
+        seq = task_csv.normalize_sequence(row.get(config.sequence_column, ""))
         split = (row.get(config.split_column) or "").strip()
         previous = mapping.setdefault(seq, split)
         if previous != split:
@@ -79,7 +91,9 @@ def load_vectors(embedding: str, ids: list[str]) -> np.ndarray:
     """Load the pooled embeddings for the given ids as float32."""
     path = POOLED_DIR / f"{embedding}.safetensors"
     with safetensors.safe_open(str(path), framework="pt", device="cpu") as handle:
-        return np.stack([handle.get_tensor(i).float().numpy() for i in ids]).astype(np.float32)
+        return np.stack([handle.get_tensor(i).float().numpy() for i in ids]).astype(
+            np.float32
+        )
 
 
 def write_umap(frame: pd.DataFrame, target: Path) -> None:
@@ -96,7 +110,9 @@ def write_umap(frame: pd.DataFrame, target: Path) -> None:
     staging.replace(target)
 
 
-def project(frame: pd.DataFrame, embeddings: list[str], out_dir: Path, stem: str) -> None:
+def project(
+    frame: pd.DataFrame, embeddings: list[str], out_dir: Path, stem: str
+) -> None:
     """Fit one UMAP per embedding on the distinct sequences and write each layout."""
     import umap  # slow to import, so only when needed
 
@@ -112,12 +128,15 @@ def project(frame: pd.DataFrame, embeddings: list[str], out_dir: Path, stem: str
         out["umap_2"] = [float(where[i][1]) for i in out["sequence_id"]]
         target = out_dir / f"{stem}_{embedding}.parquet"
         write_umap(out, target)
-        print(f"  {embedding:<24} {vectors.shape[1]:>5} dims  {time.time() - start:7.1f}s"
-              f"  -> {target.relative_to(_REPO)}", flush=True)
+        print(
+            f"  {embedding:<24} {vectors.shape[1]:>5} dims  {time.time() - start:7.1f}s"
+            f"  -> {target.relative_to(_REPO)}",
+            flush=True,
+        )
 
 
 def pool_frame(seq_to_id: dict[str, str], common: set[str]) -> pd.DataFrame:
-    """One row per protein in the benchmark, with the datasets it belongs to and its EC class."""
+    """One row per benchmark protein, with its datasets and its EC class."""
     datasets: dict[str, set[str]] = {}
     uniprot: dict[str, str] = {}
     length: dict[str, int] = {}
@@ -128,7 +147,7 @@ def pool_frame(seq_to_id: dict[str, str], common: set[str]) -> pd.DataFrame:
             columns.append(config.wildtype_sequence_column)
         for row in read_rows(sorted(config.dataset_paths.values())[0]):
             for column in columns:
-                seq = normalize_sequence(row.get(column, ""))
+                seq = task_csv.normalize_sequence(row.get(column, ""))
                 sid = seq_to_id.get(seq)
                 if sid not in common:
                     continue
@@ -137,73 +156,102 @@ def pool_frame(seq_to_id: dict[str, str], common: set[str]) -> pd.DataFrame:
                 if row.get("uniprot_id") and column == config.sequence_column:
                     uniprot.setdefault(sid, row["uniprot_id"].strip())
                 if str(config.label_kind) == "multilabel_ec":
-                    codes = (row.get(config.target_column) or "").replace(config.ec_separator, ";")
+                    codes = (row.get(config.target_column) or "").replace(
+                        config.ec_separator, ";"
+                    )
                     ec_top.setdefault(sid, set()).update(
-                        c.strip().split(".")[0] for c in codes.split(";") if c.strip())
+                        c.strip().split(".")[0] for c in codes.split(";") if c.strip()
+                    )
 
     ids = sorted(datasets)
     top = [ec_top.get(i, set()) - {"-", ""} for i in ids]
-    return pd.DataFrame({
-        "sequence_id": ids,
-        "uniprot_id": [uniprot.get(i) for i in ids],
-        "seq_len": [length[i] for i in ids],
-        "datasets": [";".join(sorted(datasets[i])) for i in ids],
-        "n_datasets": [len(datasets[i]) for i in ids],
-        "ec_class": [next(iter(t)) if len(t) == 1 else ("multiple" if t else None) for t in top],
-    })
+    return pd.DataFrame(
+        {
+            "sequence_id": ids,
+            "uniprot_id": [uniprot.get(i) for i in ids],
+            "seq_len": [length[i] for i in ids],
+            "datasets": [";".join(sorted(datasets[i])) for i in ids],
+            "n_datasets": [len(datasets[i]) for i in ids],
+            "ec_class": [
+                next(iter(t)) if len(t) == 1 else ("multiple" if t else None)
+                for t in top
+            ],
+        }
+    )
 
 
-def build(name: str, embeddings: list[str], seq_to_id: dict[str, str],
-          common: set[str]) -> None:
+def build(
+    name: str, embeddings: list[str], seq_to_id: dict[str, str], common: set[str]
+) -> None:
     config = data_registry.TASK_REGISTRY[name]
     paths = sorted(config.dataset_paths.values())
     random_path = next((p for p in paths if "random" in p.stem), paths[0])
     rows = read_rows(random_path)
 
-    frame = pd.DataFrame({
-        "sequence_id": [seq_to_id.get(normalize_sequence(r.get(config.sequence_column, "")))
-                        for r in rows],
-        "uniprot_id": [(r.get("uniprot_id") or "").strip() or None for r in rows],
-        "seq_len": [len(normalize_sequence(r.get(config.sequence_column, ""))) for r in rows],
-        "label": display_label(rows, config),
-        "split": [(r.get(config.split_column) or "").strip() for r in rows],
-    })
+    frame = pd.DataFrame(
+        {
+            "sequence_id": [
+                seq_to_id.get(
+                    task_csv.normalize_sequence(r.get(config.sequence_column, ""))
+                )
+                for r in rows
+            ],
+            "uniprot_id": [(r.get("uniprot_id") or "").strip() or None for r in rows],
+            "seq_len": [
+                len(task_csv.normalize_sequence(r.get(config.sequence_column, "")))
+                for r in rows
+            ],
+            "label": display_label(rows, config),
+            "split": [(r.get(config.split_column) or "").strip() for r in rows],
+        }
+    )
     similarity = [p for p in paths if "similarity" in p.stem]
     if similarity:
         by_seq = split_by_sequence(read_rows(similarity[0]), config, name)
         frame["split_similarity"] = [
-            by_seq[normalize_sequence(r.get(config.sequence_column, ""))] for r in rows
+            by_seq[task_csv.normalize_sequence(r.get(config.sequence_column, ""))]
+            for r in rows
         ]
 
     kept = frame["sequence_id"].isin(common)
     frame = frame[kept].reset_index(drop=True)
-    card_dir = random_path.parent.name   # the explorer keys files by this, e.g. ddg_mut
-    print(f"{name}: {len(rows):,} rows, {int(kept.sum()):,} in the common set, "
-          f"{frame['sequence_id'].nunique():,} distinct sequences", flush=True)
+    card_dir = random_path.parent.name  # the explorer keys files by this, e.g. ddg_mut
+    print(
+        f"{name}: {len(rows):,} rows, {int(kept.sum()):,} in the common set, "
+        f"{frame['sequence_id'].nunique():,} distinct sequences",
+        flush=True,
+    )
     project(frame, embeddings, OUT_DIR, card_dir)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--dataset", choices=sorted(data_registry.TASK_REGISTRY))
-    target.add_argument("--pool", action="store_true",
-                        help="One UMAP of every protein in the benchmark.")
-    parser.add_argument("--embedding", action="append",
-                        help="Repeatable. Defaults to every pooled store.")
+    target.add_argument(
+        "--pool",
+        action="store_true",
+        help="One UMAP of every protein in the benchmark.",
+    )
+    parser.add_argument(
+        "--embedding",
+        action="append",
+        help="Repeatable. Defaults to every pooled store.",
+    )
     args = parser.parse_args()
 
     embeddings = args.embedding or embedding_names()
     unknown = set(embeddings) - set(embedding_names())
     if unknown:
         raise SystemExit(f"no pooled store for: {sorted(unknown)}")
-    seq_to_id = load_sequence_to_id_index(SEQUENCE_INDEX)
+    seq_to_id = stores.load_sequence_to_id_index(SEQUENCE_INDEX)
     common = set(COMMON_IDS.read_text().split())
     if args.pool:
         frame = pool_frame(seq_to_id, common)
         print(f"pool: {len(frame):,} proteins", flush=True)
-        # Own folder, so the website sync does not ship it before there is a view for it.
+        # Own folder, so the website sync skips it until a view exists for it.
         project(frame, embeddings, OUT_DIR / "pool", "pool")
     else:
         build(args.dataset, embeddings, seq_to_id, common)

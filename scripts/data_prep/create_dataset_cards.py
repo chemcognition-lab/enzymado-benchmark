@@ -54,15 +54,6 @@ def create_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--dendrogram",
-        action="store_true",
-        default=False,
-        help=(
-            "Generate a dendrogram of cluster representatives "
-            "(UPGMA, trigram cosine distance). Off by default."
-        ),
-    )
-    parser.add_argument(
         "--figures_dir",
         default=str(dataset_card_populator.DEFAULT_FIGURES_DIR),
         help=(
@@ -90,7 +81,6 @@ def main() -> None:
         emb_model=args.emb_model,
         embeddings_json=args.embeddings_json,
         seq_identity=args.seq_identity,
-        dendrogram=args.dendrogram,
         allow_incomplete=args.allow_incomplete,
         figures_dir=args.figures_dir,
     )

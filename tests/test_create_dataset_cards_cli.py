@@ -45,7 +45,6 @@ def test_dataset_card_cli_defaults_are_stable(monkeypatch) -> None:
                 "emb_model": None,
                 "embeddings_json": "embeddings_models_output.json",
                 "seq_identity": 0.5,
-                "dendrogram": False,
                 "allow_incomplete": False,
                 "figures_dir": "results/figures",
             },
@@ -67,7 +66,6 @@ def test_dataset_card_cli_forwards_selected_options(monkeypatch) -> None:
             "custom_embeddings.json",
             "--seq_identity",
             "0.6",
-            "--dendrogram",
         ],
     ) == [
         (
@@ -79,7 +77,6 @@ def test_dataset_card_cli_forwards_selected_options(monkeypatch) -> None:
                 "seq_identity": 0.6,
                 "allow_incomplete": False,
                 "figures_dir": "results/figures",
-                "dendrogram": True,
             },
         ),
         ("run", None),

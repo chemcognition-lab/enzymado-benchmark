@@ -27,7 +27,6 @@ class DatasetCardPopulator:
         emb_model: str | None = None,
         embeddings_json: str | Path | None = None,
         seq_identity: float = DEFAULT_SEQUENCE_IDENTITY,
-        dendrogram: bool = False,
         allow_incomplete: bool = False,
         figures_dir: str | Path = DEFAULT_FIGURES_DIR,
     ) -> None:
@@ -44,9 +43,6 @@ class DatasetCardPopulator:
         self.embeddings_json = Path(embeddings_json) if embeddings_json else None
         self.seq_identity = (
             seq_identity  # Identity threshold for whole-dataset MMSeqs2 clustering
-        )
-        self.dendrogram = (
-            dendrogram  # Whether to generate a dendrogram of cluster representatives
         )
 
         self.target_map = dict(statistics.TARGET_MAP)
@@ -121,19 +117,6 @@ class DatasetCardPopulator:
             prop_name,
             output_dir,
             self.seq_identity,
-        )
-
-    def generate_dendrogram(
-        self,
-        cluster_stats: dict[str, typing.Any],
-        prop_name: str,
-        output_dir: Path,
-    ) -> str | None:
-        """Generate a dendrogram of cluster representatives."""
-        return clustering.plot_dendrogram(
-            cluster_stats,
-            prop_name,
-            output_dir,
         )
 
     def _resolve_embedding_path(self) -> Path | None:
@@ -266,18 +249,13 @@ class DatasetCardPopulator:
             prop_name,
             output_dir,
         )
-        dendrogram_path = (
-            self.generate_dendrogram(cluster_stats, prop_name, output_dir)
-            if self.dendrogram
-            else None
-        )
         cluster_for_card = {
             key: value
             for key, value in cluster_stats.items()
             if not key.startswith("_")
         }
         cluster_for_card["cluster_diversity_plot"] = diversity_path
-        cluster_for_card["dendrogram_plot"] = dendrogram_path
+        cluster_for_card["dendrogram_plot"] = None  # the published card schema keeps it
 
         with card_path.open(encoding="utf-8") as handle:
             card = json.load(handle)
