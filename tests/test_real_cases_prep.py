@@ -13,6 +13,10 @@ from scripts.data_prep.real_cases import (
     welo5_soraphen,
 )
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 
 def test_clean_and_validate_protein_sequence() -> None:
     """Verify gap stripping and canonical amino-acid validation."""
@@ -119,16 +123,16 @@ def test_layout_builders_and_validation(tmp_path: Path) -> None:
     base_seq = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY"
     written = utils.write_processed_dataset(
         "tiny_valid",
-        ["dataset_id", "protein_sequence", "val"],
+        [_C.dataset_id, _C.protein_sequence, "val"],
         [
             {
-                "dataset_id": "tiny_valid_000001",
-                "protein_sequence": f"{base_seq}A",
+                _C.dataset_id: "tiny_valid_000001",
+                _C.protein_sequence: f"{base_seq}A",
                 "val": "1.0",
             },
             {
-                "dataset_id": "tiny_valid_000002",
-                "protein_sequence": f"{base_seq}C",
+                _C.dataset_id: "tiny_valid_000002",
+                _C.protein_sequence: f"{base_seq}C",
                 "val": "2.0",
             },
         ],

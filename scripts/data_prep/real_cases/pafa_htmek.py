@@ -1,4 +1,16 @@
-"""Preprocess PafA alkaline phosphatase HT-MEK kinetic datasets (Layout A)."""
+"""Preprocess PafA alkaline phosphatase HT-MEK kinetic datasets (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence construction & numbering offset: Loads the mature Elizabethkingia
+  meningoseptica PafA sequence from pafa_wt.fasta (appending the C-terminal
+  "GR" linker residues present in the HT-MEK construct when absent). Because
+  HT-MEK mutation tokens use full-length precursor numbering (including the
+  17-aa signal peptide), mutations are applied with offset = -17.
+- Endpoints & target transformation: Extracts strictly positive measurements
+  for kcat (cMUP, s^-1), Km (cMUP, uM), and kcat/Km (M^-1 s^-1), transforming
+  each endpoint onto a base-10 logarithmic scale (log10_kcat, log10_km,
+  log10_kcat_km).
+"""
 
 from __future__ import annotations
 
@@ -6,6 +18,10 @@ import csv
 from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
+
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
 
 PAFA_ENDPOINTS: dict[str, tuple[str, str]] = {
     "pafa_htmek_kcat": ("kcat_cMUP_s_inv", "log10_kcat"),
@@ -69,7 +85,7 @@ def clean_pafa_data(
     written: dict[str, Path] = {}
     for task_name, (_, target_col) in PAFA_ENDPOINTS.items():
         rows = build_pafa_endpoint_rows(csv_path, fasta_path, task_name)
-        fieldnames = ["dataset_id", "protein_sequence", target_col]
+        fieldnames = [_C.dataset_id, _C.protein_sequence, target_col]
         written[task_name] = utils.write_processed_dataset(
             task_name,
             fieldnames,

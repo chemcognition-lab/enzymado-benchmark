@@ -119,8 +119,9 @@ def test_fireprotdb_tabular_rows_and_blank_line_handling_are_preserved(
 
 
 def test_real_case_dataset_paths_and_targets_are_stable() -> None:
-    """Freeze the eight real-case inputs and their stratification targets."""
-    assert real_case_splits.REAL_CASE_DATASETS == (
+    """Freeze the 36 real-case inputs and their stratification targets."""
+    assert len(real_case_splits.REAL_CASE_DATASETS) == 36
+    assert real_case_splits.REAL_CASE_DATASETS[:8] == (
         (
             Path(
                 "data/processed/real_case/align_amylase_activity/"
@@ -190,7 +191,9 @@ def test_real_case_metadata_paths_keep_canonical_then_legacy_order(
         return canonical_path
 
     monkeypatch.setattr(
-        real_case_splits, "build_metadata_path", fake_build_metadata_path
+        real_case_splits.dataset_splitting,
+        "build_metadata_path",
+        fake_build_metadata_path,
     )
 
     assert real_case_splits._metadata_paths(source_path) == (
@@ -237,21 +240,27 @@ def test_real_case_driver_keeps_exact_split_contract(
         split_calls.append((args, kwargs))
         return summary
 
-    monkeypatch.setattr(real_case_splits, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(real_case_splits._P, "project_root", tmp_path)
     monkeypatch.setattr(
         real_case_splits,
         "REAL_CASE_DATASETS",
         ((source_path, "activity"),),
     )
     monkeypatch.setattr(
-        real_case_splits, "build_output_csv_path", fake_build_output_csv_path
+        real_case_splits.dataset_splitting,
+        "build_output_csv_path",
+        fake_build_output_csv_path,
     )
     monkeypatch.setattr(
         real_case_splits,
         "_metadata_paths",
         lambda path: metadata_paths,
     )
-    monkeypatch.setattr(real_case_splits, "split_dataset_csv", fake_split_dataset_csv)
+    monkeypatch.setattr(
+        real_case_splits.dataset_splitting,
+        "split_dataset_csv",
+        fake_split_dataset_csv,
+    )
     monkeypatch.setattr(
         real_case_splits.os, "chdir", lambda path: chdir_calls.append(path)
     )

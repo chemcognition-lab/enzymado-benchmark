@@ -1,4 +1,14 @@
-"""Preprocess PyKS polyketide synthase soluble expression DMS dataset (Layout A)."""
+"""Preprocess PyKS polyketide synthase soluble expression DMS dataset (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence reconstruction & indexing: Reconstructs the 439-aa Aloe arborescens
+  pentaketide chromone synthase (PyKS) wild-type sequence from rows where
+  Normalized_ER == 0 (synonymous wild-type controls) in Wrenbeck et al. (2019)
+  Data S1. Because the source "Location" column is 0-indexed (0..438), 1-based
+  positions are obtained via Location + 1.
+- Target: Retains all canonical single-site missense variants and wild-type
+  with their continuous Normalized_ER soluble expression scores.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +17,12 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "pyks_solubility"
-FIELDNAMES = ["dataset_id", "protein_sequence", "normalized_er"]
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, "normalized_er"]
 
 
 def resolve_pyks_csv(csv_path: Path | None = None) -> Path:

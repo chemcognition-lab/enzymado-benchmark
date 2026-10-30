@@ -1,4 +1,15 @@
-"""Preprocess Pseudomonas aeruginosa AmiE multi-substrate DMS datasets (Layout A)."""
+"""Preprocess Pseudomonas aeruginosa AmiE multi-substrate DMS datasets (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence construction: Uses the 346-aa Pseudomonas aeruginosa aliphatic
+  amidase AmiE wild-type sequence (UniProt: P11436) and applies 1-based
+  single-residue substitutions from Wrenbeck et al. (Nat. Commun. 2017).
+- Substrate-specific tasks: Because all variants in each selection experiment
+  are assayed against a single amide substrate (Acetamide, Propionamide, or
+  Isobutyramide), each selection screen is modeled as an independent Layout A
+  task predicting normalized_fitness. Synonymous wild-type controls are
+  averaged into the wild-type sequence entry.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +18,10 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
-# Pseudomonas aeruginosa aliphatic amidase AmiE (UniProt: P11436, 346 aa)
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 AMIE_WT_SEQ = (
     "MRHGDISSSNDTVGVAVVNYKMPRLHTAAEVLDNARKIADMIVGMKQGLPGMDLVVFPEY"
     "SLQGIMYDPAEMMETAVAIPGEETEIFSRACRKANVWGVFSLTGERHEEHPRKAPYNTLVL"
@@ -23,7 +37,7 @@ AMIE_SUBSTRATE_FILES: dict[str, str] = {
     "amie_isobutyramide_dms": "amiESelectionFitnessData_Isobutyramide.txt",
 }
 
-FIELDNAMES = ["dataset_id", "protein_sequence", "normalized_fitness"]
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, "normalized_fitness"]
 
 
 def resolve_amie_tsv(filename: str) -> Path:

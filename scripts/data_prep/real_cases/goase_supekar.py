@@ -1,4 +1,16 @@
-"""Preprocess Galactose Oxidase variant-substrate activity matrix (Layout B)."""
+"""Preprocess Galactose Oxidase variant-substrate activity matrix (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence reconstruction: Extracts the 639-aa wild-type Galactose Oxidase
+  (GOase) sequence from the CA atoms of 1GOG.pdb inside
+  GOase_ML_pred_workflow.zip and applies each variant's colon-delimited
+  mutation list (GOh*.txt).
+- Substrate canonicalization: Loads the 56 alcohol substrates from panel56.smi,
+  neutralizing docking alkoxide anions ([O-] -> O) prior to RDKit SMILES
+  canonicalization.
+- Target transformation: Measured activities across the 34 variants x 56
+  substrates matrix include zeros and are modeled via log10(activity + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -8,11 +20,15 @@ import zipfile
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "goase_variant_substrate"
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "activity",
     "log10_activity",
 ]

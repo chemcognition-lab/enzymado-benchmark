@@ -1,4 +1,17 @@
-"""Clean Erickson et al. (2022) PETase thermotolerance dataset."""
+"""Clean Erickson et al. (2022) PETase thermotolerance dataset.
+
+Dataset & Processing Rationale:
+- Target transformation: Sum of aromatic products spans 0 to ~2,700 mg/L with
+  roughly one-fifth of reaction wells at 0 and the smallest nonzero value near
+  1 mg/L, so the regression target is modeled as log10(sum_aromatic_products + 1).
+- Condition encoding: Reaction conditions in values.csv are encoded as a buffer
+  code followed by pH (e.g., "NP7.5"). These are parsed into continuous
+  temperature (°C), continuous pH, and one-hot buffer columns (C, NP, H, B, G).
+- Source table correction: values.csv labels its seventh data row (0-based row
+  index 6) "30°C, C6" a second time immediately before the 40°C block, which
+  otherwise lacks a C6 row, and its product yields fall between the 30°C and
+  50°C series. It is therefore corrected to ("40°C", "C6").
+"""
 
 from __future__ import annotations
 
@@ -6,30 +19,22 @@ import csv
 import math
 from pathlib import Path
 import re
-import sys
 
 from scripts.data_prep.real_cases import utils
 
-if str(utils.PROJECT_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(utils.PROJECT_ROOT / "src"))
+from enzymado import paths_and_constants
 
-from enzymado.paths_and_constants import Constants
+_C = paths_and_constants.Constants
 
 ERICKSON_VALUE_COLUMN = "sum_aromatic_products"
-# The products span 0 to ~2,700 mg/L with a fifth of the wells at 0, so the
-# target is log10(x + 1); the smallest nonzero value is about 1.
 ERICKSON_TARGET_COLUMN = "log10_sum_aromatic_products_plus_one"
-# Reaction conditions are a buffer code followed by the pH, e.g. "NP7.5".
 ERICKSON_BUFFERS = ("C", "NP", "H", "B", "G")
 ERICKSON_BUFFER_COLUMNS = [f"buffer_{code.lower()}" for code in ERICKSON_BUFFERS]
-# values.csv labels its seventh data row "30°C, C6" a second time. It sits
-# before the 40°C block, which has no C6 row, and its values fall between 30°C
-# and 50°C, so it is the 40°C C6 measurement.
 ERICKSON_ROW_FIXES = {6: (("30°C", "C6"), ("40°C", "C6"))}
 ERICKSON_INTERIM_COLUMNS = [
-    Constants.dataset_id,
+    _C.dataset_id,
     "enzyme_id",
-    Constants.protein_sequence,
+    _C.protein_sequence,
     "rxn_temperature_raw",
     "temperature",
     "rxn_condition",
@@ -40,8 +45,8 @@ ERICKSON_INTERIM_COLUMNS = [
     ERICKSON_VALUE_COLUMN,
 ]
 ERICKSON_PROCESSED_COLUMNS = [
-    Constants.dataset_id,
-    Constants.protein_sequence,
+    _C.dataset_id,
+    _C.protein_sequence,
     "temperature",
     "ph",
     *ERICKSON_BUFFER_COLUMNS,
@@ -108,13 +113,71 @@ def load_sequences(sequences_path: Path) -> dict[str, str]:
     return records
 
 
+def _append_erickson_condition_rows(
+    raw_row: list[str],
+    enzyme_ids: list[str],
+    measurement_labels: list[str],
+    sequences_by_id: dict[str, str],
+    temperature_raw: str,
+    condition: str,
+    interim_rows: list[dict[str, str]],
+    processed_rows: list[dict[str, str]],
+) -> None:
+    """Parse one temperature/buffer row across all enzymes and append output rows."""
+    temperature = parse_temperature(temperature_raw)
+    buffer, ph = parse_erickson_condition(condition)
+    buffer_one_hot = {
+        col: "1.0" if code == buffer else "0.0"
+        for code, col in zip(ERICKSON_BUFFERS, ERICKSON_BUFFER_COLUMNS, strict=True)
+    }
+
+    for enzyme_id, measurement_label, raw_value in zip(
+        enzyme_ids, measurement_labels, raw_row[2:], strict=True
+    ):
+        if not enzyme_id:
+            continue
+        protein_sequence = sequences_by_id.get(enzyme_id)
+        if not protein_sequence:
+            raise ValueError(f"Missing protein sequence for enzyme id '{enzyme_id}'.")
+
+        measurement_name, measurement_unit = parse_measurement_label(measurement_label)
+        dataset_id = build_erickson_dataset_id(enzyme_id, temperature_raw, condition)
+        value = str(float(utils.clean_text(raw_value)))
+
+        interim_rows.append(
+            {
+                _C.dataset_id: dataset_id,
+                "enzyme_id": enzyme_id,
+                _C.protein_sequence: protein_sequence,
+                "rxn_temperature_raw": temperature_raw,
+                "temperature": str(temperature),
+                "rxn_condition": condition,
+                "ph": str(ph),
+                "buffer": buffer,
+                "measurement_name": measurement_name,
+                "measurement_unit": measurement_unit,
+                ERICKSON_VALUE_COLUMN: value,
+            }
+        )
+        processed_rows.append(
+            {
+                _C.dataset_id: dataset_id,
+                _C.protein_sequence: protein_sequence,
+                "temperature": str(temperature),
+                "ph": str(ph),
+                **buffer_one_hot,
+                ERICKSON_VALUE_COLUMN: value,
+                ERICKSON_TARGET_COLUMN: str(math.log10(float(value) + 1.0)),
+            }
+        )
+
+
 def build_erickson_rows(
     sequences_path: Path,
     values_path: Path,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Build interim and processed row dicts from Erickson raw CSV files."""
     sequences_by_id = load_sequences(sequences_path)
-
     with values_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.reader(handle))
 
@@ -134,7 +197,6 @@ def build_erickson_rows(
     for row_index, raw_row in enumerate(rows[2:]):
         if not any(utils.clean_text(cell) for cell in raw_row):
             continue
-
         temperature_raw = utils.clean_text(raw_row[0])
         condition = utils.clean_text(raw_row[1])
         if not temperature_raw or not condition:
@@ -148,65 +210,18 @@ def build_erickson_rows(
                 )
             temperature_raw, condition = corrected
 
-        temperature = parse_temperature(temperature_raw)
-        buffer, ph = parse_erickson_condition(condition)
-
-        for enzyme_id, measurement_label, raw_value in zip(
+        _append_erickson_condition_rows(
+            raw_row,
             enzyme_ids,
             measurement_labels,
-            raw_row[2:],
-            strict=True,
-        ):
-            if not enzyme_id:
-                continue
+            sequences_by_id,
+            temperature_raw,
+            condition,
+            interim_rows,
+            processed_rows,
+        )
 
-            protein_sequence = sequences_by_id.get(enzyme_id)
-            if not protein_sequence:
-                raise ValueError(
-                    f"Missing protein sequence for enzyme id '{enzyme_id}'."
-                )
-
-            measurement_name, measurement_unit = parse_measurement_label(
-                measurement_label
-            )
-            dataset_id = build_erickson_dataset_id(
-                enzyme_id, temperature_raw, condition
-            )
-            value = str(float(utils.clean_text(raw_value)))
-
-            interim_rows.append(
-                {
-                    Constants.dataset_id: dataset_id,
-                    "enzyme_id": enzyme_id,
-                    Constants.protein_sequence: protein_sequence,
-                    "rxn_temperature_raw": temperature_raw,
-                    "temperature": str(temperature),
-                    "rxn_condition": condition,
-                    "ph": str(ph),
-                    "buffer": buffer,
-                    "measurement_name": measurement_name,
-                    "measurement_unit": measurement_unit,
-                    ERICKSON_VALUE_COLUMN: value,
-                }
-            )
-            processed_rows.append(
-                {
-                    Constants.dataset_id: dataset_id,
-                    Constants.protein_sequence: protein_sequence,
-                    "temperature": str(temperature),
-                    "ph": str(ph),
-                    **{
-                        column: "1.0" if code == buffer else "0.0"
-                        for code, column in zip(
-                            ERICKSON_BUFFERS, ERICKSON_BUFFER_COLUMNS, strict=True
-                        )
-                    },
-                    ERICKSON_VALUE_COLUMN: value,
-                    ERICKSON_TARGET_COLUMN: str(math.log10(float(value) + 1.0)),
-                }
-            )
-
-    dataset_ids = [row[Constants.dataset_id] for row in processed_rows]
+    dataset_ids = [row[_C.dataset_id] for row in processed_rows]
     if len(set(dataset_ids)) != len(dataset_ids):
         raise ValueError("Erickson rows do not have unique dataset ids.")
     return interim_rows, processed_rows

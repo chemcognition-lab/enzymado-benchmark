@@ -1,4 +1,14 @@
-"""Preprocess Tm9D8* TrpB 3-site combinatorial epistasis dataset (Layout A)."""
+"""Preprocess Tm9D8* TrpB 3-site combinatorial epistasis dataset (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence construction: Uses the Thermotoga maritima TrpB engineered scaffold
+  Tm9D8* (Johnston et al., PNAS 2024, Table S3). Combinatorial Library 3A
+  simultaneously mutates three active-site positions: 1-based residues 104 (A),
+  105 (E), and 106 (T).
+- Filtering & target: Stop-codon (*) combinations are excluded, leaving all
+  20^3 = 8,000 canonical 3-site amino-acid combinations with measured linear
+  enrichment fitness scores.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +17,13 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
-TASK_NAME = "trpb3_epistasis"
-FIELDNAMES = ["dataset_id", "protein_sequence", "fitness"]
+from enzymado import paths_and_constants
 
-# Thermotoga maritima TrpB variant Tm9D8* sequence (Johnston et al. PNAS 2024 Table S3)
-# Library 3A mutates 1-based positions 104 (A), 105 (E), and 106 (T).
+_C = paths_and_constants.Constants
+
+TASK_NAME = "trpb3_epistasis"
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, "fitness"]
+
 TM9D8_WT_SEQ = (
     "MKGYFGPYGGQYVPEILMGALEELEAAYEGIMKDESFWKEFNDLLRDYAGRPTPLYFARR"
     "LSEKYGARVYLKREDLLHTGAHKINNAIGQVLLAKLMGKTRIIAETGAGQHGVATATAAAL"

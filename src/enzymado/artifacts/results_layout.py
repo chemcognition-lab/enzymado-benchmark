@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
 INVALIDATION_MARKER = "target_audit_invalid.json"
 PER_RESIDUE_TASKS = {"active_sites", "binding_site"}
 SPLIT_FAMILIES = ("random", "similarity")
@@ -24,6 +27,15 @@ MODEL_FAMILY_ALIASES = {
 def _path_token(value: str) -> str:
     """Normalize dynamic path components used in artifact trees."""
     return value.strip().replace("/", "_")
+
+
+def format_repo_path(path: Path) -> str:
+    """Format a path relative to the repository root when inside the checkout."""
+    root = _P.project_root.resolve()
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def canonical_split_family(split_variant: str | None) -> str:
@@ -196,6 +208,7 @@ __all__ = [
     "canonical_embedding_mode",
     "canonical_model_family",
     "canonical_split_family",
+    "format_repo_path",
     "is_run_complete",
     "find_model_artifact",
     "find_prediction_artifact",

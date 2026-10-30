@@ -2,27 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import collections.abc
 import csv
 import json
 import lzma
 import math
 from pathlib import Path
-from typing import Any
+import typing
 
 import joblib
 import numpy as np
 import safetensors.torch
 import torch
 
-import enzymado.models.training_protocol
-import enzymado.paths_and_constants
+from enzymado.models import training_protocol
 
-from . import sample_identity
-from .results_layout import (
-    INVALIDATION_MARKER,
-    build_prediction_artifact_path,
-)
+from . import results_layout, sample_identity
 
 HPARAMS_SCHEMA_VERSION = 1
 
@@ -70,7 +65,7 @@ def dequantize_probabilities(array):
     return np.asarray(array, dtype=np.float32) / np.float32(PROBA_QUANT_LEVELS)
 
 
-def _payload_row_count(payload: Any) -> int:
+def _payload_row_count(payload: typing.Any) -> int:
     """Return a consistent leading dimension from a flat or structured payload."""
     if isinstance(payload, dict):
         counts = {_payload_row_count(value) for value in payload.values()}
@@ -94,7 +89,7 @@ def make_safetensors_predictions_file(
     target_mask=None,
     *,
     artifact_path: Path | None = None,
-    sample_ids: Sequence[str] | None = None,
+    sample_ids: collections.abc.Sequence[str] | None = None,
     pred_proba=None,
 ) -> Path:
     """Persist one split as compressed safetensors."""
@@ -140,7 +135,7 @@ def save_raw_predictions(
     model_name: str,
     split_variant: str,
     split_name: str,
-    sample_ids: Sequence[str] | None = None,
+    sample_ids: collections.abc.Sequence[str] | None = None,
     pred_proba=None,
 ) -> Path:
     """Persist one split's raw predictions as safetensors.
@@ -149,7 +144,7 @@ def save_raw_predictions(
     scripts/results/compute_metrics.py reading these files plus hparams.json,
     not inline during training.
     """
-    prediction_path = build_prediction_artifact_path(
+    prediction_path = results_layout.build_prediction_artifact_path(
         run_dir,
         task_name=task_name,
         emb_name=emb_name,
@@ -169,19 +164,10 @@ def save_raw_predictions(
     )
 
 
-def _format_path(path: Path) -> str:
-    """Format a path relative to the repository root when inside the checkout."""
-    root = enzymado.paths_and_constants.Paths.project_root.resolve()
-    try:
-        return path.resolve().relative_to(root).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 def _json_ready(value):
     """Convert NumPy/PyTorch scalars and paths into JSON-serializable values."""
     if isinstance(value, Path):
-        return _format_path(value)
+        return results_layout.format_repo_path(value)
     if isinstance(value, np.generic):
         value = value.item()
     if isinstance(value, float):
@@ -211,7 +197,7 @@ def write_hparams_file(
     deterministic_algorithms: bool | None = None,
 ) -> Path:
     """Persist the model configuration used for one run."""
-    invalidation_marker = run_dir / INVALIDATION_MARKER
+    invalidation_marker = run_dir / results_layout.INVALIDATION_MARKER
     if invalidation_marker.exists():
         invalidation_marker.unlink()
 
@@ -224,7 +210,7 @@ def write_hparams_file(
         "split_variant": split_variant,
         "wrapper": getattr(model_info["wrap"], "__name__", str(model_info["wrap"])),
         "params": model_info["params"],
-        "selection_protocol": enzymado.models.training_protocol.selection_protocol(
+        "selection_protocol": training_protocol.selection_protocol(
             model_info["wrap"], model_info["params"]
         ),
     }

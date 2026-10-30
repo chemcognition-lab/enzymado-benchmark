@@ -1,4 +1,17 @@
-"""Preprocess Ao 3FCR/3HMU/6SNU amine transaminase chiral amine panel (Layout B)."""
+"""Preprocess Ao 3FCR/3HMU/6SNU amine transaminase chiral amine panel (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence reconstruction & indexing offsets: Wild-type sequences for the three
+  amine transaminase scaffolds (3FCR, 3HMU, 6SNU) are taken from Supplementary
+  Information Section 7 (pages S23-S25). Mutations on 3HMU use PDB residue
+  numbering that is shifted by +2 relative to the full construct sequence
+  (offset = +2), whereas 3FCR and 6SNU use 0-offset 1-based numbering.
+- Substrate panel: Evaluates 79 engineered variants (rows 3..81 of the
+  "detailed data" sheet) across 30 enantiopure chiral amines ((R)-1 through
+  (S)-15 from Figure 3, Angew. Chem. 2023) with stereoisomeric SMILES.
+- Target transformation: Specific activities (mU/mg) include zero-activity
+  enzyme-substrate pairs and are modeled via log10(specific_activity + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -7,17 +20,20 @@ from pathlib import Path
 import pandas as pd
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "ao_3fcr_transaminase"
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "specific_activity",
     "log10_specific_activity",
 ]
 LOG10_OFFSET = 1e-3
 
-# Wild-type sequences from Supplementary Information Section 7 (pages S23-S25)
 WT_SEQUENCES: dict[str, tuple[str, int]] = {
     "3FCR": (
         "MLKNDQLDQWDRDNFFHPSTHLAQHARGESANRVIKTASGVFIEDRDGTKLLDAFAGLYCV"
@@ -55,7 +71,6 @@ WT_SEQUENCES: dict[str, tuple[str, int]] = {
     ),
 }
 
-# 30 enantiopure chiral amines (R)-1..(S)-15 from Figure 3 (Angew. Chem. 2023)
 SUBSTRATE_SMILES: dict[str, str] = {
     "(R)-1": "C[C@@H](N)c1ccccc1",
     "(S)-1": "C[C@H](N)c1ccccc1",
@@ -114,7 +129,6 @@ def build_ata_rows(input_xlsx: Path) -> list[dict[str, object]]:
     }
 
     records: list[tuple[tuple[str, ...], float]] = []
-    # Rows 3..81 contain the 79 enzyme variants in the specific activity sub-table
     for row_idx in range(3, 82):
         var_label = utils.clean_text(df.iloc[row_idx, 1])
         if not var_label or "-" not in var_label:

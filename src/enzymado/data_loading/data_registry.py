@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
 import enum
 from pathlib import Path
 import sys
 
-import enzymado.paths_and_constants
+from enzymado import paths_and_constants
 
 # enum.StrEnum was added in Python 3.11; provide a shim for 3.10
 if sys.version_info < (3, 11) and not hasattr(enum, "StrEnum"):
@@ -18,7 +18,9 @@ if sys.version_info < (3, 11) and not hasattr(enum, "StrEnum"):
     enum.StrEnum = _StrEnum  # type: ignore[attr-defined]
 
 
-PROJECT_ROOT = enzymado.paths_and_constants.Paths.project_root
+_C = paths_and_constants.Constants
+_P = paths_and_constants.Paths
+PROJECT_ROOT = _P.project_root
 
 
 class LabelType(enum.StrEnum):
@@ -40,7 +42,7 @@ class SplitType(enum.StrEnum):
     SIMILARITY = "similarity"
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class TaskConfig:
     """Configuration needed to build datasets and loaders for one task."""
 
@@ -53,16 +55,16 @@ class TaskConfig:
     # annotated residue positions for residue_binary_vector.
     target_column: str
     task_scope: str = "properties"
-    sequence_column: str = "protein_sequence"
+    sequence_column: str = _C.protein_sequence
     split_column: str = "split"
     ligand_column: str | None = None
     numeric_feature_columns: tuple[str, ...] = ()
-    index_columns: tuple[str, ...] = ("dataset_id", "uniprot_id")
+    index_columns: tuple[str, ...] = (_C.dataset_id, "uniprot_id")
     wildtype_sequence_column: str | None = None
     ec_separator: str = ";"
 
 
-_DATA = PROJECT_ROOT / "data/processed"
+_DATA = _P.data_processed_dir
 
 
 TASK_REGISTRY: dict[str, TaskConfig] = {

@@ -16,8 +16,11 @@ import typing
 
 import torch
 
-import enzymado.paths_and_constants
+from enzymado import paths_and_constants
 
+from . import results_layout
+
+_P = paths_and_constants.Paths
 RUN_MANIFEST_SCHEMA_VERSION = 1
 _FILE_SAMPLE_BYTES = 64 * 1024
 _SOURCE_DIRS = ("src", "scripts", "embedding_scripts")
@@ -74,15 +77,6 @@ def _sampled_content_sha256(path: Path) -> tuple[str, list[int]]:
     return digest.hexdigest(), offsets
 
 
-def _format_manifest_path(path: Path) -> str:
-    """Format a manifest path relative to the repository root when possible."""
-    root = enzymado.paths_and_constants.Paths.project_root.resolve()
-    try:
-        return path.resolve().relative_to(root).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 @functools.lru_cache(maxsize=None)
 def _fingerprint_file_cached(
     resolved_path: str,
@@ -101,7 +95,7 @@ def _fingerprint_file_cached(
         kind = "sampled_content_sha256"
         sha256, offsets = _sampled_content_sha256(resolved)
     fingerprint: dict[str, object] = {
-        "path": _format_manifest_path(resolved),
+        "path": results_layout.format_repo_path(resolved),
         "kind": kind,
         "sha256": sha256,
         "size_bytes": size_bytes,
@@ -144,7 +138,7 @@ def _fingerprint_directory_cached(resolved_path: str) -> dict[str, object]:
             }
         )
     return {
-        "path": _format_manifest_path(resolved),
+        "path": results_layout.format_repo_path(resolved),
         "kind": "tree_inventory_sha256",
         "sha256": _canonical_json_sha256(records),
         "file_count": len(records),
@@ -216,7 +210,7 @@ def _package_versions() -> dict[str, str | None]:
 @functools.lru_cache(maxsize=1)
 def _build_static_environment_manifest() -> dict[str, object]:
     """Build the process-stable, comparatively expensive environment fields."""
-    repository_root = enzymado.paths_and_constants.Paths.project_root
+    repository_root = _P.project_root
     status = _git_output(
         repository_root,
         "status",

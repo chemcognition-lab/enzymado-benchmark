@@ -1,4 +1,14 @@
-"""Preprocess SARS-CoV-2 PLpro activity and abundance DMS datasets (Layout A)."""
+"""Preprocess SARS-CoV-2 PLpro activity and abundance DMS datasets (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence reconstruction: The 315-aa SARS-CoV-2 papain-like protease (PLpro)
+  wild-type sequence is reconstructed from the 1-based "Pos" and "WT_AA"
+  columns of worksheet "Fig. 3" in Flynn et al. (2024) MOESM9.
+- Endpoints & filtering: Stop-codon and non-canonical mutations are excluded;
+  synonymous wild-type rows are averaged into the wild-type entry. Produces two
+  regression tasks from the "fitness_activity" (plpro_activity) and
+  "fitness_abundance" (plpro_abundance) columns.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +16,10 @@ from pathlib import Path
 
 import openpyxl
 from scripts.data_prep.real_cases import utils
+
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
 
 PLPRO_ENDPOINTS: dict[str, tuple[str, str]] = {
     "plpro_activity": ("fitness_activity", "fitness_activity"),
@@ -88,7 +102,7 @@ def clean_plpro_data(
     written: dict[str, Path] = {}
     for task_name, (_, target_col) in PLPRO_ENDPOINTS.items():
         rows = build_plpro_endpoint_rows(resolved_xlsx, task_name)
-        fieldnames = ["dataset_id", "protein_sequence", target_col]
+        fieldnames = [_C.dataset_id, _C.protein_sequence, target_col]
         written[task_name] = utils.write_processed_dataset(
             task_name,
             fieldnames,

@@ -1,4 +1,19 @@
-"""Clean Align to Innovate Tournament datasets (Proteins 2025)."""
+"""Clean Align to Innovate Tournament datasets (Proteins 2025).
+
+Dataset & Processing Rationale:
+- Families & endpoints: Processes alpha-amylase (specific_activity, expression,
+  thermostability) and b-glucosidase (activity, expression, melting_point)
+  combining train and test release splits into unified per-property tables.
+- Replicate aggregation: Multiple measurements for the same unique protein
+  sequence are averaged arithmetically, recording the replicate count in
+  n_measurements.
+- Target transformation: Endpoints spanning two or more orders of magnitude
+  (alpha-amylase specific_activity and thermostability; b-glucosidase activity
+  and expression) are modeled on a log10 scale. When zero values are present,
+  an additive offset equal to the smallest positive measurement rounded to one
+  significant figure is applied prior to log10 transformation. Melting point
+  and alpha-amylase expression remain on a linear scale.
+"""
 
 from __future__ import annotations
 
@@ -6,18 +21,17 @@ import csv
 import json
 import math
 from pathlib import Path
-import sys
 
 from scripts.data_prep.real_cases import utils
 
-if str(utils.PROJECT_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(utils.PROJECT_ROOT / "src"))
+from enzymado import paths_and_constants
 
-from enzymado.paths_and_constants import Constants, Paths
+_C = paths_and_constants.Constants
+_P = paths_and_constants.Paths
 
 ALIGN_PROCESSED_COLUMNS = [
-    Constants.dataset_id,
-    Constants.protein_sequence,
+    _C.dataset_id,
+    _C.protein_sequence,
     "n_measurements",
 ]
 ALIGN_FAMILIES = (
@@ -57,8 +71,6 @@ ALIGN_TASK_OUTPUTS = {
     },
 }
 
-# Targets that span two or more orders of magnitude are modelled on a log10
-# scale, like GalOx and PETase. Melting point and amylase expression stay linear.
 ALIGN_LOG_TARGETS = {
     ("alpha-amylase", "specific_activity"),
     ("alpha-amylase", "thermostability"),
@@ -87,6 +99,34 @@ def normalize_align_column_name(column_name: str) -> str:
     return utils.slugify(column_name)
 
 
+def _read_align_csv(csv_path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read one ALIGN family CSV and attach its source_split label."""
+    source_split = "test" if "test" in csv_path.name.lower() else "train"
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows = [
+            {
+                **{key: utils.clean_text(value) for key, value in row.items()},
+                "source_split": source_split,
+            }
+            for row in reader
+        ]
+    return fieldnames, rows
+
+
+def _measurement_key(
+    row: dict[str, str],
+    measurement_columns: list[str],
+) -> tuple[str, tuple[float | None, ...]]:
+    """Return sequence plus numeric measurement tuple for deduplication."""
+    values = tuple(
+        float(row[c]) if utils.clean_text(row.get(c)) else None
+        for c in measurement_columns
+    )
+    return utils.normalize_sequence(row.get("mutated_sequence")), values
+
+
 def load_align_rows(
     family: str,
     align_root: Path,
@@ -99,19 +139,9 @@ def load_align_rows(
     raw_rows: list[dict[str, str]] = []
     all_fieldnames: list[str] = []
     for csv_path in sorted(family_dir.glob("*.csv")):
-        source_split = "test" if "test" in csv_path.name.lower() else "train"
-        with csv_path.open("r", encoding="utf-8", newline="") as handle:
-            reader = csv.DictReader(handle)
-            fieldnames = list(reader.fieldnames or [])
-            for fieldname in fieldnames:
-                if fieldname not in all_fieldnames:
-                    all_fieldnames.append(fieldname)
-            for row in reader:
-                normalized_row = {
-                    key: utils.clean_text(value) for key, value in row.items()
-                }
-                normalized_row["source_split"] = source_split
-                raw_rows.append(normalized_row)
+        fieldnames, rows = _read_align_csv(csv_path)
+        all_fieldnames.extend(f for f in fieldnames if f not in all_fieldnames)
+        raw_rows.extend(rows)
 
     if not raw_rows:
         raise ValueError(f"No ALIGN rows were loaded from {family_dir}.")
@@ -122,34 +152,26 @@ def load_align_rows(
         if fieldname not in {"mutant", "mutated_sequence", "dataset"}
     ]
 
-    def measurement_key(row: dict[str, str]) -> tuple:
-        """Sequence plus every measurement as a number, so 0.600 equals 0.6."""
-        values = tuple(
-            float(row[c]) if utils.clean_text(row.get(c)) else None
-            for c in measurement_columns
-        )
-        return utils.normalize_sequence(row.get("mutated_sequence")), values
-
-    # Step 1: the tournament's train file already holds its test rows; drop the copies.
     train_keys = {
-        measurement_key(row) for row in raw_rows if row["source_split"] == "train"
+        _measurement_key(row, measurement_columns)
+        for row in raw_rows
+        if row["source_split"] == "train"
     }
     kept_rows = [
         row
         for row in raw_rows
-        if row["source_split"] == "train" or measurement_key(row) not in train_keys
+        if row["source_split"] == "train"
+        or _measurement_key(row, measurement_columns) not in train_keys
     ]
     dropped_test = len(raw_rows) - len(kept_rows)
 
-    # Step 2: one row per distinct measurement, whatever the file, round or formatting.
     deduped_rows: list[dict[str, str]] = []
-    seen_keys: set[tuple] = set()
+    seen_keys: set[tuple[str, tuple[float | None, ...]]] = set()
     for row in kept_rows:
-        key = measurement_key(row)
-        if key in seen_keys:
-            continue
-        seen_keys.add(key)
-        deduped_rows.append(row)
+        key = _measurement_key(row, measurement_columns)
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped_rows.append(row)
 
     print(
         f"{family}: {len(raw_rows)} raw rows, {dropped_test} tournament test rows "
@@ -157,6 +179,76 @@ def load_align_rows(
         f"measurements, {len(deduped_rows)} kept"
     )
     return all_fieldnames, deduped_rows, measurement_columns
+
+
+def _build_align_interim_row(
+    family: str,
+    row_index: int,
+    row: dict[str, str],
+    protein_sequence: str,
+    measurement_columns: list[str],
+    *,
+    has_dataset_col: bool,
+) -> dict[str, str]:
+    """Construct a single normalized interim row for an ALIGN variant."""
+    interim_row = {
+        _C.dataset_id: build_align_dataset_id(family, row_index),
+        "source_split": utils.clean_text(row.get("source_split")),
+        "mutant": utils.clean_text(row.get("mutant")),
+        _C.protein_sequence: protein_sequence,
+    }
+    if has_dataset_col:
+        interim_row["source_dataset"] = utils.clean_text(row.get("dataset"))
+    for col in measurement_columns:
+        interim_row[normalize_align_column_name(col)] = utils.clean_text(row.get(col))
+    return interim_row
+
+
+def _record_align_measurements(
+    row: dict[str, str],
+    protein_sequence: str,
+    measurement_columns: list[str],
+    values_by_task: dict[str, dict[str, list[float]]],
+) -> None:
+    """Append valid numeric measurements from one row into values_by_task."""
+    for col in measurement_columns:
+        raw_value = utils.clean_text(row.get(col))
+        if raw_value:
+            values_by_task[col].setdefault(protein_sequence, []).append(
+                float(raw_value)
+            )
+
+
+def _build_align_task_output(
+    family: str,
+    measurement_column: str,
+    by_sequence: dict[str, list[float]],
+) -> tuple[str, str, list[str], list[dict[str, str]]]:
+    """Build processed rows and fieldnames for one ALIGN family measurement column."""
+    task_name = normalize_align_column_name(measurement_column)
+    processed_rows = [
+        {
+            _C.dataset_id: build_align_dataset_id(family, index),
+            _C.protein_sequence: sequence,
+            "n_measurements": str(len(values)),
+            task_name: str(sum(values) / len(values)),
+        }
+        for index, (sequence, values) in enumerate(by_sequence.items(), start=1)
+    ]
+    fieldnames = [*ALIGN_PROCESSED_COLUMNS, task_name]
+    if (family, task_name) in ALIGN_LOG_TARGETS:
+        target = f"log10_{task_name}"
+        offset = log10_offset([float(row[task_name]) for row in processed_rows])
+        for row in processed_rows:
+            row[target] = str(math.log10(float(row[task_name]) + offset))
+        fieldnames.append(target)
+        print(f"  {task_name}: target {target} with offset {offset:g}")
+    repeated = sum(1 for values in by_sequence.values() if len(values) > 1)
+    print(
+        f"  {task_name}: {sum(map(len, by_sequence.values()))} measurements, "
+        f"{len(processed_rows)} variants, {repeated} averaged over repeats"
+    )
+    return measurement_column, task_name, fieldnames, processed_rows
 
 
 def build_align_rows(
@@ -171,94 +263,49 @@ def build_align_rows(
     all_fieldnames, deduped_rows, measurement_columns = load_align_rows(
         family, align_root
     )
-
+    has_dataset_col = "dataset" in all_fieldnames
     interim_fieldnames = [
-        Constants.dataset_id,
+        _C.dataset_id,
         "source_split",
         "mutant",
-        Constants.protein_sequence,
+        _C.protein_sequence,
+        *(["source_dataset"] if has_dataset_col else []),
+        *(normalize_align_column_name(col) for col in measurement_columns),
     ]
-    if "dataset" in all_fieldnames:
-        interim_fieldnames.append("source_dataset")
-    interim_fieldnames.extend(
-        normalize_align_column_name(column) for column in measurement_columns
-    )
 
     interim_rows: list[dict[str, str]] = []
-    # Step 3: repeated measurements of a variant are averaged into one row.
     values_by_task: dict[str, dict[str, list[float]]] = {
-        measurement_column: {} for measurement_column in measurement_columns
+        col: {} for col in measurement_columns
     }
-
     for row_index, row in enumerate(deduped_rows, start=1):
         protein_sequence = utils.normalize_sequence(row.get("mutated_sequence"))
         if not protein_sequence:
             continue
-
-        dataset_id = build_align_dataset_id(family, row_index)
-        interim_row = {
-            Constants.dataset_id: dataset_id,
-            "source_split": utils.clean_text(row.get("source_split")),
-            "mutant": utils.clean_text(row.get("mutant")),
-            Constants.protein_sequence: protein_sequence,
-        }
-        if "dataset" in all_fieldnames:
-            interim_row["source_dataset"] = utils.clean_text(row.get("dataset"))
-
-        for measurement_column in measurement_columns:
-            normalized_name = normalize_align_column_name(measurement_column)
-            interim_row[normalized_name] = utils.clean_text(row.get(measurement_column))
-        interim_rows.append(interim_row)
-
-        for measurement_column in measurement_columns:
-            raw_value = utils.clean_text(row.get(measurement_column))
-            if raw_value:
-                values_by_task[measurement_column].setdefault(
-                    protein_sequence, []
-                ).append(float(raw_value))
-
-    processed_outputs: list[tuple[str, str, list[str], list[dict[str, str]]]] = []
-    for measurement_column in measurement_columns:
-        task_name = normalize_align_column_name(measurement_column)
-        by_sequence = values_by_task[measurement_column]
-        processed_rows = [
-            {
-                Constants.dataset_id: build_align_dataset_id(family, index),
-                Constants.protein_sequence: sequence,
-                "n_measurements": str(len(values)),
-                task_name: str(sum(values) / len(values)),
-            }
-            for index, (sequence, values) in enumerate(by_sequence.items(), start=1)
-        ]
-        fieldnames = [*ALIGN_PROCESSED_COLUMNS, task_name]
-        if (family, task_name) in ALIGN_LOG_TARGETS:
-            target = f"log10_{task_name}"
-            offset = log10_offset([float(row[task_name]) for row in processed_rows])
-            for row in processed_rows:
-                row[target] = str(math.log10(float(row[task_name]) + offset))
-            fieldnames.append(target)
-            print(f"  {task_name}: target {target} with offset {offset:g}")
-        repeated = sum(1 for values in by_sequence.values() if len(values) > 1)
-        print(
-            f"  {task_name}: {sum(map(len, by_sequence.values()))} measurements, "
-            f"{len(processed_rows)} variants, {repeated} averaged over repeats"
-        )
-        processed_outputs.append(
-            (
-                measurement_column,
-                task_name,
-                fieldnames,
-                processed_rows,
+        interim_rows.append(
+            _build_align_interim_row(
+                family,
+                row_index,
+                row,
+                protein_sequence,
+                measurement_columns,
+                has_dataset_col=has_dataset_col,
             )
         )
+        _record_align_measurements(
+            row, protein_sequence, measurement_columns, values_by_task
+        )
 
+    processed_outputs = [
+        _build_align_task_output(family, col, values_by_task[col])
+        for col in measurement_columns
+    ]
     return interim_fieldnames, interim_rows, processed_outputs
 
 
 def resolve_align_interim_path(
     out_interim_arg: Path,
     default_erickson_interim: Path,
-    paths: Paths,
+    paths: _P,
     family_slug: str,
 ) -> Path:
     """Resolve output interim CSV path for an ALIGN family."""
@@ -272,7 +319,7 @@ def resolve_align_interim_path(
 def resolve_align_processed_dir(
     out_processed_arg: Path,
     default_erickson_processed: Path,
-    paths: Paths,
+    paths: _P,
 ) -> Path:
     """Resolve base processed directory for ALIGN task outputs."""
     if out_processed_arg == default_erickson_processed:
@@ -338,8 +385,8 @@ def build_align_section_record(
                 "path": path_to_card_path(csv_path, project_root),
                 "file_format": "csv",
                 "schema": {
-                    "protein_id_col": Constants.dataset_id,
-                    "sequence_col": Constants.protein_sequence,
+                    "protein_id_col": _C.dataset_id,
+                    "sequence_col": _C.protein_sequence,
                     "target_col": task_name,
                 },
                 "splits": {
@@ -350,11 +397,11 @@ def build_align_section_record(
                 },
                 "filters": {
                     "drop_na_in": [
-                        Constants.protein_sequence,
+                        _C.protein_sequence,
                         task_name,
                     ],
                     "deduplicate_by": [
-                        Constants.protein_sequence,
+                        _C.protein_sequence,
                     ],
                     "aggregate_repeats": "mean over distinct measurements",
                 },

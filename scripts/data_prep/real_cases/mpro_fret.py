@@ -1,4 +1,14 @@
-"""Preprocess SARS-CoV-2 Mpro FRET cleavage DMS dataset (Layout A)."""
+"""Preprocess SARS-CoV-2 Mpro FRET cleavage DMS dataset (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence construction: Uses the 306-aa SARS-CoV-2 main protease (3CLpro /
+  Mpro, PDB: 6LU7 Chain A) wild-type sequence and applies single-residue
+  substitutions at 1-based "Position" and "aa" columns from Flynn et al.
+  (eLife 2022, Fig. 2 Data 1).
+- Replicate aggregation: Combines biological replicate sheets "FRET scores rep 1"
+  and "FRET scores rep 2", excluding stop codons and averaging replicates and
+  synonymous wild-type controls into unique protein sequences.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +17,13 @@ from pathlib import Path
 import openpyxl
 from scripts.data_prep.real_cases import utils
 
-TASK_NAME = "mpro_fret_cleavage"
-FIELDNAMES = ["dataset_id", "protein_sequence", "functional_score"]
+from enzymado import paths_and_constants
 
-# SARS-CoV-2 3CLpro / Mpro wild-type sequence (PDB: 6LU7 Chain A, 306 aa)
+_C = paths_and_constants.Constants
+
+TASK_NAME = "mpro_fret_cleavage"
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, "functional_score"]
+
 MPRO_WT_SEQ = (
     "SGFRKMAFPSGKVEGCMVQVTCGTTTLNGLWLDDVVYCPRHVICTSEDMLNPNYEDLLIR"
     "KSNHNFLVQAGNVQLRVIGHSMQNCVLKLKVDTANPKTPKYKFVRIQPGQTFSVLACYNG"

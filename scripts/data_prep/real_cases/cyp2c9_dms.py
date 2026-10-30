@@ -1,4 +1,14 @@
-"""Preprocess Human CYP2C9 Click-seq activity and VAMP-seq abundance DMS (Layout A)."""
+"""Preprocess Human CYP2C9 Click-seq activity and VAMP-seq abundance DMS (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence construction: Uses the canonical 490-aa human Cytochrome P450 2C9
+  sequence (UniProt: P11712) and parses HGVS protein tokens (e.g., p.Pro489Asn)
+  from Amorosi et al. (2021).
+- Filtering & endpoints: Synonymous (p.=) and nonsense (Ter) rows are excluded,
+  while explicit wild-type controls and missense variants are retained for two
+  tasks: Click-seq catalytic activity (cyp2c9_activity) and VAMP-seq cellular
+  abundance (cyp2c9_abundance).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +17,10 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
-# Canonical Human Cytochrome P450 2C9 sequence (UniProt: P11712, 490 aa)
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 CYP2C9_WT_SEQ = (
     "MDSLVVLVLCLSCLLLLSLWRQSSGRGKLPPGPTPLPVIGNILQIGIKDISKSLTNLSKV"
     "YGPVFTLYFGLKPIVVLHGYEAVKEALIDLGEEFSGRGIFPLAERANRGFGIVFSNGKKW"
@@ -56,7 +69,7 @@ def clean_cyp2c9_data(
     for task_name, (filename, target_col) in CYP2C9_TASKS.items():
         csv_path = resolve_cyp2c9_csv(filename)
         rows = build_cyp2c9_rows(csv_path, task_name, target_col)
-        fieldnames = ["dataset_id", "protein_sequence", target_col]
+        fieldnames = [_C.dataset_id, _C.protein_sequence, target_col]
         written[task_name] = utils.write_processed_dataset(
             task_name,
             fieldnames,

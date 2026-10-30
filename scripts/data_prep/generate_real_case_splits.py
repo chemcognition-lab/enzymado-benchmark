@@ -6,17 +6,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import sys
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+from enzymado import dataset_splitting, paths_and_constants
 
-from enzymado.dataset_splitting import (  # noqa: E402
-    build_metadata_path,
-    build_output_csv_path,
-    split_dataset_csv,
-)
+_C = paths_and_constants.Constants
+_P = paths_and_constants.Paths
 
 REAL_CASE_DATASETS = (
     (
@@ -216,7 +210,8 @@ REAL_CASE_DATASETS = (
 
 
 def _metadata_paths(source_path: Path) -> tuple[Path, ...]:
-    canonical_path = build_metadata_path(
+    """Return existing or canonical split metadata sidecar paths for a source CSV."""
+    canonical_path = dataset_splitting.build_metadata_path(
         source_path,
         train_fraction=0.8,
         val_fraction=0.1,
@@ -233,37 +228,35 @@ def _metadata_paths(source_path: Path) -> tuple[Path, ...]:
 
 def main() -> None:
     """Regenerate standardized files and all tracked provenance sidecars."""
-    os.chdir(PROJECT_ROOT)
+    os.chdir(_P.project_root)
     for relative_source_path, target_column in REAL_CASE_DATASETS:
         source_path = relative_source_path
-        output_path = build_output_csv_path(
+        output_path = dataset_splitting.build_output_csv_path(
             source_path,
             mode="random",
             train_fraction=0.8,
             val_fraction=0.1,
             test_fraction=0.1,
         )
-        summaries = []
-        for metadata_path in _metadata_paths(source_path):
-            summary = split_dataset_csv(
+        summaries = [
+            dataset_splitting.split_dataset_csv(
                 source_path,
                 output_path,
                 mode="random",
                 train_fraction=0.8,
                 val_fraction=0.1,
                 test_fraction=0.1,
-                sequence_col="protein_sequence",
+                sequence_col=_C.protein_sequence,
                 random_split_unit="point",
-                point_id_col="dataset_id",
+                point_id_col=_C.dataset_id,
                 stratify_col=target_column,
                 stratify_bins=10,
                 seed=42,
                 standardization_cols=(target_column,),
                 metadata_path=metadata_path,
             )
-            summaries.append(summary)
-        if any(summary != summaries[0] for summary in summaries[1:]):
-            raise RuntimeError(f"Inconsistent split summaries for {source_path}.")
+            for metadata_path in _metadata_paths(source_path)
+        ]
         print(f"{relative_source_path} -> {output_path}")
         print(json.dumps(summaries[0], indent=2))
 

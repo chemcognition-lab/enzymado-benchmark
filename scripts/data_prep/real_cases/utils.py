@@ -11,12 +11,16 @@ import re
 
 from rdkit import Chem, RDLogger
 
+from enzymado import paths_and_constants
+
 RDLogger.DisableLog("rdApp.*")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-RAW_REAL_CASE_DIR = PROJECT_ROOT / "data" / "raw" / "real_case"
-DOCS_DATASETS_DIR = PROJECT_ROOT / "docs" / "datasets"
-PROCESSED_REAL_CASE_DIR = PROJECT_ROOT / "data" / "processed" / "real_case"
+_C = paths_and_constants.Constants
+_P = paths_and_constants.Paths
+
+RAW_REAL_CASE_DIR = _P.data_raw_dir / "real_case"
+DOCS_DATASETS_DIR = _P.project_root / "docs" / "datasets"
+PROCESSED_REAL_CASE_DIR = _P.data_processed_real_case
 
 CANONICAL_AA: frozenset[str] = frozenset("ACDEFGHIKLMNPQRSTVWY")
 
@@ -334,8 +338,8 @@ def build_layout_a_rows(
     rows: list[dict[str, object]] = []
     for idx, ((seq,), val) in enumerate(sorted(aggregated.items()), start=1):
         row: dict[str, object] = {
-            "dataset_id": f"{task_name}_{idx:06d}",
-            "protein_sequence": seq,
+            _C.dataset_id: f"{task_name}_{idx:06d}",
+            _C.protein_sequence: seq,
         }
         if raw_col is not None:
             row[raw_col] = format_float(val)
@@ -360,9 +364,9 @@ def build_layout_b_rows(
     rows: list[dict[str, object]] = []
     for idx, ((seq, smi), val) in enumerate(sorted(aggregated.items()), start=1):
         row: dict[str, object] = {
-            "dataset_id": f"{task_name}_{idx:06d}",
-            "protein_sequence": seq,
-            "smiles": smi,
+            _C.dataset_id: f"{task_name}_{idx:06d}",
+            _C.protein_sequence: seq,
+            _C.smiles: smi,
         }
         if raw_col is not None:
             row[raw_col] = format_float(val)
@@ -390,11 +394,11 @@ def validate_dataset_rows(
             f"[{min_rows}, {max_rows}]"
         )
 
-    dataset_ids = {str(row.get("dataset_id", "")) for row in rows}
+    dataset_ids = {str(row.get(_C.dataset_id, "")) for row in rows}
     if len(dataset_ids) != n_rows:
         raise ValueError(f"Task {task_name!r} has non-unique dataset_id values")
 
-    unique_seqs = {str(row.get("protein_sequence", "")) for row in rows}
+    unique_seqs = {str(row.get(_C.protein_sequence, "")) for row in rows}
     if not all(is_valid_sequence(seq) for seq in unique_seqs):
         raise ValueError(f"Task {task_name!r} contains invalid protein_sequence")
     if len(unique_seqs) < min_unique_seqs:

@@ -1,4 +1,14 @@
-"""Preprocess Fisher flavin-dependent halogenase NaCl and NaBr panels (Layout B)."""
+"""Preprocess Fisher flavin-dependent halogenase NaCl and NaBr panels (Layout B).
+
+Dataset & Processing Rationale:
+- Halide-specific tasks: Separates the Fisher et al. (2019) flavin-dependent
+  halogenase (FDH) family screen into chlorination (fisher_fdh_nacl,
+  Conversion_NaCl) and bromination (fisher_fdh_nabr, Conversion_NaBr) tasks
+  because halide identity is an inorganic reaction condition rather than a
+  organic substrate SMILES change.
+- Target transformation: Fractional conversions include zero-conversion
+  enzyme-substrate pairs and are modeled via log10(conversion + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -7,14 +17,18 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_SPECS: tuple[tuple[str, str, str], ...] = (
     ("fisher_fdh_nacl", "halogenase_NaCl.csv", "Conversion_NaCl"),
     ("fisher_fdh_nabr", "halogenase_NaBr.csv", "Conversion_NaBr"),
 )
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "conversion",
     "log10_conversion",
 ]

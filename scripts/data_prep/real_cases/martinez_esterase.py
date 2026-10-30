@@ -1,4 +1,16 @@
-"""Preprocess Martínez-Martínez microbial esterase substrate panel (Layout B)."""
+"""Preprocess Martínez-Martínez microbial esterase substrate panel (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence & length filtering: Amino acid sequences are loaded from
+  Supplementary Table S1 ("ID enzyme" -> "AMINO ACID SEQUENCE") and filtered to
+  canonical sequences shorter than 1,000 residues to fit within PLM context
+  limits.
+- Substrate matrix: Crosses the filtered microbial esterases against the
+  ester substrate panel in Supplementary Table S3 ("Smiles code").
+- Target transformation: Specific activities (U/g) include inactive pairs (0.0)
+  and span several orders of magnitude, so the target is modeled as
+  log10(specific_activity + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -7,11 +19,15 @@ from pathlib import Path
 import pandas as pd
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "martinez_esterase_panel"
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "specific_activity",
     "log10_specific_activity",
 ]

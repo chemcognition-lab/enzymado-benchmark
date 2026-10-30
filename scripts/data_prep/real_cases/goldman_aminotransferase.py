@@ -1,4 +1,12 @@
-"""Preprocess Goldman aminotransferase family specificity dataset (Layout B)."""
+"""Preprocess Goldman aminotransferase family specificity dataset (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence & substrate pairing: Pairs full-length aminotransferase sequences
+  ("SEQ") with canonicalized amino-donor/acceptor substrate SMILES ("SUBSTRATES")
+  from the Goldman et al. (2022) family-wide screen.
+- Target: "LogSpActivity" is already reported as log10 specific activity in the
+  source table and is mapped directly to log10_specific_activity.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +15,12 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "goldman_aminotransferase"
-FIELDNAMES = ["dataset_id", "protein_sequence", "smiles", "log10_specific_activity"]
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, _C.smiles, "log10_specific_activity"]
 
 
 def resolve_aminotransferase_csv(input_csv: Path | None = None) -> Path:

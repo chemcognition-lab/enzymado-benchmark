@@ -1,4 +1,18 @@
-"""Preprocess Huang HAD phosphatase cap-domain specificity panels (Layout B)."""
+"""Preprocess Huang HAD phosphatase cap-domain specificity panels (Layout B).
+
+Dataset & Processing Rationale:
+- Clade partitioning: The full haloacid dehalogenase (HAD) superfamily screen
+  (Huang et al., PNAS 2015) exceeds the 20,000-row single-task cap (~35,800
+  pairs). Enzymes are therefore partitioned via Supplemental Table 2 metadata
+  into three structurally and evolutionarily distinct cap-domain tasks:
+  - huang_had_phosphatase_c0: Capless C0 phosphatases.
+  - huang_had_phosphatase_c1: SFLD Subgroup C1.5 alpha-helical cap phosphatases.
+  - huang_had_phosphatase_c2: C2 alpha/beta-cap phosphatases.
+- Substrate canonicalization & target transformation: Organophosphate alkoxide
+  groups ([O-]) are neutralized to protonated OH prior to RDKit SMILES
+  canonicalization. Fractional conversions include zeros and are modeled via
+  log10(conversion + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -8,15 +22,19 @@ from pathlib import Path
 import pandas as pd
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_CAP_MAP: dict[str, str] = {
     "C0": "huang_had_phosphatase_c0",
     "C1": "huang_had_phosphatase_c1",
     "C2": "huang_had_phosphatase_c2",
 }
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "conversion",
     "log10_conversion",
 ]

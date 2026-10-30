@@ -1,4 +1,14 @@
-"""Preprocess RgDAOx EP-Seq activity and stability DMS datasets (Layout A)."""
+"""Preprocess RgDAOx EP-Seq activity and stability DMS datasets (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence reconstruction: The 365-aa Rhodotorula gracilis D-amino acid oxidase
+  (RgDAOx) wild-type sequence is reconstructed directly from the "Position" and
+  "wildtype_residue" columns of DMS_scores_DAOX.csv (with N-terminal M1).
+- Endpoints & filtering: Nonsense/stop mutations are excluded; missense and WT
+  rows are split into two tasks corresponding to "Activity score (log)"
+  (daox_epseq_activity) and "Expression score (log)" (daox_epseq_stability).
+  Scores are already reported on a log scale in the source table.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +16,10 @@ import csv
 from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
+
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
 
 DAOX_ENDPOINTS: dict[str, tuple[str, str]] = {
     "daox_epseq_activity": ("Activity score (log)", "log_activity"),
@@ -71,7 +85,7 @@ def clean_daox_data(
     written: dict[str, Path] = {}
     for task_name, (_, target_col) in DAOX_ENDPOINTS.items():
         rows = build_daox_endpoint_rows(csv_path, task_name)
-        fieldnames = ["dataset_id", "protein_sequence", target_col]
+        fieldnames = [_C.dataset_id, _C.protein_sequence, target_col]
         written[task_name] = utils.write_processed_dataset(
             task_name,
             fieldnames,

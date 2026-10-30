@@ -1,4 +1,17 @@
-"""Preprocess McbA amide synthetase 9-drug single-mutant matrix (Layout B)."""
+"""Preprocess McbA amide synthetase 9-drug single-mutant matrix (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence reconstruction: Wild-type McbA (518 aa) is translated directly from
+  the codon-optimized coding DNA sequence reported in Table S6 (ATG = M1).
+  Single-site saturation variants across active-site residues are reconstructed
+  from each worksheet's column headers and amino-acid row labels.
+- Substrate panel: Evaluates 9 pharmaceutical amide synthesis targets across
+  worksheets Fig3b-d and FigS18-S23 (Moclobemide, Metoclopramide, Cinchocaine,
+  Itopride, Declopramide, Trimethobenzamide, (S)-Sulpiride, Procainamide, and
+  Troxipide), represented by their canonicalized product SMILES.
+- Target transformation: Negative baseline-subtracted relative activities are
+  clamped at 0.0 and transformed via log10(activity + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -7,17 +20,20 @@ from pathlib import Path
 import pandas as pd
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "mcba_reaction_activity"
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "activity",
     "log10_activity",
 ]
 LOG10_OFFSET = 1e-3
 
-# Codon-optimized wt-McbA coding sequence from Table S6 (ATG = M1, 518 aa)
 WT_MCBA_DNA = (
     "ATGGAGAAAAAAATCTGGAGCCATCCGCAGTTCGAAAAAGGCGGATCCGG"
     "AGAAAACCTGTATTTCCAGGGCGGTTACGCTCGTCGTGTAATGGATGGTAT"
@@ -53,17 +69,16 @@ WT_MCBA_DNA = (
     "GACTAA"
 )
 
-# 9 pharmaceutical amide synthesis targets from Fig. 3b-d and Fig. S18-S23
 SHEET_TO_DRUG_SMILES: dict[str, str] = {
-    "Fig3b": "O=C(NCCN1CCOCC1)c1ccc(Cl)cc1",  # Moclobemide
-    "Fig3c": "CCN(CC)CCNC(=O)c1cc(Cl)c(N)cc1OC",  # Metoclopramide
-    "Fig3d": "CCCCOc1cc(C(=O)NCCN(CC)CC)c2ccccc2n1",  # Cinchocaine
-    "FigS18": "COc1cc(C(=O)NCc2ccc(OCCN(C)C)cc2)ccc1OC",  # Itopride
-    "FigS19": "CCN(CC)CCNC(=O)c1ccc(N)cc1Cl",  # Declopramide
-    "FigS20": "COc1cc(C(=O)NCc2ccc(OCCN(C)C)cc2)cc(OC)c1OC",  # Trimethobenzamide
-    "FigS21": "CCN1CCC[C@H]1CNC(=O)c1cc(S(N)(=O)=O)ccc1OC",  # (S)-Sulpiride
-    "FigS22": "CCN(CC)CCNC(=O)c1ccc(N)cc1",  # Procainamide
-    "FigS23": "COc1cc(C(=O)N[C@H]2CN3CCC2CC3)cc(OC)c1OC",  # Troxipide
+    "Fig3b": "O=C(NCCN1CCOCC1)c1ccc(Cl)cc1",
+    "Fig3c": "CCN(CC)CCNC(=O)c1cc(Cl)c(N)cc1OC",
+    "Fig3d": "CCCCOc1cc(C(=O)NCCN(CC)CC)c2ccccc2n1",
+    "FigS18": "COc1cc(C(=O)NCc2ccc(OCCN(C)C)cc2)ccc1OC",
+    "FigS19": "CCN(CC)CCNC(=O)c1ccc(N)cc1Cl",
+    "FigS20": "COc1cc(C(=O)NCc2ccc(OCCN(C)C)cc2)cc(OC)c1OC",
+    "FigS21": "CCN1CCC[C@H]1CNC(=O)c1cc(S(N)(=O)=O)ccc1OC",
+    "FigS22": "CCN(CC)CCNC(=O)c1ccc(N)cc1",
+    "FigS23": "COc1cc(C(=O)N[C@H]2CN3CCC2CC3)cc(OC)c1OC",
 }
 
 

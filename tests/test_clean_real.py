@@ -1,25 +1,23 @@
+"""Tests for cleaning Erickson, Cleeveland, and ALIGN real-case datasets."""
+
+from __future__ import annotations
+
 import csv
 import json
 import math
 from pathlib import Path
 
 import pytest
+from scripts.data_prep import clean_real
+from scripts.data_prep.real_cases import align_tournament, erickson_petase
 
-from scripts.data_prep.clean_real import (
-    ERICKSON_BUFFER_COLUMNS,
-    log10_offset,
-    build_align_rows,
-    build_argument_parser,
-    build_erickson_rows,
-    resolve_align_processed_dir,
-    resolve_align_task_processed_dir,
-    sync_align_benchmark_card,
-)
+from enzymado import paths_and_constants
 
-from enzymado.paths_and_constants import Paths
+_P = paths_and_constants.Paths
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
+    """Write rows to a test CSV file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
@@ -27,7 +25,10 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> 
         writer.writerows(rows)
 
 
-def test_build_align_rows_splits_each_task_into_its_own_output(tmp_path):
+def test_build_align_rows_splits_each_task_into_its_own_output(
+    tmp_path: Path,
+) -> None:
+    """Verify ALIGN rows are deduplicated, averaged, and split per task."""
     align_root = tmp_path / "align"
     family_dir = align_root / "alpha-amylase"
     fieldnames = [
@@ -53,9 +54,11 @@ def test_build_align_rows_splits_each_task_into_its_own_output(tmp_path):
         ],
     )
 
-    interim_fieldnames, interim_rows, processed_outputs = build_align_rows(
-        "alpha-amylase",
-        align_root,
+    interim_fieldnames, interim_rows, processed_outputs = (
+        align_tournament.build_align_rows(
+            "alpha-amylase",
+            align_root,
+        )
     )
 
     assert interim_fieldnames == [
@@ -85,10 +88,8 @@ def test_build_align_rows_splits_each_task_into_its_own_output(tmp_path):
     assert task_names == ["expression", "thermostability", "specific_activity"]
 
     by_task = {
-        task_name: (fieldnames, rows)
-        for _, task_name, fieldnames, rows in processed_outputs
+        task_name: (cols, rows) for _, task_name, cols, rows in processed_outputs
     }
-    # One row per variant: repeated measurements are averaged and counted.
     assert by_task["expression"] == (
         ["dataset_id", "protein_sequence", "n_measurements", "expression"],
         [
@@ -104,8 +105,9 @@ def test_build_align_rows_splits_each_task_into_its_own_output(tmp_path):
     assert by_task["specific_activity"][1][0]["specific_activity"] == "3.5"
 
 
-def test_align_defaults_cover_supported_families_and_real_case_output_dir():
-    parser = build_argument_parser()
+def test_align_defaults_cover_supported_families_and_real_case_output_dir() -> None:
+    """Verify CLI parser defaults and output directory resolution for ALIGN."""
+    parser = clean_real.build_argument_parser()
     args = parser.parse_args(["--dataset", "align"])
 
     assert args.align_family == "all"
@@ -114,8 +116,8 @@ def test_align_defaults_cover_supported_families_and_real_case_output_dir():
     assert "b-glucosidase" in align_choices
     assert "alkaline phosphatase" not in align_choices
 
-    paths = Paths()
-    resolved_dir = resolve_align_processed_dir(
+    paths = _P()
+    resolved_dir = align_tournament.resolve_align_processed_dir(
         args.out_processed,
         paths.data_processed_properties / "aromatic_products" / "erickson.csv",
         paths,
@@ -123,30 +125,34 @@ def test_align_defaults_cover_supported_families_and_real_case_output_dir():
     assert resolved_dir == paths.data_processed_real_case
 
 
-def test_align_task_outputs_use_current_directory_layout(tmp_path):
+def test_align_task_outputs_use_current_directory_layout(tmp_path: Path) -> None:
+    """Verify task-specific directory mapping for all six ALIGN endpoints."""
     processed_dir = tmp_path / "real_case"
 
-    assert resolve_align_task_processed_dir(
+    assert align_tournament.resolve_align_task_processed_dir(
         processed_dir, "alpha-amylase", "specific_activity"
     ) == (processed_dir / "align_amylase_activity")
-    assert resolve_align_task_processed_dir(
+    assert align_tournament.resolve_align_task_processed_dir(
         processed_dir, "alpha-amylase", "expression"
     ) == (processed_dir / "align_amylase_expression")
-    assert resolve_align_task_processed_dir(
+    assert align_tournament.resolve_align_task_processed_dir(
         processed_dir, "alpha-amylase", "thermostability"
     ) == (processed_dir / "align_amylase_stability")
-    assert resolve_align_task_processed_dir(
+    assert align_tournament.resolve_align_task_processed_dir(
         processed_dir, "b-glucosidase", "activity"
     ) == (processed_dir / "align_glucosidase_activity")
-    assert resolve_align_task_processed_dir(
+    assert align_tournament.resolve_align_task_processed_dir(
         processed_dir, "b-glucosidase", "expression"
     ) == (processed_dir / "align_glucosidase_expression")
-    assert resolve_align_task_processed_dir(
+    assert align_tournament.resolve_align_task_processed_dir(
         processed_dir, "b-glucosidase", "melting_point"
     ) == (processed_dir / "align_glucosidase_melting")
 
 
-def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
+def test_sync_align_benchmark_card_replaces_legacy_align_entries(
+    tmp_path: Path,
+) -> None:
+    """Verify benchmark_card.json synchronization for ALIGN tasks."""
     project_root = tmp_path
     processed_dir = project_root / "data" / "processed" / "real_case"
     benchmark_card_path = project_root / "benchmark_card.json"
@@ -214,7 +220,7 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
         encoding="utf-8",
     )
 
-    updated_sections = sync_align_benchmark_card(
+    updated_sections = align_tournament.sync_align_benchmark_card(
         benchmark_card_path,
         processed_dir,
         project_root,
@@ -233,7 +239,8 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
     amylase_entry = updated_card["real_case"]["align_amylase_expression"]["datasets"][0]
     assert amylase_entry["dataset_id"] == "alpha_amylase__expression"
     assert amylase_entry["path"] == (
-        "data/processed/real_case/align_amylase_expression/alpha_amylase__expression.csv"
+        "data/processed/real_case/align_amylase_expression/"
+        "alpha_amylase__expression.csv"
     )
     assert amylase_entry["schema"]["target_col"] == "expression"
 
@@ -242,60 +249,78 @@ def test_sync_align_benchmark_card_replaces_legacy_align_entries(tmp_path):
     ][0]
     assert glucosidase_entry["dataset_id"] == "b_glucosidase__melting_point"
     assert glucosidase_entry["path"] == (
-        "data/processed/real_case/align_glucosidase_melting/b_glucosidase__melting_point.csv"
+        "data/processed/real_case/align_glucosidase_melting/"
+        "b_glucosidase__melting_point.csv"
     )
     assert glucosidase_entry["schema"]["target_col"] == "melting_point"
 
 
 def _write_erickson_values(path: Path, rows: list[list[str]]) -> None:
-    header = [["Enzyme ID", "", "101"], ["Rxn Temperature (°C)", "Rxn pH", "Sum (mg/L)"]]
+    """Write an Erickson values.csv test fixture."""
+    header = [
+        ["Enzyme ID", "", "101"],
+        ["Rxn Temperature (°C)", "Rxn pH", "Sum (mg/L)"],
+    ]
     with path.open("w", encoding="utf-8", newline="") as handle:
         csv.writer(handle).writerows(header + rows)
 
 
-def test_erickson_rows_carry_ph_and_buffer_and_fix_the_relabelled_row(tmp_path):
+def test_erickson_rows_carry_ph_and_buffer_and_fix_the_relabelled_row(
+    tmp_path: Path,
+) -> None:
+    """Verify Erickson pH/buffer parsing and row 6 temperature relabelling fix."""
     sequences = tmp_path / "sequences.csv"
-    write_csv(sequences, ["Enzyme ID", "Protein Sequence"], [
-        {"Enzyme ID": "101", "Protein Sequence": "MKV"},
-    ])
+    write_csv(
+        sequences,
+        ["Enzyme ID", "Protein Sequence"],
+        [{"Enzyme ID": "101", "Protein Sequence": "MKV"}],
+    )
     conditions = ["C6", "NP7", "NP7.5", "H7.5", "B8", "G9"]
     rows = [["30°C", c, "1"] for c in conditions] + [["30°C", "C6", "2"]]
     rows += [["40°C", c, "3"] for c in conditions[1:]]
     values = tmp_path / "values.csv"
     _write_erickson_values(values, rows)
 
-    _, processed = build_erickson_rows(sequences, values)
+    _, processed = erickson_petase.build_erickson_rows(sequences, values)
 
     by_id = {row["dataset_id"]: row for row in processed}
     assert len(by_id) == len(processed) == 12
     fixed = by_id["101_40_c_c6"]
     assert (fixed["temperature"], fixed["ph"], fixed["sum_aromatic_products"]) == (
-        "40.0", "6.0", "2.0",
+        "40.0",
+        "6.0",
+        "2.0",
     )
     assert float(fixed["log10_sum_aromatic_products_plus_one"]) == pytest.approx(
         math.log10(3.0)
     )
     hepes = by_id["101_30_c_h7_5"]
-    assert hepes["ph"] == "7.5" and hepes["buffer_h"] == "1.0"
+    assert hepes["ph"] == "7.5"
+    assert hepes["buffer_h"] == "1.0"
     for row in processed:
-        assert sum(float(row[column]) for column in ERICKSON_BUFFER_COLUMNS) == 1.0
+        buffer_cols = erickson_petase.ERICKSON_BUFFER_COLUMNS
+        assert sum(float(row[column]) for column in buffer_cols) == 1.0
 
 
-def test_erickson_row_fix_refuses_an_unexpected_label(tmp_path):
+def test_erickson_row_fix_refuses_an_unexpected_label(tmp_path: Path) -> None:
+    """Verify Erickson row fix raises ValueError when row 6 does not match."""
     sequences = tmp_path / "sequences.csv"
-    write_csv(sequences, ["Enzyme ID", "Protein Sequence"], [
-        {"Enzyme ID": "101", "Protein Sequence": "MKV"},
-    ])
+    write_csv(
+        sequences,
+        ["Enzyme ID", "Protein Sequence"],
+        [{"Enzyme ID": "101", "Protein Sequence": "MKV"}],
+    )
     rows = [["30°C", c, "1"] for c in ["C6", "NP7", "NP7.5", "H7.5", "B8", "G9", "NP7"]]
     values = tmp_path / "values.csv"
     _write_erickson_values(values, rows)
 
     with pytest.raises(ValueError, match="expected 30°C, C6"):
-        build_erickson_rows(sequences, values)
+        erickson_petase.build_erickson_rows(sequences, values)
 
 
-def test_log10_offset_is_the_smallest_positive_value_only_when_zeros_exist():
-    assert log10_offset([0.5, 2.0, 30.0]) == 0.0
-    assert log10_offset([0.0, 0.006487, 7053.0]) == 0.006
+def test_log10_offset_is_the_smallest_positive_value_only_when_zeros_exist() -> None:
+    """Verify log10_offset returns 0 on positive values or min when 0s exist."""
+    assert align_tournament.log10_offset([0.5, 2.0, 30.0]) == 0.0
+    assert align_tournament.log10_offset([0.0, 0.006487, 7053.0]) == 0.006
     with pytest.raises(ValueError, match="negative"):
-        log10_offset([-1.0, 2.0])
+        align_tournament.log10_offset([-1.0, 2.0])

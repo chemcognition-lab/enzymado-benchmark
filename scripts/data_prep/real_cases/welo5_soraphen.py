@@ -1,4 +1,13 @@
-"""Preprocess WelO5* halogenase Soraphen A conversion dataset (Layout A)."""
+"""Preprocess WelO5* halogenase Soraphen A conversion dataset (Layout A).
+
+Dataset & Processing Rationale:
+- Sequence construction: Applies combinatorial active-site point mutations onto
+  the wild-type Hapalosiphon welwitschii Fe(II)/alpha-ketoglutarate-dependent
+  halogenase WelO5* sequence (welo5_wt.fasta).
+- Target transformation: Soraphen A conversion values include zero-conversion
+  variants and span several orders of magnitude, so the regression target is
+  modeled as log10(activity + 1e-3).
+"""
 
 from __future__ import annotations
 
@@ -7,8 +16,12 @@ from pathlib import Path
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "welo5_soraphen_activity"
-FIELDNAMES = ["dataset_id", "protein_sequence", "activity", "log10_activity"]
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, "activity", "log10_activity"]
 LOG10_OFFSET = 1e-3
 
 

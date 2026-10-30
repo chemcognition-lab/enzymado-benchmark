@@ -1,4 +1,18 @@
-"""Preprocess Koudelakova haloalkane dehalogenase (HLD) specificity panel (Layout B)."""
+"""Preprocess Koudelakova haloalkane dehalogenase (HLD) specificity panel (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence construction: Combines 9 wild-type haloalkane dehalogenases (DatA,
+  DbeA, DbjA, DhaA, DhlA, DmbA, DmbC, DrbA, LinB) from Table S1 with 4
+  engineered variants constructed per Table S2:
+  - DbeA1: 9-aa insertion VAEEQDHAE between DbeA residues 142 and 143.
+  - DbeA2: 9-aa insertion EVAEEQDHA between DbeA residues 141 and 142.
+  - DbjA_delta: 7-aa deletion of residues H140..E146 (HTEVAEE) in DbjA.
+  - DhaA31: 5 point substitutions I135F/C176Y/V245F/L246I/Y273F on DhaA.
+- Substrate matrix: Extracts the 390 cells (13 enzymes x 30 halogenated
+  substrates) from Table S5 of the supplementary PDF in exact Table S3/S5 order.
+- Target transformation: Transformed activities include zeros and are modeled on
+  a log10 scale via log10(transformed_activity + 1e-4).
+"""
 
 from __future__ import annotations
 
@@ -7,17 +21,21 @@ import subprocess
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+_P = paths_and_constants.Paths
+
 TASK_NAME = "koudelakova_hld_panel"
 FIELDNAMES = [
-    "dataset_id",
-    "protein_sequence",
-    "smiles",
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.smiles,
     "transformed_activity",
     "log10_activity",
 ]
 LOG10_OFFSET = 1e-4
 
-# 9 wild-type HLD sequences from Table S1 GenBank/UniProt/PDB accessions
 WT_HLD_SEQUENCES: dict[str, str] = {
     "DatA": (
         "MKEHRHMTEKSPHSAFGDGAKAYDVPAFGLQIHTVEHGSGAPIVFLHGNPTSSYLWRHIFRRL"
@@ -101,7 +119,6 @@ ENZYME_ORDER: tuple[str, ...] = (
     "DhaA31",
 )
 
-# 30 halogenated substrates in the exact order of Table S3 & Table S5
 SUBSTRATE_ORDER_SMILES: tuple[tuple[str, str], ...] = (
     ("1-Chlorobutane", "CCCCCl"),
     ("1-Chlorohexane", "CCCCCCCl"),
@@ -143,7 +160,7 @@ def resolve_hld_pdf(pdf_path: Path | None = None) -> Path:
     raw_pdf = utils.RAW_REAL_CASE_DIR / TASK_NAME / "hld_koudelakova2011_biochemj.pdf"
     if raw_pdf.exists():
         return raw_pdf
-    return utils.PROJECT_ROOT / "docs" / "pdfs" / "hld_koudelakova2011_biochemj.pdf"
+    return _P.project_root / "docs" / "pdfs" / "hld_koudelakova2011_biochemj.pdf"
 
 
 def build_hld_sequences() -> dict[str, str]:
@@ -152,13 +169,9 @@ def build_hld_sequences() -> dict[str, str]:
     dbea = seqs["DbeA"]
     dbja = seqs["DbjA"]
     dhaa = seqs["DhaA"]
-    # Table S2: DbeA1 insertion between residues 142 and 143: VAEEQDHAE
     seqs["DbeA1"] = dbea[:142] + "VAEEQDHAE" + dbea[142:]
-    # Table S2: DbeA2 insertion between residues 141 and 142: EVAEEQDHA
     seqs["DbeA2"] = dbea[:141] + "EVAEEQDHA" + dbea[141:]
-    # Table S2: DbjA_delta deletion of H140..E146 (HTEVAEE)
     seqs["DbjA_delta"] = dbja[:139] + dbja[146:]
-    # Table S2: DhaA31 substitutions I135F, C176Y, V245F, L246I, Y273F
     seqs["DhaA31"] = utils.apply_mutations(dhaa, "I135F/C176Y/V245F/L246I/Y273F")
     return seqs
 

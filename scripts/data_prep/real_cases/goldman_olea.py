@@ -1,4 +1,15 @@
-"""Preprocess Goldman OleA thiolase family specificity dataset (Layout B)."""
+"""Preprocess Goldman OleA thiolase family specificity dataset (Layout B).
+
+Dataset & Processing Rationale:
+- Sequence & organism normalization: Parses the 73 bacterial OleA sequences
+  from 73_OleA_JGI_unaligned.fasta.txt, normalizes JGI organism headers (and 6
+  strain-name aliases) to match enzyme_substrate_activity_data.csv, and strips
+  the 20-aa N-terminal His-tag (MGSSHHHHHHSSGLVPRGSH) while restoring the
+  catalytic cysteine (FDVANASLAF -> FDVANACLAF) on crystal-structure entry 4KU5.
+- Compound mapping & target: Reconciles the "oxidazole" -> "oxadiazole"
+  spelling variant against final_15_cmpnds_tested.csv and maps the reported
+  log_slope directly to log_activity.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +19,12 @@ import re
 
 from scripts.data_prep.real_cases import utils
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 TASK_NAME = "goldman_olea_thiolase"
-FIELDNAMES = ["dataset_id", "protein_sequence", "smiles", "log_activity"]
+FIELDNAMES = [_C.dataset_id, _C.protein_sequence, _C.smiles, "log_activity"]
 
 ORG_PREFIX_RE = re.compile(r"^.+\.1")
 MANUAL_ORG_SUBS: dict[str, str] = {

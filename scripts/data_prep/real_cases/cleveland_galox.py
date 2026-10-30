@@ -1,30 +1,36 @@
-"""Clean Cleveland et al. (2021) GalOx / AA5 CRO dataset."""
+"""Clean Cleveland et al. (2021) GalOx / AA5 CRO dataset.
+
+Dataset & Processing Rationale:
+- Target transformation: Galactose oxidase / AA5 copper radical oxidase specific
+  activity spans four orders of magnitude (0.01 to 705) with strictly positive
+  measurements, so the regression target is modeled on a log10 scale
+  (log10_specific_activity).
+- Feature retention: Substrate concentration (parsed from the "substrate notes"
+  column) and canonical substrate isomeric SMILES are retained alongside the
+  full-length variant protein sequence.
+"""
 
 from __future__ import annotations
 
 import csv
 import math
 from pathlib import Path
-import sys
 
 from scripts.data_prep.real_cases import utils
 
-if str(utils.PROJECT_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(utils.PROJECT_ROOT / "src"))
+from enzymado import paths_and_constants
 
-from enzymado.paths_and_constants import Constants
+_C = paths_and_constants.Constants
 
 CLEVELAND_VALUE_COLUMN = "specific_activity"
-# Specific activity spans four orders of magnitude (0.01 to 705), so the target
-# is its log10.
 CLEVELAND_TARGET_COLUMN = "log10_specific_activity"
 CLEVELAND_INTERIM_COLUMNS = [
-    Constants.dataset_id,
+    _C.dataset_id,
     "protein_name",
-    Constants.protein_sequence,
+    _C.protein_sequence,
     "substrate_name",
-    Constants.ligand_name,
-    Constants.smiles,
+    _C.ligand_name,
+    _C.smiles,
     "substrate_notes",
     "substrate_concentration",
     "measurement",
@@ -33,10 +39,10 @@ CLEVELAND_INTERIM_COLUMNS = [
     "variance",
 ]
 CLEVELAND_PROCESSED_COLUMNS = [
-    Constants.dataset_id,
-    Constants.protein_sequence,
-    Constants.ligand_name,
-    Constants.smiles,
+    _C.dataset_id,
+    _C.protein_sequence,
+    _C.ligand_name,
+    _C.smiles,
     "substrate_concentration",
     CLEVELAND_VALUE_COLUMN,
     CLEVELAND_TARGET_COLUMN,
@@ -95,8 +101,7 @@ def build_cleeveland_rows(
     processed_rows: list[dict[str, str]] = []
 
     with dataset_path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
+        for row in csv.DictReader(handle):
             protein_name = utils.clean_text(row.get("protein_name"))
             substrate_name = utils.clean_text(row.get("substrate_name"))
             if not protein_name or not substrate_name:
@@ -124,12 +129,12 @@ def build_cleeveland_rows(
 
             interim_rows.append(
                 {
-                    Constants.dataset_id: dataset_id,
+                    _C.dataset_id: dataset_id,
                     "protein_name": protein_name,
-                    Constants.protein_sequence: protein_sequence,
+                    _C.protein_sequence: protein_sequence,
                     "substrate_name": substrate_name,
-                    Constants.ligand_name: substrate_name,
-                    Constants.smiles: smiles,
+                    _C.ligand_name: substrate_name,
+                    _C.smiles: smiles,
                     "substrate_notes": substrate_notes,
                     "substrate_concentration": substrate_concentration,
                     "measurement": measurement,
@@ -140,10 +145,10 @@ def build_cleeveland_rows(
             )
             processed_rows.append(
                 {
-                    Constants.dataset_id: dataset_id,
-                    Constants.protein_sequence: protein_sequence,
-                    Constants.ligand_name: substrate_name,
-                    Constants.smiles: smiles,
+                    _C.dataset_id: dataset_id,
+                    _C.protein_sequence: protein_sequence,
+                    _C.ligand_name: substrate_name,
+                    _C.smiles: smiles,
                     "substrate_concentration": substrate_concentration,
                     CLEVELAND_VALUE_COLUMN: value,
                     CLEVELAND_TARGET_COLUMN: str(math.log10(float(value))),
