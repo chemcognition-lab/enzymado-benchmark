@@ -74,6 +74,15 @@ def _sampled_content_sha256(path: Path) -> tuple[str, list[int]]:
     return digest.hexdigest(), offsets
 
 
+def _format_manifest_path(path: Path) -> str:
+    """Format a manifest path relative to the repository root when possible."""
+    root = enzymado.paths_and_constants.Paths.project_root.resolve()
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 @functools.lru_cache(maxsize=None)
 def _fingerprint_file_cached(
     resolved_path: str,
@@ -92,7 +101,7 @@ def _fingerprint_file_cached(
         kind = "sampled_content_sha256"
         sha256, offsets = _sampled_content_sha256(resolved)
     fingerprint: dict[str, object] = {
-        "path": str(resolved),
+        "path": _format_manifest_path(resolved),
         "kind": kind,
         "sha256": sha256,
         "size_bytes": size_bytes,
@@ -135,7 +144,7 @@ def _fingerprint_directory_cached(resolved_path: str) -> dict[str, object]:
             }
         )
     return {
-        "path": str(resolved),
+        "path": _format_manifest_path(resolved),
         "kind": "tree_inventory_sha256",
         "sha256": _canonical_json_sha256(records),
         "file_count": len(records),
@@ -227,7 +236,7 @@ def _build_static_environment_manifest() -> dict[str, object]:
     )
     return {
         "python": sys.version,
-        "python_executable": sys.executable,
+        "python_executable": Path(sys.executable).name,
         "platform": platform.platform(),
         "packages": _package_versions(),
         "cuda_runtime": torch.version.cuda,

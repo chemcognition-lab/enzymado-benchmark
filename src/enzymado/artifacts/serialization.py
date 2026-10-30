@@ -16,6 +16,7 @@ import safetensors.torch
 import torch
 
 import enzymado.models.training_protocol
+import enzymado.paths_and_constants
 
 from . import sample_identity
 from .results_layout import (
@@ -168,10 +169,19 @@ def save_raw_predictions(
     )
 
 
+def _format_path(path: Path) -> str:
+    """Format a path relative to the repository root when inside the checkout."""
+    root = enzymado.paths_and_constants.Paths.project_root.resolve()
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def _json_ready(value):
     """Convert NumPy/PyTorch scalars and paths into JSON-serializable values."""
     if isinstance(value, Path):
-        return str(value)
+        return _format_path(value)
     if isinstance(value, np.generic):
         value = value.item()
     if isinstance(value, float):

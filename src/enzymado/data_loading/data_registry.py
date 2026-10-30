@@ -326,6 +326,382 @@ TASK_REGISTRY: dict[str, TaskConfig] = {
         ),
         index_columns=("dataset_id",),
     ),
+    "welo5_soraphen_activity": TaskConfig(
+        name="welo5_soraphen_activity",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/welo5_soraphen_activity"
+            / "welo5_soraphen_activity_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_activity_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "pafa_htmek_kcat": TaskConfig(
+        name="pafa_htmek_kcat",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/pafa_htmek_kcat"
+            / "pafa_htmek_kcat_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_kcat_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "pafa_htmek_km": TaskConfig(
+        name="pafa_htmek_km",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/pafa_htmek_km"
+            / "pafa_htmek_km_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_km_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "pafa_htmek_kcat_km": TaskConfig(
+        name="pafa_htmek_kcat_km",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/pafa_htmek_kcat_km"
+            / "pafa_htmek_kcat_km_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_kcat_km_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "daox_epseq_activity": TaskConfig(
+        name="daox_epseq_activity",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/daox_epseq_activity"
+            / "daox_epseq_activity_random_80_10_10_standardized.csv",
+        },
+        target_column="log_activity_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "daox_epseq_stability": TaskConfig(
+        name="daox_epseq_stability",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/daox_epseq_stability"
+            / "daox_epseq_stability_random_80_10_10_standardized.csv",
+        },
+        target_column="log_stability_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "cyp2c9_activity": TaskConfig(
+        name="cyp2c9_activity",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/cyp2c9_activity"
+            / "cyp2c9_activity_random_80_10_10_standardized.csv",
+        },
+        target_column="activity_score_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "cyp2c9_abundance": TaskConfig(
+        name="cyp2c9_abundance",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/cyp2c9_abundance"
+            / "cyp2c9_abundance_random_80_10_10_standardized.csv",
+        },
+        target_column="abundance_score_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "mpro_fret_cleavage": TaskConfig(
+        name="mpro_fret_cleavage",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/mpro_fret_cleavage"
+            / "mpro_fret_cleavage_random_80_10_10_standardized.csv",
+        },
+        target_column="functional_score_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "plpro_activity": TaskConfig(
+        name="plpro_activity",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/plpro_activity"
+            / "plpro_activity_random_80_10_10_standardized.csv",
+        },
+        target_column="fitness_activity_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "plpro_abundance": TaskConfig(
+        name="plpro_abundance",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/plpro_abundance"
+            / "plpro_abundance_random_80_10_10_standardized.csv",
+        },
+        target_column="fitness_abundance_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "amie_acetamide_dms": TaskConfig(
+        name="amie_acetamide_dms",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/amie_acetamide_dms"
+            / "amie_acetamide_dms_random_80_10_10_standardized.csv",
+        },
+        target_column="normalized_fitness_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "amie_propionamide_dms": TaskConfig(
+        name="amie_propionamide_dms",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/amie_propionamide_dms"
+            / "amie_propionamide_dms_random_80_10_10_standardized.csv",
+        },
+        target_column="normalized_fitness_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "amie_isobutyramide_dms": TaskConfig(
+        name="amie_isobutyramide_dms",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/amie_isobutyramide_dms"
+            / "amie_isobutyramide_dms_random_80_10_10_standardized.csv",
+        },
+        target_column="normalized_fitness_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "pyks_solubility": TaskConfig(
+        name="pyks_solubility",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/pyks_solubility"
+            / "pyks_solubility_random_80_10_10_standardized.csv",
+        },
+        target_column="normalized_er_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "trpb3_epistasis": TaskConfig(
+        name="trpb3_epistasis",
+        batch_kind=TaskType.PROTEIN_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/trpb3_epistasis"
+            / "trpb3_epistasis_random_80_10_10_standardized.csv",
+        },
+        target_column="fitness_standardized",
+        index_columns=("dataset_id",),
+    ),
+    "goase_variant_substrate": TaskConfig(
+        name="goase_variant_substrate",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/goase_variant_substrate"
+            / "goase_variant_substrate_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "goldman_olea_thiolase": TaskConfig(
+        name="goldman_olea_thiolase",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/goldman_olea_thiolase"
+            / "goldman_olea_thiolase_random_80_10_10_standardized.csv",
+        },
+        target_column="log_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "goldman_aminotransferase": TaskConfig(
+        name="goldman_aminotransferase",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/goldman_aminotransferase"
+            / "goldman_aminotransferase_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_specific_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "fisher_fdh_nacl": TaskConfig(
+        name="fisher_fdh_nacl",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/fisher_fdh_nacl"
+            / "fisher_fdh_nacl_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_conversion_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "fisher_fdh_nabr": TaskConfig(
+        name="fisher_fdh_nabr",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/fisher_fdh_nabr"
+            / "fisher_fdh_nabr_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_conversion_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "martinez_esterase_panel": TaskConfig(
+        name="martinez_esterase_panel",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/martinez_esterase_panel"
+            / "martinez_esterase_panel_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_specific_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "huang_had_phosphatase_c0": TaskConfig(
+        name="huang_had_phosphatase_c0",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/huang_had_phosphatase_c0"
+            / "huang_had_phosphatase_c0_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_conversion_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "huang_had_phosphatase_c1": TaskConfig(
+        name="huang_had_phosphatase_c1",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/huang_had_phosphatase_c1"
+            / "huang_had_phosphatase_c1_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_conversion_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "huang_had_phosphatase_c2": TaskConfig(
+        name="huang_had_phosphatase_c2",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/huang_had_phosphatase_c2"
+            / "huang_had_phosphatase_c2_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_conversion_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "mcba_reaction_activity": TaskConfig(
+        name="mcba_reaction_activity",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/mcba_reaction_activity"
+            / "mcba_reaction_activity_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "ao_3fcr_transaminase": TaskConfig(
+        name="ao_3fcr_transaminase",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/ao_3fcr_transaminase"
+            / "ao_3fcr_transaminase_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_specific_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
+    "koudelakova_hld_panel": TaskConfig(
+        name="koudelakova_hld_panel",
+        batch_kind=TaskType.PROTEIN_LIGAND_GLOBAL,
+        label_kind=LabelType.SCALAR_REGRESSION,
+        task_scope="real_case",
+        dataset_paths={
+            SplitType.RANDOM: _DATA
+            / "real_case/koudelakova_hld_panel"
+            / "koudelakova_hld_panel_random_80_10_10_standardized.csv",
+        },
+        target_column="log10_activity_standardized",
+        ligand_column="smiles",
+        index_columns=("dataset_id",),
+    ),
 }
 
 
