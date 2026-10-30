@@ -29,6 +29,9 @@ scripts/logs/
 # Under results/ only the release trees are versioned; reruns, pilots, seed runs and
 # backups stay local, so a broad `git add` cannot sweep them in.
 results/*
+!results/all_runs.csv
+!results/leaderboard_properties.csv
+!results/leaderboard_real_case.csv
 !results/predictions/
 !results/bootstrap/
 !results/ratings/
