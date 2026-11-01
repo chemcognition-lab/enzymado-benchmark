@@ -194,6 +194,26 @@ def validation_objective(
     return -float(score)
 
 
+def score_validation_tensors(
+    logits_t: Tensor,
+    y_t: Tensor,
+    metric_name: str | None,
+) -> float | None:
+    """Return the negated selection metric for concatenated validation output.
+
+    Callers must pass the whole validation split at once: AUPRC and Kendall
+    tau are not averages, so scoring per batch and taking the mean would not
+    give the value the leaderboard reports.
+    """
+    training_protocol.check_finite_tensors([logits_t], "validation logits")
+    scores = torch.sigmoid(logits_t) if metric_name == "auprc" else logits_t
+    return validation_objective(
+        y_t.reshape(-1).detach().cpu().numpy(),
+        scores.reshape(-1).detach().cpu().numpy(),
+        metric_name,  # type: ignore[arg-type]
+    )
+
+
 def _atomic_torch_save(payload, path: str | Path) -> None:
     """Write a torch-serialized payload atomically to avoid partial checkpoints."""
     path_obj = Path(path)

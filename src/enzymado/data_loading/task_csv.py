@@ -9,6 +9,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from enzymado import paths_and_constants
+
+_C = paths_and_constants.Constants
+
 
 def normalize_sequence(value: str | None) -> str:
     """Return a normalized sequence key for embedding store lookups."""
@@ -25,7 +29,7 @@ def clean_text(value: str | None) -> str:
 def filter_rows_by_split(
     rows: list[dict[str, str]],
     split_name: str | None = None,
-    split_column: str = "split",
+    split_column: str = _C.split,
 ) -> list[dict[str, str]]:
     """Return only rows matching split_name, or all rows if split_name is None."""
     if split_name is None:
@@ -55,8 +59,8 @@ class TaskCSVLoader:
     dataset_path: Path
     index_columns: tuple[str, ...]
     split_name: str | None = None
-    split_column: str = "split"
-    sequence_column: str = "protein_sequence"
+    split_column: str = _C.split
+    sequence_column: str = _C.protein_sequence
 
     def load_rows(self) -> list[dict[str, str]]:
         frame = pd.read_csv(self.dataset_path, dtype=str, keep_default_na=False)

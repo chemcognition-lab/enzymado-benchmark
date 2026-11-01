@@ -8,63 +8,25 @@ import os
 from pathlib import Path
 
 from enzymado import dataset_splitting, paths_and_constants
+from enzymado.data_loading import data_registry
 
 _C = paths_and_constants.Constants
 _P = paths_and_constants.Paths
-_REAL_CASE_DIR = Path("data/processed/real_case")
+_SPLIT_SUFFIX = "_random_80_10_10_standardized.csv"
 
 
-def _dataset_spec(spec: str, target: str) -> tuple[Path, str]:
-    rel_path = spec if "/" in spec else f"{spec}/{spec}.csv"
-    return _REAL_CASE_DIR / rel_path, target
+def _real_case_spec(config: data_registry.TaskConfig) -> tuple[Path, str]:
+    split_path = config.dataset_paths[data_registry.SplitType.RANDOM]
+    source_name = f"{split_path.name.removesuffix(_SPLIT_SUFFIX)}.csv"
+    rel_source = split_path.with_name(source_name).relative_to(_P.project_root)
+    target_col = config.target_column.removesuffix("_standardized")
+    return rel_source, target_col
 
 
-_RAW_SPECS: tuple[tuple[str, str], ...] = (
-    (
-        "align_amylase_activity/alpha_amylase__specific_activity.csv",
-        "log10_specific_activity",
-    ),
-    ("align_amylase_expression/alpha_amylase__expression.csv", "expression"),
-    (
-        "align_amylase_stability/alpha_amylase__thermostability.csv",
-        "log10_thermostability",
-    ),
-    ("align_glucosidase_activity/b_glucosidase__activity.csv", "log10_activity"),
-    ("align_glucosidase_expression/b_glucosidase__expression.csv", "log10_expression"),
-    ("align_glucosidase_melting/b_glucosidase__melting_point.csv", "melting_point"),
-    ("cleeveland_galox/cleeveland.csv", "log10_specific_activity"),
-    ("erickson_petase/erickson.csv", "log10_sum_aromatic_products_plus_one"),
-    ("welo5_soraphen_activity", "log10_activity"),
-    ("pafa_htmek_kcat", "log10_kcat"),
-    ("pafa_htmek_km", "log10_km"),
-    ("pafa_htmek_kcat_km", "log10_kcat_km"),
-    ("daox_epseq_activity", "log_activity"),
-    ("daox_epseq_stability", "log_stability"),
-    ("cyp2c9_activity", "activity_score"),
-    ("cyp2c9_abundance", "abundance_score"),
-    ("mpro_fret_cleavage", "functional_score"),
-    ("plpro_activity", "fitness_activity"),
-    ("plpro_abundance", "fitness_abundance"),
-    ("amie_acetamide_dms", "normalized_fitness"),
-    ("amie_propionamide_dms", "normalized_fitness"),
-    ("amie_isobutyramide_dms", "normalized_fitness"),
-    ("pyks_solubility", "normalized_er"),
-    ("trpb3_epistasis", "fitness"),
-    ("goase_variant_substrate", "log10_activity"),
-    ("goldman_olea_thiolase", "log_activity"),
-    ("goldman_aminotransferase", "log10_specific_activity"),
-    ("fisher_fdh_nacl", "log10_conversion"),
-    ("fisher_fdh_nabr", "log10_conversion"),
-    ("martinez_esterase_panel", "log10_specific_activity"),
-    ("huang_had_phosphatase_c0", "log10_conversion"),
-    ("huang_had_phosphatase_c1", "log10_conversion"),
-    ("huang_had_phosphatase_c2", "log10_conversion"),
-    ("mcba_reaction_activity", "log10_activity"),
-    ("ao_3fcr_transaminase", "log10_specific_activity"),
-    ("koudelakova_hld_panel", "log10_activity"),
-)
 REAL_CASE_DATASETS: tuple[tuple[Path, str], ...] = tuple(
-    _dataset_spec(spec, target) for spec, target in _RAW_SPECS
+    _real_case_spec(cfg)
+    for cfg in data_registry.TASK_REGISTRY.values()
+    if cfg.task_scope == "real_case"
 )
 
 
@@ -88,8 +50,7 @@ def _metadata_paths(source_path: Path) -> tuple[Path, ...]:
 def main() -> None:
     """Regenerate standardized files and all tracked provenance sidecars."""
     os.chdir(_P.project_root)
-    for relative_source_path, target_column in REAL_CASE_DATASETS:
-        source_path = relative_source_path
+    for source_path, target_column in REAL_CASE_DATASETS:
         output_path = dataset_splitting.build_output_csv_path(
             source_path,
             mode="random",
@@ -116,7 +77,7 @@ def main() -> None:
             )
             for metadata_path in _metadata_paths(source_path)
         ]
-        print(f"{relative_source_path} -> {output_path}")
+        print(f"{source_path} -> {output_path}")
         print(json.dumps(summaries[0], indent=2))
 
 

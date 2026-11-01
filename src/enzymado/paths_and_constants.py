@@ -22,10 +22,14 @@ class Paths:
     data_raw_fireprotdb_dir: Path = data_raw_dir / "fireprotdb"
     data_raw_swissprot_dir: Path = data_raw_dir / "swissprot"
     data_raw_catpred_dir: Path = data_raw_dir / "catpred"
+    data_raw_real_case: Path = data_raw_dir / "real_case"
 
     data_processed_properties: Path = data_processed_dir / "properties"
     data_processed_datasets: Path = data_processed_dir / "datasets"
+    protein_pool_csv: Path = data_processed_dir / "protein_pool.csv"
+    legacy_seq_index_csv: Path = data_processed_dir / "protein_sequences_unique.csv"
 
+    docs_datasets_dir: Path = project_root / "docs" / "datasets"
     models_dir: Path = project_root / "models"
     notebooks_dir: Path = project_root / "notebooks"
     results_dir: Path = project_root / "results"
@@ -34,15 +38,6 @@ class Paths:
     scripts_dir: Path = project_root / "scripts"
     src_dir: Path = project_root / "src"
     tests_dir: Path = project_root / "tests"
-
-    def __init__(self) -> None:
-        """Copy shared paths onto each instance for compatibility."""
-        for name in dir(self.__class__):
-            if name.startswith("_"):
-                continue
-            value = getattr(self.__class__, name)
-            if isinstance(value, Path):
-                setattr(self, name, value)
 
 
 class Constants:
@@ -55,6 +50,7 @@ class Constants:
     ligand_id: str = "ligand_id_raw"
     ligand_name: str = "ligand_name"
     smiles: str = "smiles"
+    split: str = "split"
 
 
 __all__ = ["Paths", "Constants"]

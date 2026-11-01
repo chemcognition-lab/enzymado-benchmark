@@ -24,7 +24,7 @@ import safetensors
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 CAUSE = "GPU memory on long sequences"
 
 

@@ -27,7 +27,7 @@ from scipy import stats
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 sys.path.insert(0, str(_P.scripts_dir / "results"))
 sys.path.insert(0, str(_P.scripts_dir / "figures"))
 

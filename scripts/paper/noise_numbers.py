@@ -26,7 +26,7 @@ import pandas as pd
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 MARGINS = _P.results_dir / "noise_seeds" / "tie_margins_v4.csv"
 KEY = ["task", "split", "metric", "model_family", "pool_type"]
 PRIMARY = {"regression": "kendall_tau", "classification": "auprc"}

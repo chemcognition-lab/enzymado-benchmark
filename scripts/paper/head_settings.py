@@ -16,7 +16,7 @@ import json
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 GROUP = {"ec_number": "EC", "active_sites": "residue", "binding_site": "residue"}
 IGNORED = {"random_state", "seed", "n_jobs", "device", "nthread"}
 

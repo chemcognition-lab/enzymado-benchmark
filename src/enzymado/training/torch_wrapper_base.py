@@ -2,14 +2,13 @@
 
 import torch
 
-from enzymado.models import training_protocol
 from enzymado.models.common import (
     DEVICE,
     apply_feature_scaler,
     fit_feature_scaler,
     masked_mean_pool,
     run_wrapper_training,
-    validation_objective,
+    score_validation_tensors,
 )
 
 
@@ -74,21 +73,8 @@ class BaseStandardWrapper:
         return x
 
     def _selection_objective(self, logits_t, y_t):
-        """Return the negated selection metric for concatenated validation output.
-
-        Callers must pass the whole validation split at once: AUPRC and Kendall
-        tau are not averages, so scoring per batch and taking the mean would not
-        give the value the leaderboard reports.
-        """
-        training_protocol.check_finite_tensors([logits_t], "validation logits")
-        scores = (
-            torch.sigmoid(logits_t) if self.validation_metric == "auprc" else logits_t
-        )
-        return validation_objective(
-            y_t.reshape(-1).detach().cpu().numpy(),
-            scores.reshape(-1).detach().cpu().numpy(),
-            self.validation_metric,
-        )
+        """Return the negated selection metric for concatenated validation output."""
+        return score_validation_tensors(logits_t, y_t, self.validation_metric)
 
     def _run_training(
         self,

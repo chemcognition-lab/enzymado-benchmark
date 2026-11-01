@@ -13,7 +13,7 @@ from scipy import stats
 
 from enzymado import paths_and_constants, vis
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 RELEASE = pd.to_datetime(
     pd.Series(
         {

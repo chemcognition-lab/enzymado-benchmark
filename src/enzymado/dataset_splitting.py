@@ -8,63 +8,32 @@ import json
 from pathlib import Path
 import shutil
 
-from enzymado.splitting import (
-    artifacts,
-    core,
-    random_splits,
-    similarity,
-    standardization,
+from enzymado.splitting.artifacts import (
+    build_metadata_path,
+    build_output_csv_path,
+    resolve_csv_inputs,
+    write_split_dataset,
+    write_split_metadata,
 )
-
-# Keep existing imports valid while implementations are grouped by responsibility.
-SPLIT_NAMES = core.SPLIT_NAMES
-SEQUENCE_COLUMN_ALIASES = core.SEQUENCE_COLUMN_ALIASES
-ID_COLUMN_ALIASES = core.ID_COLUMN_ALIASES
-STANDARDIZATION_EXCLUDED_COLUMNS = standardization.STANDARDIZATION_EXCLUDED_COLUMNS
-STANDARDIZATION_EXCLUDED_SUFFIXES = standardization.STANDARDIZATION_EXCLUDED_SUFFIXES
-KNOWN_REGRESSION_TARGET_COLUMNS = standardization.KNOWN_REGRESSION_TARGET_COLUMNS
-sanitize_output_tag = core.sanitize_output_tag
-validate_split_fractions = core.validate_split_fractions
-clean_sequence = core.clean_sequence
-detect_sequence_column = core.detect_sequence_column
-detect_id_column = core.detect_id_column
-read_csv_rows = core.read_csv_rows
-build_group_index = core.build_group_index
-assign_items_to_splits = core.assign_items_to_splits
-apply_group_assignments = core.apply_group_assignments
-summarize_split_rows = core.summarize_split_rows
-parse_finite_float = standardization.parse_finite_float
-is_numeric_column = standardization.is_numeric_column
-is_binary_numeric_column = standardization.is_binary_numeric_column
-should_exclude_standardization_column = (
-    standardization.should_exclude_standardization_column
+from enzymado.splitting.core import (
+    detect_id_column,
+    detect_sequence_column,
+    read_csv_rows,
+    validate_split_fractions,
 )
-resolve_standardization_columns = standardization.resolve_standardization_columns
-make_standardized_column_name = standardization.make_standardized_column_name
-format_standardized_value = standardization.format_standardized_value
-build_standardized_dataset_rows = standardization.build_standardized_dataset_rows
-generate_random_split_rows = random_splits.generate_random_split_rows
-build_point_index = random_splits.build_point_index
-assign_continuous_stratified_points = random_splits.assign_continuous_stratified_points
-generate_point_stratified_split_rows = (
-    random_splits.generate_point_stratified_split_rows
+from enzymado.splitting.random_splits import (
+    generate_point_stratified_split_rows,
+    generate_random_split_rows,
 )
-build_sequence_dedup_index = similarity.build_sequence_dedup_index
-write_fasta = similarity.write_fasta
-parse_mmseqs_cluster_tsv = similarity.parse_mmseqs_cluster_tsv
-build_mmseqs_cluster_command = similarity.build_mmseqs_cluster_command
-cluster_sequences_with_mmseqs2 = similarity.cluster_sequences_with_mmseqs2
-build_group_clusters = similarity.build_group_clusters
-generate_similarity_split_from_clusters = (
-    similarity.generate_similarity_split_from_clusters
+from enzymado.splitting.similarity import (
+    build_mmseqs_cluster_command,
+    generate_similarity_split_from_clusters,
+    generate_similarity_split_rows,
 )
-generate_similarity_split_rows = similarity.generate_similarity_split_rows
-write_split_dataset = artifacts.write_split_dataset
-write_split_metadata = artifacts.write_split_metadata
-resolve_csv_inputs = artifacts.resolve_csv_inputs
-format_fraction_label = artifacts.format_fraction_label
-build_output_csv_path = artifacts.build_output_csv_path
-build_metadata_path = artifacts.build_metadata_path
+from enzymado.splitting.standardization import (
+    build_standardized_dataset_rows,
+    resolve_standardization_columns,
+)
 
 type CsvRow = dict[str, str]
 type SplitSummary = dict[str, dict[str, int]]
@@ -682,6 +651,25 @@ def main() -> None:
         print("Skipped datasets:")
         for path, reason in skipped:
             print(f"- {path}: {reason}")
+
+
+__all__ = [
+    "build_argument_parser",
+    "build_metadata_path",
+    "build_mmseqs_cluster_command",
+    "build_output_csv_path",
+    "build_standardized_dataset_rows",
+    "generate_point_stratified_split_rows",
+    "generate_random_split_rows",
+    "generate_similarity_split_from_clusters",
+    "generate_similarity_split_rows",
+    "main",
+    "resolve_standardization_columns",
+    "split_dataset_csv",
+    "validate_split_fractions",
+    "write_split_dataset",
+    "write_split_metadata",
+]
 
 
 if __name__ == "__main__":

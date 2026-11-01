@@ -18,8 +18,8 @@ RDLogger.DisableLog("rdApp.*")
 _C = paths_and_constants.Constants
 _P = paths_and_constants.Paths
 
-RAW_REAL_CASE_DIR = _P.data_raw_dir / "real_case"
-DOCS_DATASETS_DIR = _P.project_root / "docs" / "datasets"
+RAW_REAL_CASE_DIR = _P.data_raw_real_case
+DOCS_DATASETS_DIR = _P.docs_datasets_dir
 PROCESSED_REAL_CASE_DIR = _P.data_processed_real_case
 
 CANONICAL_AA: frozenset[str] = frozenset("ACDEFGHIKLMNPQRSTVWY")

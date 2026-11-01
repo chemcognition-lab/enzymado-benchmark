@@ -26,7 +26,7 @@ import pandas as pd
 from enzymado import paths_and_constants
 from enzymado.data_loading import data_registry, labels
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 sys.path.insert(0, str(_P.scripts_dir / "data_prep"))
 
 import remove_uniprot_fragments  # noqa: E402

@@ -24,7 +24,7 @@ import pandas as pd
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 SCALAR = {"kcat", "km", "ph_opt", "dtm", "ddg", "binding", "solubility"}
 CLUSTERS = {"6111759": "Killarney", "6111712": "Nibi"}
 

@@ -14,7 +14,7 @@ import pandas as pd
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 FONT_DIR = _P.scripts_dir / "figures" / "fonts"
 MONO, SANS = "IBM Plex Mono", "Archivo"
 

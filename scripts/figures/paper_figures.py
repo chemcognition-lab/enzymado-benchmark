@@ -14,7 +14,7 @@ import pandas as pd
 
 from enzymado import paths_and_constants, vis
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 METRIC_TAG = {"kendall_tau": "Kendall tau", "auprc": "AUPRC"}
 BRACKET_TAG = {"kendall_tau": "Kendall\n$\\tau$", "auprc": "AUPRC"}  # fonts lack τ
 HUE = {"kendall_tau": "brown", "auprc": "green"}

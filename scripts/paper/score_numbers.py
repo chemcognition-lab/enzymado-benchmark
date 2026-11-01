@@ -20,7 +20,7 @@ from scipy import stats
 
 from enzymado import paths_and_constants, vis
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 PROT5_2020 = ("prot5_xl_uniref50", "prot5_xl_half_uniref50")
 
 

@@ -66,9 +66,9 @@ def _select_global_arrays(
     model_info: enzymado.types.ModelInfo,
     data: data_loading.PooledTaskData,
 ) -> GlobalArrays:
-    """Select named global arrays, rejecting incomplete prepared payloads."""
+    """Select named global arrays for flat-EC or standard pooled routes."""
     if model_info.get("flat_ec_labels"):
-        selected = GlobalArrays(
+        return GlobalArrays(
             x_train=data.x_train_flat,
             y_train=data.y_train_flat,
             x_val=data.x_val_flat,
@@ -79,32 +79,17 @@ def _select_global_arrays(
             mask_val=data.mask_val_flat,
             mask_test=data.mask_test_flat,
         )
-    else:
-        selected = GlobalArrays(
-            x_train=data.x_train,
-            y_train=data.y_train,
-            x_val=data.x_val,
-            y_val=data.y_val,
-            x_test=data.x_test,
-            y_test=data.y_test,
-            mask_train=data.target_mask_train,
-            mask_val=data.target_mask_val,
-            mask_test=data.target_mask_test,
-        )
-    if any(
-        payload is None
-        for payload in (
-            selected.x_train,
-            selected.y_train,
-            selected.x_test,
-            selected.y_test,
-        )
-    ):
-        label_layout = "flat EC" if model_info.get("flat_ec_labels") else "pooled"
-        raise RuntimeError(
-            f"Prepared task data is missing required {label_layout} arrays."
-        )
-    return selected
+    return GlobalArrays(
+        x_train=data.x_train,
+        y_train=data.y_train,
+        x_val=data.x_val,
+        y_val=data.y_val,
+        x_test=data.x_test,
+        y_test=data.y_test,
+        mask_train=data.target_mask_train,
+        mask_val=data.target_mask_val,
+        mask_test=data.target_mask_test,
+    )
 
 
 def _dataset_sizes(
@@ -123,9 +108,6 @@ def _dataset_sizes(
         n_val = len(data.x_val_flat) if data.x_val_flat is not None else 0
         return len(data.x_train_flat), n_val, len(data.x_test_flat)
     raise RuntimeError("PooledTaskData contains no arrays.")
-
-
-# Training route functions
 
 
 def train_global(
@@ -255,9 +237,6 @@ def train_attention(
     return trained
 
 
-# Attention data-preparation thin wrapper
-
-
 def prepare_attention(
     config: data_loading.TaskConfig,
     task_name: str,
@@ -287,14 +266,11 @@ def prepare_attention(
     )
 
 
-# Route specs
-
-
 @dataclass(frozen=True)
 class TrainingRouteSpec:
     """Bundle of plain functions describing one training route."""
 
-    name: str  # "global" | "residue" | "attention"
+    name: str
     train: collections.abc.Callable[..., object]
     prepare: collections.abc.Callable[..., data_loading.LoaderTaskData] | None = None
 

@@ -47,9 +47,10 @@ def _log_skipped_rows(split_name: str, bundle: TaskDatasetBundle) -> None:
         f"    WARNING: {split_name} dropped {skipped:,} of {loaded:,} rows"
         f" failing validation ({len(bundle.dataset):,} kept)."
     )
-    for reason in getattr(bundle.dataset, "skipped_reasons", []):
+    reasons = getattr(bundle.dataset, "skipped_reasons", [])
+    for reason in reasons:
         log(f"      - {reason}")
-    if skipped > len(getattr(bundle.dataset, "skipped_reasons", [])):
+    if skipped > len(reasons):
         log("      - (further reasons not shown)")
 
 
@@ -67,7 +68,6 @@ class PooledTaskData:
     target_mask_train: torch.Tensor | dict[str, torch.Tensor] | None
     target_mask_val: torch.Tensor | dict[str, torch.Tensor] | None
     target_mask_test: torch.Tensor | dict[str, torch.Tensor] | None
-    # EC flat arrays (only populated when config.label_kind == "multilabel_ec")
     x_train_flat: torch.Tensor | None
     y_train_flat: torch.Tensor | None
     mask_train_flat: torch.Tensor | None
@@ -137,8 +137,6 @@ def _load_and_filter_rows(
             separator=config.ec_separator,
         ).fit(train_rows)
         ec_vocabulary = ec_builder.vocabulary_by_level
-        if ec_vocabulary is None:
-            raise RuntimeError("EC vocabulary builder did not produce a vocabulary.")
         vocabulary_sizes = ", ".join(
             f"{level_name}={len(labels):,}"
             for level_name, labels in ec_vocabulary.items()
@@ -189,10 +187,9 @@ def _build_pooled_data(
     emb_path: str | Path,
     split_variant: str,
     rows: _TaskRows,
-    embedding_dim: int | None,  # unused; accepted for uniform call-site signature
+    embedding_dim: int | None = None,
 ) -> PooledTaskData:
     """Build pooled x/y arrays for the global training route (MLP/Linear/XGB)."""
-    del embedding_dim
     log("    Loading pooled embeddings from safetensors...")
     t0 = time.time()
     by_id, by_seq = load_pooled_embedding_subset(
@@ -204,10 +201,6 @@ def _build_pooled_data(
     )
 
     if config.label_kind == "multilabel_ec":
-        if rows.ec_vocabulary is None:
-            raise ValueError(
-                "Canonical EC vocabulary is missing from loaded task rows."
-            )
         log("    Using canonical EC vocabulary from the complete train split...")
         ec_builder = HierarchicalECLabelBuilder(
             target_column=config.target_column,
@@ -221,55 +214,20 @@ def _build_pooled_data(
         )
 
         log("    Building pooled hierarchical EC arrays...")
-        x_tr, y_tr, m_tr = build_ec_arrays(
-            rows.train_rows,
-            by_id,
-            by_seq,
-            config,
-            ec_builder,
-            missing_policy="raise",
-        )
-        x_va, y_va, m_va = build_ec_arrays(
-            rows.val_rows,
-            by_id,
-            by_seq,
-            config,
-            ec_builder,
-            missing_policy="raise",
-        )
-        x_te, y_te, m_te = build_ec_arrays(
-            rows.test_rows,
-            by_id,
-            by_seq,
-            config,
-            ec_builder,
-            missing_policy="raise",
+        split_rows = (rows.train_rows, rows.val_rows, rows.test_rows)
+        (x_tr, y_tr, m_tr), (x_va, y_va, m_va), (x_te, y_te, m_te) = (
+            build_ec_arrays(
+                split, by_id, by_seq, config, ec_builder, missing_policy="raise"
+            )
+            for split in split_rows
         )
 
         log("    Building pooled flat EC arrays for XGBoost...")
-        xf_tr, yf_tr, mf_tr = build_flat_ec_arrays(
-            rows.train_rows,
-            by_id,
-            by_seq,
-            config,
-            flat_builder,
-            missing_policy="raise",
-        )
-        xf_va, yf_va, mf_va = build_flat_ec_arrays(
-            rows.val_rows,
-            by_id,
-            by_seq,
-            config,
-            flat_builder,
-            missing_policy="raise",
-        )
-        xf_te, yf_te, mf_te = build_flat_ec_arrays(
-            rows.test_rows,
-            by_id,
-            by_seq,
-            config,
-            flat_builder,
-            missing_policy="raise",
+        (xf_tr, yf_tr, mf_tr), (xf_va, yf_va, mf_va), (xf_te, yf_te, mf_te) = (
+            build_flat_ec_arrays(
+                split, by_id, by_seq, config, flat_builder, missing_policy="raise"
+            )
+            for split in split_rows
         )
 
         return PooledTaskData(
@@ -298,7 +256,6 @@ def _build_pooled_data(
             cleanup=lambda: None,
         )
 
-    # Non-EC: build datasets, pool embeddings into tensors, discard intermediate store
     log("    Validating rows against embedding store...")
     store = build_pooled_embedding_store(by_id, by_seq)
     train_bundle = build_task_dataset(
@@ -535,7 +492,6 @@ def _build_loader_data(
                 f" Received '{residue_store_mode}'."
             )
     else:
-        # Attention route: always use lazy store regardless of batch_kind
         log("    Building lazy safetensors store (attention route)...")
         t0 = time.time()
         store = load_lazy_safetensors_embedding_store(
@@ -593,14 +549,9 @@ def _build_loader_data(
         f" train={n_train:,} val={n_val:,} test={n_test:,}"
     )
 
-    store_ref = [store]  # closure captures a mutable container so cleanup can release
+    store_ref = [store]
 
     def cleanup() -> None:
-        # The train/val/test datasets' feature builders each hold the same store,
-        # so releasing only store_ref leaves a materialized store (100s of GiB)
-        # pinned until the whole LoaderTaskData is collected — long enough to
-        # stack under the next task and OOM. Drop every reference, then hand the
-        # freed arenas back to the OS.
         _release_loader_bundles(train_bundle, val_bundle, test_bundle)
         store_ref[0] = None
         gc.collect()

@@ -16,7 +16,7 @@ import pandas as pd
 
 from enzymado import paths_and_constants, vis
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 DATA = _P.results_dir / "paper"
 GROUPS = {"14 PLMs": vis.TEAL, "4 PLMs": vis.BROWN}
 HEADING = 22  # room for the question above each panel

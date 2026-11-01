@@ -28,9 +28,8 @@ from .task_csv import TaskCSVLoader, clean_text, normalize_sequence
 
 _P = paths_and_constants.Paths
 PROJECT_ROOT = _P.project_root
-_PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_pool.csv"
-# Older checkouts named the index protein_sequences_unique.csv.
-_LEGACY_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
+_PREFERRED_SEQ_INDEX = _P.protein_pool_csv
+_LEGACY_SEQ_INDEX = _P.legacy_seq_index_csv
 
 
 def log(msg: str) -> None:
@@ -48,13 +47,6 @@ def resolve_sequence_index_path() -> Path | None:
 
 def get_task_rows(config, split_name: str, split_variant: str) -> list[dict]:
     """Load CSV rows for a task split without touching any embeddings."""
-    if split_variant not in config.dataset_paths:
-        available = ", ".join(sorted(config.dataset_paths)) or "<none>"
-        raise KeyError(
-            f"Unknown split variant '{split_variant}' for task '{config.name}'. "
-            f"Available variants: {available}"
-        )
-
     return TaskCSVLoader(
         dataset_path=config.dataset_paths[split_variant],
         index_columns=config.index_columns,

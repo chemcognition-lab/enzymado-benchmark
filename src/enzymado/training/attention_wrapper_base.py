@@ -13,7 +13,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from enzymado.models import training_protocol
 from enzymado.models.attention_blocks import (
     MeanAggregation,
     batch_to_attention_tensors,
@@ -23,7 +22,7 @@ from enzymado.models.common import (
     make_torch_checkpoint_callback,
     make_validation_callback,
     run_training_with_early_stopping,
-    validation_objective,
+    score_validation_tensors,
 )
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
@@ -110,6 +109,7 @@ class _BaseAttentionWrapper:
         self.seq_scale_ = None
         self.extra_mean_ = None
         self.extra_scale_ = None
+        self.pooled_standardizer_fitted_ = False
         self.first_problematic_batch_ = None
         self.diagnostic_global_step_ = 0
         self._diagnostic_epoch_ = 0
@@ -329,12 +329,8 @@ class _BaseAttentionWrapper:
             return
 
         var = m2 / count
-        mean = torch.nan_to_num(mean, nan=0.0, posinf=0.0, neginf=0.0)
-        var = torch.nan_to_num(var, nan=0.0, posinf=0.0, neginf=0.0)
-        degenerate = var <= _SEQUENCE_VARIANCE_EPS
         scale = torch.sqrt(torch.clamp(var, min=0.0))
-        scale = torch.nan_to_num(scale, nan=1.0, posinf=1.0, neginf=1.0)
-        scale[degenerate] = 1.0
+        scale[var <= _SEQUENCE_VARIANCE_EPS] = 1.0
         self.seq_mean_ = mean.reshape(1, 1, -1).to(
             device=self.device, dtype=torch.float32
         )
@@ -352,11 +348,9 @@ class _BaseAttentionWrapper:
         self._fit_sequence_scaler_from_batches(dataloader, _tensor_fn)
 
     def _normalize_sequence(self, seq_t: torch.Tensor) -> torch.Tensor:
-        mean = getattr(self, "seq_mean_", None)
-        scale = getattr(self, "seq_scale_", None)
-        if mean is None or scale is None:
+        if self.seq_mean_ is None or self.seq_scale_ is None:
             return seq_t
-        return (seq_t.float() - mean) / scale
+        return (seq_t.float() - self.seq_mean_) / self.seq_scale_
 
     def _normalize_extra(self, extra_t: torch.Tensor | None) -> torch.Tensor | None:
         if extra_t is None or self.extra_mean_ is None or self.extra_scale_ is None:
@@ -370,13 +364,15 @@ class _BaseAttentionWrapper:
         the attention block, which has no mean-pool counterpart, trains at a rate
         it tolerates. Without it every parameter uses ``lr``.
         """
-        block_lr = getattr(self, "attention_block_lr", None)
-        if block_lr is None:
+        if self.attention_block_lr is None:
             return self.model.parameters()
         block = list(self.model.pooler.parameters())
         block_ids = {id(param) for param in block}
         rest = [p for p in self.model.parameters() if id(p) not in block_ids]
-        return [{"params": block, "lr": float(block_lr)}, {"params": rest}]
+        return [
+            {"params": block, "lr": float(self.attention_block_lr)},
+            {"params": rest},
+        ]
 
     def _scale_gradients(self, factor: float) -> None:
         """Rescale accumulated gradients in place before an optimizer step."""
@@ -392,9 +388,9 @@ class _BaseAttentionWrapper:
         reproduces exactly the input scale of the published mean-pool route.
         Skipped when the model already carries fitted statistics (resume).
         """
-        model = self.model
-        if bool(getattr(self, "pooled_standardizer_fitted_", False)):
+        if self.pooled_standardizer_fitted_:
             return
+        model = self.model
         mean_agg = MeanAggregation()
         total = None
         total_sq = None
@@ -436,15 +432,7 @@ class _BaseAttentionWrapper:
 
     def _selection_objective(self, logits_t, y_t):
         """Return the negated selection metric for concatenated validation output."""
-        training_protocol.check_finite_tensors([logits_t], "validation logits")
-        scores = (
-            torch.sigmoid(logits_t) if self.validation_metric == "auprc" else logits_t
-        )
-        return validation_objective(
-            y_t.reshape(-1).detach().cpu().numpy(),
-            scores.reshape(-1).detach().cpu().numpy(),
-            self.validation_metric,
-        )
+        return score_validation_tensors(logits_t, y_t, self.validation_metric)
 
     def _run_early_stopping(
         self,

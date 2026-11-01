@@ -1,16 +1,4 @@
-"""Model registries keyed by benchmark task type and label kind.
-
-This file is organized by model family first:
-
-1. Linear / SGD baselines
-2. MLP baselines
-3. XGBoost baselines
-4. Final registry assembly by task type / label kind
-5. Attention-model registries grouped by model family
-
-That keeps each family's parameters and wrappers together, while preserving the
-same public registry objects used by the training pipeline.
-"""
+"""Model registries keyed by benchmark task type and label kind."""
 
 from __future__ import annotations
 
@@ -21,7 +9,7 @@ import typing
 import torch
 import torch.utils.data
 
-import enzymado.data_loading as data_loading
+from enzymado import data_loading
 import enzymado.types
 
 from .attention_wrappers import (
@@ -71,9 +59,10 @@ def _make_model_entry(
     return entry
 
 
-# Linear / SGD family
-
-
+_EARLY_STOPPING_PARAMS: dict[str, object] = {
+    "early_stopping_patience": 20,
+    "early_stopping_min_delta": 1e-4,
+}
 # The scalar linear head is the MLP wrapper without a hidden layer, trained in
 # minibatches like the MLP. The earlier full-batch head took one optimizer step
 # per epoch and stopped at 200 steps, before it had converged. Weight decay
@@ -86,8 +75,28 @@ _SCALAR_LINEAR_PARAMS: dict[str, object] = {
     "optimizer_name": "adamw",
     "weight_decay": _LINEAR_WEIGHT_DECAY,
     "dropout": 0.0,
-    "early_stopping_patience": 20,
-    "early_stopping_min_delta": 1e-4,
+    **_EARLY_STOPPING_PARAMS,
+}
+_BASE_MLP_PARAMS: dict[str, object] = {
+    "hidden_dims": (2048,),
+    "lr": 1e-3,
+    "epochs": 100,
+    "optimizer_name": "adamw",
+    "weight_decay": 0.1,
+    "dropout": 0.1,
+    **_EARLY_STOPPING_PARAMS,
+}
+_SCALAR_MLP_PARAMS: dict[str, object] = {
+    **_BASE_MLP_PARAMS,
+    "batch_size": 256,
+}
+_STANDARD_XGB_PARAMS: dict[str, object] = {
+    "n_estimators": 100,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "n_jobs": -1,
+    "device": "cuda",
+    "early_stopping_rounds": 20,
 }
 
 
@@ -115,8 +124,7 @@ def _ec_linear_classifier_entry() -> enzymado.types.ModelInfo:
             "lr": 0.01,
             "epochs": 200,
             "optimizer_name": "adamw",
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_EARLY_STOPPING_PARAMS,
         },
         residue_aware=False,
     )
@@ -130,31 +138,17 @@ def _residue_linear_classifier_entry() -> enzymado.types.ModelInfo:
             "lr": 0.001,
             "epochs": 200,
             "optimizer_name": "adamw",
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_EARLY_STOPPING_PARAMS,
         },
         residue_aware=True,
         loader_batch_size=128,
     )
 
 
-# MLP family
-
-
 def _standard_mlp_classifier_entry() -> enzymado.types.ModelInfo:
     return _make_model_entry(
         MLPClassifierTorch,
-        {
-            "hidden_dims": (2048,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "batch_size": 256,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        _SCALAR_MLP_PARAMS,
         residue_aware=True,
     )
 
@@ -162,17 +156,7 @@ def _standard_mlp_classifier_entry() -> enzymado.types.ModelInfo:
 def _standard_mlp_regressor_entry() -> enzymado.types.ModelInfo:
     return _make_model_entry(
         MLPRegressorTorch,
-        {
-            "hidden_dims": (2048,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "batch_size": 256,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        _SCALAR_MLP_PARAMS,
         residue_aware=True,
     )
 
@@ -180,17 +164,7 @@ def _standard_mlp_regressor_entry() -> enzymado.types.ModelInfo:
 def _ec_mlp_classifier_entry() -> enzymado.types.ModelInfo:
     return _make_model_entry(
         ECMultiHeadClassifierTorch,
-        {
-            "hidden_dims": (2048,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "batch_size": 256,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        _SCALAR_MLP_PARAMS,
         residue_aware=False,
     )
 
@@ -198,54 +172,26 @@ def _ec_mlp_classifier_entry() -> enzymado.types.ModelInfo:
 def _residue_mlp_classifier_entry() -> enzymado.types.ModelInfo:
     return _make_model_entry(
         ResidueBinaryClassifierTorch,
-        {
-            "hidden_dims": (256,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        {**_BASE_MLP_PARAMS, "hidden_dims": (256,)},
         residue_aware=True,
         loader_batch_size=256,
     )
 
 
-# XGBoost family
-
-
 def _standard_xgb_classifier_entry() -> enzymado.types.ModelInfo:
+    # Select on the metric the leaderboard reports, matching the torch
+    # baselines, instead of spending the whole boosting budget blind.
     return _make_model_entry(
         XGBClassifier,
-        {
-            "n_estimators": 100,
-            "max_depth": 6,
-            "learning_rate": 0.1,
-            "n_jobs": -1,
-            "device": "cuda",
-            # Select on the metric the leaderboard reports, matching the torch
-            # baselines, instead of spending the whole boosting budget blind.
-            "eval_metric": "aucpr",
-            "early_stopping_rounds": 20,
-        },
+        {**_STANDARD_XGB_PARAMS, "eval_metric": "aucpr"},
     )
 
 
 def _standard_xgb_regressor_entry() -> enzymado.types.ModelInfo:
+    # Regression boosting selects on RMSE under this protocol.
     return _make_model_entry(
         XGBRegressor,
-        {
-            "n_estimators": 100,
-            "max_depth": 6,
-            "learning_rate": 0.1,
-            "n_jobs": -1,
-            "device": "cuda",
-            # Regression boosting selects on RMSE under this protocol.
-            "eval_metric": "rmse",
-            "early_stopping_rounds": 20,
-        },
+        {**_STANDARD_XGB_PARAMS, "eval_metric": "rmse"},
     )
 
 
@@ -306,8 +252,6 @@ def _residue_xgb_classifier_entry() -> enzymado.types.ModelInfo:
     )
 
 
-# Registry assembly
-
 MODEL_MAP: enzymado.types.ModelMap = {
     "classification": {
         "mlp_classification": _standard_mlp_classifier_entry(),
@@ -346,9 +290,6 @@ if XGBClassifier is not None:
     )
 
 
-# Training helpers
-
-
 def get_model_map(
     task_type: str,
     label_kind: str,
@@ -357,6 +298,19 @@ def get_model_map(
     if label_kind in STRUCTURED_MODEL_MAP:
         return STRUCTURED_MODEL_MAP[label_kind]
     return MODEL_MAP[task_type]
+
+
+def _filter_fit_kwargs(
+    fit_fn: collections.abc.Callable[..., object],
+    extra_kwargs: dict[str, object],
+) -> dict[str, object]:
+    """Keep only non-None keyword arguments accepted by fit_fn."""
+    accepted = inspect.signature(fit_fn).parameters
+    return {
+        key: value
+        for key, value in extra_kwargs.items()
+        if value is not None and key in accepted
+    }
 
 
 def train_model(
@@ -369,28 +323,18 @@ def train_model(
 ) -> object:
     """Instantiate and fit a model wrapper using only supported keyword args."""
     model = model_info["wrap"](**model_info["params"])
-    fit = typing.cast(
-        collections.abc.Callable[..., object],
-        getattr(model, "fit"),
-    )
-    fit_signature = inspect.signature(fit)
-    fit_kwargs: dict[str, object] = {}
-    if x_val is not None and y_val is not None and "x_val" in fit_signature.parameters:
-        fit_kwargs["x_val"] = x_val
-        fit_kwargs["y_val"] = y_val
-    # Gradient-boosting estimators take held-out data as sklearn's eval_set
-    # rather than x_val/y_val, so they need their own hand-off; without it
-    # early_stopping_rounds is silently inert.
-    if (
-        x_val is not None
-        and y_val is not None
-        and "eval_set" in fit_signature.parameters
-        and "x_val" not in fit_signature.parameters
-    ):
-        fit_kwargs["eval_set"] = [(x_val, y_val)]
-    for key, value in extra_fit_kwargs.items():
-        if value is not None and key in fit_signature.parameters:
-            fit_kwargs[key] = value
+    fit = typing.cast(collections.abc.Callable[..., object], model.fit)
+    accepted = inspect.signature(fit).parameters
+    fit_kwargs = _filter_fit_kwargs(fit, extra_fit_kwargs)
+    if x_val is not None and y_val is not None:
+        if "x_val" in accepted:
+            fit_kwargs["x_val"] = x_val
+            fit_kwargs["y_val"] = y_val
+        elif "eval_set" in accepted:
+            # Gradient-boosting estimators take held-out data as sklearn's
+            # eval_set rather than x_val/y_val, so they need their own hand-off;
+            # without it early_stopping_rounds is silently inert.
+            fit_kwargs["eval_set"] = [(x_val, y_val)]
     fit(x_train, y_train, **fit_kwargs)
     return model
 
@@ -404,27 +348,19 @@ def train_model_loader(
 ) -> object:
     """Instantiate and fit a model wrapper that trains from DataLoaders."""
     model = model_info["wrap"](**model_info["params"])
-    fit_loader = typing.cast(
-        collections.abc.Callable[..., object],
-        getattr(model, "fit_loader"),
+    fit_loader = typing.cast(collections.abc.Callable[..., object], model.fit_loader)
+    fit_kwargs = _filter_fit_kwargs(
+        fit_loader,
+        {"val_dataloader": val_loader, **extra_fit_kwargs},
     )
-    fit_loader_signature = inspect.signature(fit_loader)
-    fit_kwargs: dict[str, object] = {}
-    if val_loader is not None and "val_dataloader" in fit_loader_signature.parameters:
-        fit_kwargs["val_dataloader"] = val_loader
-    for key, value in extra_fit_kwargs.items():
-        if value is not None and key in fit_loader_signature.parameters:
-            fit_kwargs[key] = value
     fit_loader(train_loader, batch_kind=batch_kind, **fit_kwargs)
     return model
 
 
-# Attention-model registries grouped by model family
-#
-# Pooled (global) attention entries train exactly like their mean-pool
-# counterparts apart from the attention block. The attention route loads 16
-# proteins per loader batch (long residue tensors), so gradients are accumulated
-# to reach the same effective batch: 16 x 16 = 256 for every head.
+# Pooled (global) attention entries train like their mean-pool counterparts
+# apart from the attention block. The attention route loads 16 proteins per
+# loader batch (long residue tensors), so gradients are accumulated to reach
+# the same effective batch: 16 x 16 = 256 for every head.
 _ATTENTION_LOADER_BATCH = 16
 _MEAN_POOL_BATCH = 256
 _ACCUMULATE_TO_MEAN_POOL_BATCH = _MEAN_POOL_BATCH // _ATTENTION_LOADER_BATCH
@@ -436,11 +372,7 @@ def _make_attention_entry(
     params: dict[str, object],
 ) -> enzymado.types.ModelInfo:
     """Build one attention registry entry."""
-    return {
-        "wrap": wrap,
-        "params": dict(params),
-        "residue_aware": True,
-    }
+    return _make_model_entry(wrap, params, residue_aware=True)
 
 
 def _attention_linear_classifier_entry() -> enzymado.types.ModelInfo:
@@ -475,8 +407,7 @@ def _attention_ec_linear_entry() -> enzymado.types.ModelInfo:
             "attention_block_lr": _ATTENTION_BLOCK_LR,
             "epochs": 200,
             "optimizer_name": "adamw",
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_EARLY_STOPPING_PARAMS,
             "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
@@ -490,8 +421,7 @@ def _attention_residue_linear_entry() -> enzymado.types.ModelInfo:
             "lr": 0.001,
             "epochs": 200,
             "optimizer_name": "adamw",
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_EARLY_STOPPING_PARAMS,
         },
     )
 
@@ -500,14 +430,7 @@ def _attention_mlp_classifier_entry() -> enzymado.types.ModelInfo:
     return _make_attention_entry(
         AttentionBinaryClassifierTorch,
         {
-            "hidden_dims": (2048,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_BASE_MLP_PARAMS,
             "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
@@ -517,14 +440,7 @@ def _attention_mlp_regressor_entry() -> enzymado.types.ModelInfo:
     return _make_attention_entry(
         AttentionRegressorTorch,
         {
-            "hidden_dims": (2048,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_BASE_MLP_PARAMS,
             "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
@@ -534,15 +450,7 @@ def _attention_ec_mlp_entry() -> enzymado.types.ModelInfo:
     return _make_attention_entry(
         AttentionECMultiHeadClassifierTorch,
         {
-            "hidden_dims": (2048,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "batch_size": 256,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
+            **_SCALAR_MLP_PARAMS,
             "gradient_accumulation_steps": _ACCUMULATE_TO_MEAN_POOL_BATCH,
         },
     )
@@ -551,16 +459,7 @@ def _attention_ec_mlp_entry() -> enzymado.types.ModelInfo:
 def _attention_residue_mlp_entry() -> enzymado.types.ModelInfo:
     return _make_attention_entry(
         AttentionResidueBinaryClassifierTorch,
-        {
-            "hidden_dims": (256,),
-            "lr": 1e-3,
-            "epochs": 100,
-            "optimizer_name": "adamw",
-            "weight_decay": 0.1,
-            "dropout": 0.1,
-            "early_stopping_patience": 20,
-            "early_stopping_min_delta": 1e-4,
-        },
+        {**_BASE_MLP_PARAMS, "hidden_dims": (256,)},
     )
 
 

@@ -26,7 +26,7 @@ from scipy import stats
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 RATED = {
     "regression": ("kendall_tau", "mae"),
     "classification": ("auroc", "auprc", "f1", "precision", "recall"),

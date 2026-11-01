@@ -20,11 +20,10 @@ from enzymado import paths_and_constants
 from enzymado.data_loading.data_registry import TASK_REGISTRY
 
 _P = paths_and_constants.Paths
-REPO_ROOT = _P.project_root
 
 
 def main() -> int:
-    card = json.loads((REPO_ROOT / "benchmark_card.json").read_text())
+    card = json.loads(_P.benchmark_card.read_text())
 
     registry_properties = {
         name for name, cfg in TASK_REGISTRY.items() if cfg.task_scope == "properties"

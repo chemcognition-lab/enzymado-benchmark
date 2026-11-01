@@ -29,7 +29,7 @@ import pandas as pd
 
 from enzymado import paths_and_constants
 
-_P = paths_and_constants.Paths()
+_P = paths_and_constants.Paths
 REGRESSION = ("kcat", "km", "ph_opt", "dtm", "ddg")
 TASKS = (
     *REGRESSION,
