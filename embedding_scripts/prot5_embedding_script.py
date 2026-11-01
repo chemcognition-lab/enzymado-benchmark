@@ -41,7 +41,7 @@ def read_fasta(fasta_path):
     """
 
     sequences = dict()
-    with open(fasta_path, "r") as fasta_f:
+    with Path(fasta_path).open("r", encoding="utf-8") as fasta_f:
         for line in fasta_f:
             # get uniprot ID from header and create new entry
             if line.startswith(">"):

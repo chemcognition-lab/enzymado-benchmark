@@ -247,10 +247,15 @@ class DataLoadingTests(unittest.TestCase):
         from enzymado.data_loading import features
 
         cache = self.root / "descriptastorus.npz"
-        np.savez(cache, smiles=np.array(["CCO", "N"]),
-                 features=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32))
-        with unittest.mock.patch.object(features, "LIGAND_FEATURES_PATH", cache), \
-                unittest.mock.patch.object(features, "_LIGAND_CACHE", None):
+        np.savez(
+            cache,
+            smiles=np.array(["CCO", "N"]),
+            features=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32),
+        )
+        with (
+            unittest.mock.patch.object(features, "LIGAND_FEATURES_PATH", cache),
+            unittest.mock.patch.object(features, "_LIGAND_CACHE", None),
+        ):
             builder = features.RDKitLigandFeatureBuilder(ligand_column="smiles")
             np.testing.assert_array_equal(builder.build({"smiles": " N "}), [3.0, 4.0])
             self.assertIn("not in", builder.validate_row({"smiles": "CCC"}))

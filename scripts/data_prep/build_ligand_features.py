@@ -17,27 +17,28 @@ import csv
 import json
 from multiprocessing import Pool
 from pathlib import Path
-import sys
 
 import numpy as np
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "src"))
+from enzymado import paths_and_constants
+from enzymado.data_loading import data_registry
 
-from enzymado.data_loading import data_registry  # noqa: E402
-
-OUT = _REPO / "data" / "processed" / "ligand_features" / "descriptastorus.npz"
+_P = paths_and_constants.Paths
+_REPO = _P.project_root
+OUT = _P.data_ligand_features_dir / "descriptastorus.npz"
 GENERATORS = ("RDKit2DNormalized",)
 
 
 def _generators():
     from descriptastorus.descriptors import rdNormalizedDescriptors
+
     return (rdNormalizedDescriptors.RDKit2DNormalized(),)
 
 
 def featurize(smiles: str) -> tuple[str, np.ndarray | None, int]:
     """Concatenated features for one SMILES, or None if RDKit cannot parse it."""
     from rdkit import RDLogger
+
     RDLogger.DisableLog("rdApp.*")
     parts, non_finite = [], 0
     for generator in GENERATORS_CACHE:
@@ -62,13 +63,17 @@ def benchmark_smiles() -> list[str]:
             continue
         for path in config.dataset_paths.values():
             with path.open(encoding="utf-8") as handle:
-                smiles.update(r[config.ligand_column].strip() for r in csv.DictReader(handle))
+                smiles.update(
+                    r[config.ligand_column].strip() for r in csv.DictReader(handle)
+                )
     return sorted(smiles - {""})
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args()
@@ -78,7 +83,9 @@ def main() -> None:
         results = pool.map(featurize, smiles, chunksize=64)
     failed = [s for s, v, _ in results if v is None]
     if failed:
-        raise SystemExit(f"RDKit could not featurize {len(failed)} SMILES, e.g. {failed[:3]}")
+        raise SystemExit(
+            f"RDKit could not featurize {len(failed)} SMILES, e.g. {failed[:3]}"
+        )
     matrix = np.stack([v for _, v, _ in results])
     args.out.parent.mkdir(parents=True, exist_ok=True)
     staging = args.out.with_suffix(".tmp.npz")

@@ -56,7 +56,7 @@ HEADS = {
     "linear/attention": "linear + attn",
 }
 M_LEFT = 132
-ATTRIBUTES = Path(__file__).with_name("plm_attributes.csv")
+ATTRIBUTES = _P.scripts_dir / "figures" / "plm_attributes.csv"
 
 
 def _plm_ratings(leaderboard: str) -> pd.DataFrame:

@@ -1,19 +1,16 @@
 """Prepare all benchmark property datasets from their source files."""
 
-from pathlib import Path
-import sys
+from enzymado import paths_and_constants
+import enzymado.propertyprep.biolip as biolip
+import enzymado.propertyprep.chemistry as chemistry
+import enzymado.propertyprep.contracts as contracts
+import enzymado.propertyprep.parsing as parsing
+import enzymado.propertyprep.pipeline as pipeline
+import enzymado.propertyprep.uniprot as uniprot
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT / "src"))
-
-import enzymado.paths_and_constants as paths_and_constants  # noqa: E402
-import enzymado.propertyprep.biolip as biolip  # noqa: E402
-import enzymado.propertyprep.chemistry as chemistry  # noqa: E402
-import enzymado.propertyprep.contracts as contracts  # noqa: E402
-import enzymado.propertyprep.parsing as parsing  # noqa: E402
-import enzymado.propertyprep.pipeline as pipeline  # noqa: E402
-import enzymado.propertyprep.uniprot as uniprot  # noqa: E402
+_P = paths_and_constants.Paths
+_C = paths_and_constants.Constants
+_PROJECT_ROOT = _P.project_root
 
 sequence_getter = uniprot.sequence_getter
 sequence_to_enzyme_metadata = uniprot.sequence_to_enzyme_metadata
@@ -41,8 +38,8 @@ def prep_biolip_binding(
     constants: contracts.Constants | None = None,
 ) -> dict[str, object] | None:
     """Prepare only BioLiP binding using project defaults."""
-    paths = paths or paths_and_constants.Paths()
-    constants = constants or paths_and_constants.Constants()
+    paths = paths or _P()
+    constants = constants or _C()
     return biolip.prep_biolip_binding(paths, constants)
 
 
@@ -51,8 +48,8 @@ def main(
     constants: contracts.Constants | None = None,
 ) -> None:
     """Run the property-preparation pipeline with project defaults."""
-    paths = paths or paths_and_constants.Paths()
-    constants = constants or paths_and_constants.Constants()
+    paths = paths or _P()
+    constants = constants or _C()
     pipeline.run(paths, constants)
 
 

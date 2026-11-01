@@ -8,9 +8,11 @@ from typing import Callable
 import numpy as np
 import torch
 
-from enzymado.paths_and_constants import Paths
+from enzymado import paths_and_constants
 
 from .task_csv import clean_text, normalize_sequence
+
+_P = paths_and_constants.Paths
 
 
 class EmbeddingLookupError(KeyError):
@@ -210,7 +212,7 @@ class ProteinResidueEmbeddingBuilder:
         )
 
 
-LIGAND_FEATURES_PATH = Paths.data_processed_dir / "ligand_features/descriptastorus.npz"
+LIGAND_FEATURES_PATH = _P.data_processed_dir / "ligand_features/descriptastorus.npz"
 _LIGAND_CACHE: dict[str, np.ndarray] | None = None
 
 

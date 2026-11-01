@@ -27,16 +27,16 @@ import time
 import urllib.parse
 import urllib.request
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "src"))
+from enzymado import paths_and_constants
+from enzymado.data_loading import data_registry
+from enzymado.splitting.standardization import build_standardized_dataset_rows
 
-from enzymado.data_loading import data_registry  # noqa: E402
-from enzymado.splitting.standardization import build_standardized_dataset_rows  # noqa: E402
-
+_P = paths_and_constants.Paths
+_REPO = _P.project_root
 csv.field_size_limit(sys.maxsize)
 TASKS = ("binding", "ec_number", "kcat", "km", "ph_opt", "solubility")
-POOL = _REPO / "data" / "processed" / "protein_pool.csv"
-FRAGMENTS = _REPO / "data" / "processed" / "uniprot_fragments.csv"
+POOL = _P.data_processed_dir / "protein_pool.csv"
+FRAGMENTS = _P.data_processed_dir / "uniprot_fragments.csv"
 UNIPROT = "https://rest.uniprot.org"
 ACCESSION = re.compile(
     r"^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})"
@@ -81,14 +81,20 @@ def _tsv_page(url: str) -> tuple[list[list[str]], dict[str, str], bool]:
             time.sleep(10 * (attempt + 1))
             continue
         rows = [line.split("\t") for line in lines[1:]]
-        good = [row for row in rows if len(row) >= 4 and row[0] and not row[0].startswith("Error")]
+        good = [
+            row
+            for row in rows
+            if len(row) >= 4 and row[0] and not row[0].startswith("Error")
+        ]
         if len(good) == len(rows):
             return good, headers, True
         time.sleep(10 * (attempt + 1))
     return good, headers, False
 
 
-def _fragment_record(accession: str, fragment: str, length: str, non_ter: str) -> dict | None:
+def _fragment_record(
+    accession: str, fragment: str, length: str, non_ter: str
+) -> dict | None:
     if fragment.strip().lower() != "fragment":
         return None
     positions = {int(x) for x in re.findall(r"NON_TER (\d+)", non_ter)}
@@ -100,7 +106,9 @@ def _fragment_record(accession: str, fragment: str, length: str, non_ter: str) -
     }
 
 
-def fetch_fragments(accessions: list[str], chunk: int = 90000) -> tuple[list[dict], dict]:
+def fetch_fragments(
+    accessions: list[str], chunk: int = 90000
+) -> tuple[list[dict], dict]:
     """Return the UniProt entries flagged Fragment among the given accessions."""
     fields = "accession,fragment,length,ft_non_ter"
     fragments, seen, release = {}, set(), None
@@ -114,14 +122,19 @@ def fetch_fragments(accessions: list[str], chunk: int = 90000) -> tuple[list[dic
             "jobStatus"
         ) in ("NEW", "RUNNING"):
             time.sleep(10)
-        url = f"{UNIPROT}/idmapping/uniprotkb/results/{job}?fields={fields}&format=tsv&size=500"
+        url = (
+            f"{UNIPROT}/idmapping/uniprotkb/results/{job}"
+            f"?fields={fields}&format=tsv&size=500"
+        )
         while url:
             rows, headers, _ = _tsv_page(url)
             release = headers.get("X-UniProt-Release", release)
             for source, _, fragment, length, *rest in rows:
                 if length.isdigit():
                     seen.add(source)
-                    record = _fragment_record(source, fragment, length, (rest or [""])[0])
+                    record = _fragment_record(
+                        source, fragment, length, (rest or [""])[0]
+                    )
                     if record:
                         fragments[source] = record
             found = re.search(r'<([^>]+)>; rel="next"', headers.get("Link", ""))
@@ -132,7 +145,10 @@ def fetch_fragments(accessions: list[str], chunk: int = 90000) -> tuple[list[dic
     unresolved: list[str] = []
 
     def lookup(ids: list[str]) -> None:
-        url = f"{UNIPROT}/uniprotkb/accessions?accessions={','.join(ids)}&fields={fields}&format=tsv"
+        url = (
+            f"{UNIPROT}/uniprotkb/accessions?accessions={','.join(ids)}"
+            f"&fields={fields}&format=tsv"
+        )
         rows, _, whole = _tsv_page(url)
         if not whole and len(ids) > 1:
             middle = len(ids) // 2
@@ -144,7 +160,9 @@ def fetch_fragments(accessions: list[str], chunk: int = 90000) -> tuple[list[dic
         for accession, fragment, length, *rest in rows:
             if length.isdigit():
                 seen.add(accession)
-                record = _fragment_record(accession, fragment, length, (rest or [""])[0])
+                record = _fragment_record(
+                    accession, fragment, length, (rest or [""])[0]
+                )
                 if record:
                     fragments[accession] = record
 
@@ -180,10 +198,18 @@ def filter_dataset(path: Path, metadata: dict, fragments: set[str]) -> dict[str,
         reader = csv.DictReader(handle)
         fieldnames, rows = list(reader.fieldnames), list(reader)
     standardization = metadata["standardization"]
-    targets = list(standardization.get("columns", {})) if standardization.get("enabled") else []
-    standardized = {standardization["columns"][t]["standardized_column"] for t in targets}
+    targets = (
+        list(standardization.get("columns", {}))
+        if standardization.get("enabled")
+        else []
+    )
+    standardized = {
+        standardization["columns"][t]["standardized_column"] for t in targets
+    }
 
-    kept = [row for row in rows if row["protein_sequence"].strip().upper() not in fragments]
+    kept = [
+        row for row in rows if row["protein_sequence"].strip().upper() not in fragments
+    ]
     removed = {split: 0 for split in ("train", "val", "test")}
     for row in rows:
         if row["protein_sequence"].strip().upper() in fragments:
@@ -191,7 +217,9 @@ def filter_dataset(path: Path, metadata: dict, fragments: set[str]) -> dict[str,
     if targets:
         base_fields = [field for field in fieldnames if field not in standardized]
         base_rows = [{field: row[field] for field in base_fields} for row in kept]
-        fieldnames, kept, fitted = build_standardized_dataset_rows(base_rows, base_fields, targets)
+        fieldnames, kept, fitted = build_standardized_dataset_rows(
+            base_rows, base_fields, targets
+        )
         standardization.update(fitted)
 
     with path.open("w", newline="") as handle:
@@ -201,7 +229,9 @@ def filter_dataset(path: Path, metadata: dict, fragments: set[str]) -> dict[str,
     metadata["summary"] = {
         split: {
             "rows": sum(row["split"] == split for row in kept),
-            "proteins": len({row["protein_sequence"] for row in kept if row["split"] == split}),
+            "proteins": len(
+                {row["protein_sequence"] for row in kept if row["split"] == split}
+            ),
         }
         for split in ("train", "val", "test")
     }
@@ -214,14 +244,20 @@ def filter_dataset(path: Path, metadata: dict, fragments: set[str]) -> dict[str,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fetch", action="store_true", help="Query UniProt and write the fragment list.")
+    parser.add_argument(
+        "--fetch",
+        action="store_true",
+        help="Query UniProt and write the fragment list.",
+    )
     args = parser.parse_args()
 
     if args.fetch:
         accessions = sorted({a for i, _ in read_pool() if (a := base_accession(i))})
         fragments, summary = fetch_fragments(accessions)
         with FRAGMENTS.open("w", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(fragments[0]), lineterminator="\n")
+            writer = csv.DictWriter(
+                handle, fieldnames=list(fragments[0]), lineterminator="\n"
+            )
             writer.writeheader()
             writer.writerows(sorted(fragments, key=lambda row: row["accession"]))
         FRAGMENTS.with_suffix(".json").write_text(json.dumps(summary, indent=2) + "\n")

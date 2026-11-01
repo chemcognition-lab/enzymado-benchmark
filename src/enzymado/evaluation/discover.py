@@ -85,5 +85,3 @@ def task_signature(exp: Experiment) -> tuple[str, str]:
     before sharing indices, so a genuinely different test set falls back safely.
     """
     return (exp.split, exp.task)
-
-

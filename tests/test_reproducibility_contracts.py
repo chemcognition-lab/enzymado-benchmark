@@ -9,20 +9,21 @@ import numpy as np
 import pytest
 import torch
 
+from enzymado import paths_and_constants
 import enzymado.artifacts.reproducibility
 import enzymado.artifacts.results_layout
 import enzymado.data_loading.data_registry
 import enzymado.data_loading.stores
 import enzymado.dataset_splitting
 import enzymado.models.common
-import enzymado.paths_and_constants
 import enzymado.pipeline.run_config
 import enzymado.prediction.predict
 import enzymado.propertyprep.uniprot
 import enzymado.training.model_selection
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_SRC_ROOT = _PROJECT_ROOT / "src"
+_P = paths_and_constants.Paths
+_PROJECT_ROOT = _P.project_root
+_SRC_ROOT = _P.src_dir
 
 
 class FixedPredictor:
@@ -62,7 +63,7 @@ def test_all_library_modules_import() -> None:
 
 def test_repository_roots_and_source_manifest_match_checkout() -> None:
     """Keep package paths and provenance anchored to the repository root."""
-    assert enzymado.paths_and_constants.Paths.project_root == _PROJECT_ROOT
+    assert _P.project_root == _PROJECT_ROOT
     assert enzymado.data_loading.data_registry.PROJECT_ROOT == _PROJECT_ROOT
     assert enzymado.data_loading.stores.PROJECT_ROOT == _PROJECT_ROOT
     assert enzymado.propertyprep.uniprot._DEFAULT_SWISSPROT_PATH == (

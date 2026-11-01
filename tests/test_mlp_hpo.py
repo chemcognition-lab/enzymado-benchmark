@@ -19,10 +19,12 @@ from scripts.mlp_hpo import aggregate_hpo_results, hpo_job_submitter, run_hpo
 import torch
 from torch import nn
 
+from enzymado import paths_and_constants
 from enzymado.models import nn_blocks, training_protocol
 from enzymado.training import model_registry, torch_standard_wrappers
 
-ROOT = Path(__file__).resolve().parents[1]
+_P = paths_and_constants.Paths
+ROOT = _P.project_root
 SEARCH_SPACE = {
     "activation": ["relu", "silu", "swiglu"],
     "num_layers": [1, 2, 3],

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from enzymado.models import training_protocol
 from enzymado.models.attention_blocks import (
     AttentionPredictor,
     attention_autocast,
@@ -17,7 +18,6 @@ from enzymado.models.common import (
     mean_losses,
     restore_torch_training_state,
 )
-import enzymado.models.training_protocol
 from enzymado.training.attention_wrapper_base import _BaseAttentionWrapper
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
@@ -131,11 +131,11 @@ class _PooledAttentionWrapper(_BaseAttentionWrapper):
                 )
                 loss = criterion(forward_logits(seq_t, mask_t, extra_t), y_t)
                 if accumulation == 1:
-                    enzymado.models.training_protocol.backward_checked(loss)
+                    training_protocol.backward_checked(loss)
                     step(batch_index, batch, loss, max_abs_z)
                     continue
                 n_samples = int(y_t.shape[0])
-                enzymado.models.training_protocol.backward_checked(loss * n_samples)
+                training_protocol.backward_checked(loss * n_samples)
                 group_batches += 1
                 group_samples += n_samples
                 last = (batch_index, batch, loss, max_abs_z)

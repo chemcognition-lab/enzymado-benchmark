@@ -10,21 +10,21 @@ import json
 import lzma
 import math
 from pathlib import Path
-import sys
 from typing import Any
 
 import numpy as np
 from safetensors.torch import load as load_tensors
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from enzymado.artifacts.results_layout import (  # noqa: E402
+from enzymado import paths_and_constants
+from enzymado.artifacts.results_layout import (
     INVALIDATION_MARKER,
     canonical_model_family,
     canonical_split_family,
 )
-from enzymado.data_loading import TASK_REGISTRY  # noqa: E402
+from enzymado.data_loading import TASK_REGISTRY
+
+_P = paths_and_constants.Paths
+PROJECT_ROOT = _P.project_root
 
 SPLIT_TO_DATASET_VARIANT = {
     "random": "random",
@@ -332,7 +332,7 @@ def _audit_targets_from_disk(
                 continue
             try:
                 observed = _load_y_true(prediction_path)
-            except Exception as exc:  # noqa: BLE001 - audit reports corrupt prediction files.
+            except Exception as exc:  # noqa: BLE001 - report corrupt predictions.
                 split_findings.append(
                     {
                         "split": split_name,

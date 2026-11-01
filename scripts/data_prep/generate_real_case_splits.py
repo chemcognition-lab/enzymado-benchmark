@@ -11,201 +11,60 @@ from enzymado import dataset_splitting, paths_and_constants
 
 _C = paths_and_constants.Constants
 _P = paths_and_constants.Paths
+_REAL_CASE_DIR = Path("data/processed/real_case")
 
-REAL_CASE_DATASETS = (
+
+def _dataset_spec(spec: str, target: str) -> tuple[Path, str]:
+    rel_path = spec if "/" in spec else f"{spec}/{spec}.csv"
+    return _REAL_CASE_DIR / rel_path, target
+
+
+_RAW_SPECS: tuple[tuple[str, str], ...] = (
     (
-        Path(
-            "data/processed/real_case/align_amylase_activity/"
-            "alpha_amylase__specific_activity.csv"
-        ),
+        "align_amylase_activity/alpha_amylase__specific_activity.csv",
         "log10_specific_activity",
     ),
+    ("align_amylase_expression/alpha_amylase__expression.csv", "expression"),
     (
-        Path(
-            "data/processed/real_case/align_amylase_expression/"
-            "alpha_amylase__expression.csv"
-        ),
-        "expression",
-    ),
-    (
-        Path(
-            "data/processed/real_case/align_amylase_stability/"
-            "alpha_amylase__thermostability.csv"
-        ),
+        "align_amylase_stability/alpha_amylase__thermostability.csv",
         "log10_thermostability",
     ),
-    (
-        Path(
-            "data/processed/real_case/align_glucosidase_activity/"
-            "b_glucosidase__activity.csv"
-        ),
-        "log10_activity",
-    ),
-    (
-        Path(
-            "data/processed/real_case/align_glucosidase_expression/"
-            "b_glucosidase__expression.csv"
-        ),
-        "log10_expression",
-    ),
-    (
-        Path(
-            "data/processed/real_case/align_glucosidase_melting/"
-            "b_glucosidase__melting_point.csv"
-        ),
-        "melting_point",
-    ),
-    (
-        Path("data/processed/real_case/cleeveland_galox/cleeveland.csv"),
-        "log10_specific_activity",
-    ),
-    (
-        Path("data/processed/real_case/erickson_petase/erickson.csv"),
-        "log10_sum_aromatic_products_plus_one",
-    ),
-    (
-        Path(
-            "data/processed/real_case/welo5_soraphen_activity/"
-            "welo5_soraphen_activity.csv"
-        ),
-        "log10_activity",
-    ),
-    (
-        Path("data/processed/real_case/pafa_htmek_kcat/pafa_htmek_kcat.csv"),
-        "log10_kcat",
-    ),
-    (
-        Path("data/processed/real_case/pafa_htmek_km/pafa_htmek_km.csv"),
-        "log10_km",
-    ),
-    (
-        Path("data/processed/real_case/pafa_htmek_kcat_km/pafa_htmek_kcat_km.csv"),
-        "log10_kcat_km",
-    ),
-    (
-        Path("data/processed/real_case/daox_epseq_activity/daox_epseq_activity.csv"),
-        "log_activity",
-    ),
-    (
-        Path("data/processed/real_case/daox_epseq_stability/daox_epseq_stability.csv"),
-        "log_stability",
-    ),
-    (
-        Path("data/processed/real_case/cyp2c9_activity/cyp2c9_activity.csv"),
-        "activity_score",
-    ),
-    (
-        Path("data/processed/real_case/cyp2c9_abundance/cyp2c9_abundance.csv"),
-        "abundance_score",
-    ),
-    (
-        Path("data/processed/real_case/mpro_fret_cleavage/mpro_fret_cleavage.csv"),
-        "functional_score",
-    ),
-    (
-        Path("data/processed/real_case/plpro_activity/plpro_activity.csv"),
-        "fitness_activity",
-    ),
-    (
-        Path("data/processed/real_case/plpro_abundance/plpro_abundance.csv"),
-        "fitness_abundance",
-    ),
-    (
-        Path("data/processed/real_case/amie_acetamide_dms/amie_acetamide_dms.csv"),
-        "normalized_fitness",
-    ),
-    (
-        Path(
-            "data/processed/real_case/amie_propionamide_dms/amie_propionamide_dms.csv"
-        ),
-        "normalized_fitness",
-    ),
-    (
-        Path(
-            "data/processed/real_case/amie_isobutyramide_dms/amie_isobutyramide_dms.csv"
-        ),
-        "normalized_fitness",
-    ),
-    (
-        Path("data/processed/real_case/pyks_solubility/pyks_solubility.csv"),
-        "normalized_er",
-    ),
-    (
-        Path("data/processed/real_case/trpb3_epistasis/trpb3_epistasis.csv"),
-        "fitness",
-    ),
-    (
-        Path(
-            "data/processed/real_case/goase_variant_substrate/"
-            "goase_variant_substrate.csv"
-        ),
-        "log10_activity",
-    ),
-    (
-        Path(
-            "data/processed/real_case/goldman_olea_thiolase/goldman_olea_thiolase.csv"
-        ),
-        "log_activity",
-    ),
-    (
-        Path(
-            "data/processed/real_case/goldman_aminotransferase/"
-            "goldman_aminotransferase.csv"
-        ),
-        "log10_specific_activity",
-    ),
-    (
-        Path("data/processed/real_case/fisher_fdh_nacl/fisher_fdh_nacl.csv"),
-        "log10_conversion",
-    ),
-    (
-        Path("data/processed/real_case/fisher_fdh_nabr/fisher_fdh_nabr.csv"),
-        "log10_conversion",
-    ),
-    (
-        Path(
-            "data/processed/real_case/martinez_esterase_panel/"
-            "martinez_esterase_panel.csv"
-        ),
-        "log10_specific_activity",
-    ),
-    (
-        Path(
-            "data/processed/real_case/huang_had_phosphatase_c0/"
-            "huang_had_phosphatase_c0.csv"
-        ),
-        "log10_conversion",
-    ),
-    (
-        Path(
-            "data/processed/real_case/huang_had_phosphatase_c1/"
-            "huang_had_phosphatase_c1.csv"
-        ),
-        "log10_conversion",
-    ),
-    (
-        Path(
-            "data/processed/real_case/huang_had_phosphatase_c2/"
-            "huang_had_phosphatase_c2.csv"
-        ),
-        "log10_conversion",
-    ),
-    (
-        Path(
-            "data/processed/real_case/mcba_reaction_activity/mcba_reaction_activity.csv"
-        ),
-        "log10_activity",
-    ),
-    (
-        Path("data/processed/real_case/ao_3fcr_transaminase/ao_3fcr_transaminase.csv"),
-        "log10_specific_activity",
-    ),
-    (
-        Path(
-            "data/processed/real_case/koudelakova_hld_panel/koudelakova_hld_panel.csv"
-        ),
-        "log10_activity",
-    ),
+    ("align_glucosidase_activity/b_glucosidase__activity.csv", "log10_activity"),
+    ("align_glucosidase_expression/b_glucosidase__expression.csv", "log10_expression"),
+    ("align_glucosidase_melting/b_glucosidase__melting_point.csv", "melting_point"),
+    ("cleeveland_galox/cleeveland.csv", "log10_specific_activity"),
+    ("erickson_petase/erickson.csv", "log10_sum_aromatic_products_plus_one"),
+    ("welo5_soraphen_activity", "log10_activity"),
+    ("pafa_htmek_kcat", "log10_kcat"),
+    ("pafa_htmek_km", "log10_km"),
+    ("pafa_htmek_kcat_km", "log10_kcat_km"),
+    ("daox_epseq_activity", "log_activity"),
+    ("daox_epseq_stability", "log_stability"),
+    ("cyp2c9_activity", "activity_score"),
+    ("cyp2c9_abundance", "abundance_score"),
+    ("mpro_fret_cleavage", "functional_score"),
+    ("plpro_activity", "fitness_activity"),
+    ("plpro_abundance", "fitness_abundance"),
+    ("amie_acetamide_dms", "normalized_fitness"),
+    ("amie_propionamide_dms", "normalized_fitness"),
+    ("amie_isobutyramide_dms", "normalized_fitness"),
+    ("pyks_solubility", "normalized_er"),
+    ("trpb3_epistasis", "fitness"),
+    ("goase_variant_substrate", "log10_activity"),
+    ("goldman_olea_thiolase", "log_activity"),
+    ("goldman_aminotransferase", "log10_specific_activity"),
+    ("fisher_fdh_nacl", "log10_conversion"),
+    ("fisher_fdh_nabr", "log10_conversion"),
+    ("martinez_esterase_panel", "log10_specific_activity"),
+    ("huang_had_phosphatase_c0", "log10_conversion"),
+    ("huang_had_phosphatase_c1", "log10_conversion"),
+    ("huang_had_phosphatase_c2", "log10_conversion"),
+    ("mcba_reaction_activity", "log10_activity"),
+    ("ao_3fcr_transaminase", "log10_specific_activity"),
+    ("koudelakova_hld_panel", "log10_activity"),
+)
+REAL_CASE_DATASETS: tuple[tuple[Path, str], ...] = tuple(
+    _dataset_spec(spec, target) for spec, target in _RAW_SPECS
 )
 
 

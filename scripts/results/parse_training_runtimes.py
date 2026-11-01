@@ -17,12 +17,13 @@ from pathlib import Path
 import re
 import subprocess
 
-REPO = Path(__file__).resolve().parents[2]
+from enzymado import paths_and_constants
 
-EMB_DIMS = {
-    k: v["dim"]
-    for k, v in json.load(open(REPO / "embeddings_models_output.json")).items()
-}
+_P = paths_and_constants.Paths
+REPO = _P.project_root
+
+with (REPO / "embeddings_models_output.json").open(encoding="utf-8") as _emb_fh:
+    EMB_DIMS = {k: v["dim"] for k, v in json.load(_emb_fh).items()}
 
 TS_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\]")
 HEADER_EMB_RE = re.compile(r"^Embedding model: (\S+)")
@@ -257,10 +258,10 @@ def main():
                     }
                 )
 
-    out_path = REPO / "results" / "analysis" / "training_runtime_breakdown.csv"
+    out_path = _P.results_dir / "analysis" / "training_runtime_breakdown.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = list(rows[0].keys()) if rows else []
-    with open(out_path, "w", newline="") as f:
+    with out_path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(rows)

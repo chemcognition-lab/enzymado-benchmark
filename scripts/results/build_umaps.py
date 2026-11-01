@@ -16,22 +16,21 @@ import argparse
 import csv
 from pathlib import Path
 import re
-import sys
 import time
 
 import numpy as np
 import pandas as pd
 import safetensors
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "src"))
+from enzymado import paths_and_constants
+from enzymado.data_loading import data_registry, stores, task_csv
 
-from enzymado.data_loading import data_registry, stores, task_csv  # noqa: E402
-
-POOLED_DIR = _REPO / "data" / "embeddings_mean_pooled" / "protein_sequences_unique"
-SEQUENCE_INDEX = _REPO / "data" / "processed" / "protein_pool.csv"
-COMMON_IDS = _REPO / "results" / "embedding_intersection" / "common_ids.txt"
-OUT_DIR = _REPO / "results" / "figures" / "umaps"
+_P = paths_and_constants.Paths
+_REPO = _P.project_root
+POOLED_DIR = _P.data_dir / "embeddings_mean_pooled" / "protein_sequences_unique"
+SEQUENCE_INDEX = _P.data_processed_dir / "protein_pool.csv"
+COMMON_IDS = _P.results_dir / "embedding_intersection" / "common_ids.txt"
+OUT_DIR = _P.results_figures_dir / "umaps"
 
 
 def embedding_names() -> list[str]:

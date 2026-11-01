@@ -128,9 +128,7 @@ def _bootstrap_per_replicate(
             f"Index matrix expects n_units={n_units} but predictions have "
             f"{n_resample_units(payload)} rows."
         )
-    out = {
-        spec.name: np.full(n_rep, np.nan, dtype=np.float64) for spec in specs
-    }
+    out = {spec.name: np.full(n_rep, np.nan, dtype=np.float64) for spec in specs}
     for r in range(n_rep):
         idx = indices[r]
         y = payload.y_true[idx]
@@ -182,9 +180,7 @@ def bootstrap_replicates(
         out.update(_bootstrap_additive_regression(stats, indices, error_specs))
 
     raw_specs = tuple(
-        spec
-        for spec in specs
-        if spec.statistic is enzymado.types.MetricStatistic.RAW
+        spec for spec in specs if spec.statistic is enzymado.types.MetricStatistic.RAW
     )
     if raw_specs:
         out.update(_bootstrap_per_replicate(payload, indices, raw_specs))

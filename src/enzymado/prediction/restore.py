@@ -12,15 +12,13 @@ import safetensors.numpy
 import safetensors.torch
 import torch
 
-import enzymado.artifacts.serialization
-import enzymado.data_loading
-import enzymado.models
-import enzymado.training
+from enzymado import data_loading, models, training
+from enzymado.artifacts import serialization
 
 _LEGACY_ROOTS = {
-    "data_loading": enzymado.data_loading,
-    "models": enzymado.models,
-    "training": enzymado.training,
+    "data_loading": data_loading,
+    "models": models,
+    "training": training,
 }
 
 
@@ -111,7 +109,7 @@ def attach_probabilities(artifact_path: Path, proba) -> Path:
     with lzma.open(artifact_path, "rb") as handle:
         tensors = safetensors.numpy.load(handle.read())
 
-    quantized = enzymado.artifacts.serialization.quantize_probabilities(proba)
+    quantized = serialization.quantize_probabilities(proba)
     if isinstance(quantized, dict):
         additions = {f"proba_{key}": value for key, value in quantized.items()}
     else:

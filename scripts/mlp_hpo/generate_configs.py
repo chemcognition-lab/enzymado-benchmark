@@ -16,6 +16,10 @@ import json
 from pathlib import Path
 import random
 
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
+
 SEARCH_SPACE = {
     "activation": ["relu", "silu", "swiglu"],
     "num_layers": [1, 2, 3],
@@ -109,7 +113,8 @@ def main() -> None:
 
     if args.output is None:
         out_path = (
-            Path(__file__).resolve().parent
+            _P.scripts_dir
+            / "mlp_hpo"
             / f"configs_{args.n_configs}_{args.sampling}.json"
         )
     else:

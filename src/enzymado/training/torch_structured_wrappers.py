@@ -11,6 +11,7 @@ from enzymado.training.torch_residue_classification import (
 class ECMultiHeadClassifierTorch(ECMultiHeadClassifierImplementation):
     """Shared-backbone classifier for hierarchical EC targets on pooled inputs."""
 
+
 class ResidueBinaryClassifierTorch(ResidueBinaryClassifierImplementation):
     """Binary classifier over per-residue embeddings with padding-aware BCE loss."""
 

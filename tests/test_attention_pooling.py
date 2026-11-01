@@ -55,12 +55,15 @@ def test_silent_attention_leaves_exactly_the_mean() -> None:
 
 
 def test_global_block_shares_the_residue_block_layers() -> None:
-    """Same LayerNorm and attention shapes; only the query differs (mean vs residues)."""
+    """Same LayerNorm and attention shapes; only the query differs (mean vs residue)."""
     pooled = ResidualAttentionAggregation(DIM)
     residue = AttentionResidueMixer(DIM)
-    shapes = lambda module: {  # noqa: E731
-        name.split(".", 1)[1]: tuple(p.shape) for name, p in module.named_parameters()
-    }
+
+    def shapes(module):
+        return {
+            n.split(".", 1)[1]: tuple(p.shape) for n, p in module.named_parameters()
+        }
+
     assert shapes(pooled) == shapes(residue)
 
 
@@ -167,10 +170,8 @@ def _one_sgd_epoch(loader, accumulation: int):
 
 
 def _max_parameter_gap(a, b) -> float:
-    return max(
-        (p - q).abs().max().item()
-        for (_, p), (_, q) in zip(a.model.named_parameters(), b.model.named_parameters())
-    )
+    pairs = zip(a.model.named_parameters(), b.model.named_parameters())
+    return max((p - q).abs().max().item() for (_, p), (_, q) in pairs)
 
 
 @pytest.mark.parametrize(
@@ -343,9 +344,7 @@ def test_global_attention_trains_like_its_mean_pool_counterpart(
         assert attention[key] == mean_pool[key], key
     for key, default in (("weight_decay", 0.0), ("dropout", 0.0)):
         assert attention.get(key, default) == mean_pool.get(key, default), key
-    assert tuple(attention["hidden_dims"]) == tuple(
-        mean_pool.get("hidden_dims", ())
-    )
+    assert tuple(attention["hidden_dims"]) == tuple(mean_pool.get("hidden_dims", ()))
 
     loader_batch = 16  # train.py default for the attention route
     accumulation = attention["gradient_accumulation_steps"]

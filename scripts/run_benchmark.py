@@ -10,36 +10,30 @@ import argparse
 import collections.abc
 from dataclasses import dataclass
 from pathlib import Path
-import sys
 import traceback
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-_DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "predictions"
-sys.path.insert(0, str(REPO_ROOT / "src"))
+from enzymado import paths_and_constants, types
+from enzymado.data_loading import data_registry, stores
+from enzymado.evaluation import task_types
+from enzymado.pipeline import run_data, run_execution
+from enzymado.training import model_selection, train
 
-import enzymado.data_loading.data_registry  # noqa: E402
-import enzymado.data_loading.stores  # noqa: E402
-import enzymado.data_loading.task_data  # noqa: E402
-import enzymado.evaluation.task_types  # noqa: E402
-import enzymado.pipeline.run_data  # noqa: E402
-import enzymado.pipeline.run_execution  # noqa: E402
-import enzymado.training.model_selection  # noqa: E402
-import enzymado.training.train  # noqa: E402
-import enzymado.types  # noqa: E402
-
+_P = paths_and_constants.Paths
+REPO_ROOT = _P.project_root
+_DEFAULT_OUTPUT_DIR = _P.results_predictions_dir
 _DEFAULT_RANDOM_SEED = 42
 
-_ModelMap = enzymado.types.ModelRegistry
+_ModelMap = types.ModelRegistry
 _ModelMapFn = collections.abc.Callable[[str, str, str | None], _ModelMap]
 
 
 def _run_prepared_task(
     *,
-    config: enzymado.data_loading.data_registry.TaskConfig,
+    config: data_registry.TaskConfig,
     task_name: str,
     task_scope: str,
     emb_name: str,
-    emb_info: enzymado.types.EmbeddingInfo,
+    emb_info: types.EmbeddingInfo,
     output_dir: Path,
     split_variant: str,
     model_map: _ModelMap,
@@ -50,12 +44,12 @@ def _run_prepared_task(
     random_seed: int,
     deterministic_algorithms: bool = False,
     attention_overrides: dict[str, object] | None,
-    training_route_override: enzymado.training.train.TrainingRouteSpec | None,
+    training_route_override: train.TrainingRouteSpec | None,
     attach_probabilities: bool = False,
 ) -> None:
     """Prepare one task, run its selected models, and release loaded data."""
     embedding_dim = int(emb_info["dim"]) if emb_info.get("dim") is not None else None
-    prepared_task = enzymado.pipeline.run_data.prepare(
+    prepared_task = run_data.prepare(
         config=config,
         task_name=task_name,
         emb_path=emb_info["path"],
@@ -68,7 +62,7 @@ def _run_prepared_task(
     )
     prepared = prepared_task.data
     try:
-        sizes = enzymado.pipeline.run_data.summarize(prepared)
+        sizes = run_data.summarize(prepared)
         if sizes.n_train == 0 or sizes.n_test == 0:
             # Not a skip: every registered task has data, so an empty split
             # means the filters (allowlist, split variant, embedding) are
@@ -80,15 +74,11 @@ def _run_prepared_task(
             )
 
         if sizes.use_validation:
-            enzymado.data_loading.stores.log(
-                f"    Validation enabled: n_val={sizes.n_val:,}"
-            )
+            stores.log(f"    Validation enabled: n_val={sizes.n_val:,}")
         else:
-            enzymado.data_loading.stores.log(
-                "    Validation disabled: empty val split after filtering"
-            )
+            stores.log("    Validation disabled: empty val split after filtering")
 
-        context = enzymado.pipeline.run_execution.RunContext(
+        context = run_execution.RunContext(
             output_dir=output_dir,
             task_scope=task_scope,
             task_name=task_name,
@@ -107,7 +97,7 @@ def _run_prepared_task(
             attach_probabilities=attach_probabilities,
         )
         for model_name, model_info in model_map.items():
-            enzymado.pipeline.run_execution.run(context, model_name, model_info)
+            run_execution.run(context, model_name, model_info)
     finally:
         prepared.cleanup()
 
@@ -117,7 +107,7 @@ def _run_task(
     task_scope: str,
     task_name: str,
     emb_name: str,
-    emb_info: enzymado.types.EmbeddingInfo,
+    emb_info: types.EmbeddingInfo,
     output_dir: Path,
     model_prefix_filter: str | None,
     allowed_ids: set[str] | None,
@@ -130,17 +120,17 @@ def _run_task(
     random_seed: int,
     deterministic_algorithms: bool = False,
     attention_overrides: dict[str, object] | None = None,
-    training_route_override: enzymado.training.train.TrainingRouteSpec | None = None,
+    training_route_override: train.TrainingRouteSpec | None = None,
     model_map_fn: _ModelMapFn | None = None,
     attach_probabilities: bool = False,
 ) -> bool:
     """Select and run models for one task and embedding pair."""
-    config = enzymado.data_loading.data_registry.get_task_config(task_name)
-    task_type = enzymado.evaluation.task_types.from_label_kind(str(config.label_kind))
+    config = data_registry.get_task_config(task_name)
+    task_type = task_types.from_label_kind(str(config.label_kind))
     if task_type is None:
         raise ValueError(f"Unsupported label kind {str(config.label_kind)!r}.")
     if config.label_kind in skip_label_kinds:
-        enzymado.data_loading.stores.log(
+        stores.log(
             f"  Skipping {task_name!r} "
             f"(label_kind={str(config.label_kind)!r} filtered by CLI)"
         )
@@ -149,43 +139,39 @@ def _run_task(
     split_variant = split_variant_filter or "random"
     if split_variant not in config.dataset_paths:
         available = ", ".join(sorted(config.dataset_paths)) or "<none>"
-        enzymado.data_loading.stores.log(
+        stores.log(
             f"  Skipping {task_name!r} (requested split {split_variant!r} is not "
             f"available; available: {available})"
         )
         return True
 
-    enzymado.data_loading.stores.log(
-        f"\n  Task: {task_name} | type: {task_type} | split: {split_variant}"
-    )
+    stores.log(f"\n  Task: {task_name} | type: {task_type} | split: {split_variant}")
     try:
-        selector = model_map_fn or enzymado.training.model_selection.select_models
+        selector = model_map_fn or model_selection.select_models
         model_map = selector(task_type, config.label_kind, model_prefix_filter)
-        model_map = enzymado.training.model_selection.filter_by_embedding_modes(
+        model_map = model_selection.filter_by_embedding_modes(
             model_map,
             task_name,
             embedding_mode_filters,
         )
         if not model_map:
-            enzymado.data_loading.stores.log(
-                "    No models selected after filters — skipping task."
-            )
+            stores.log("    No models selected after filters — skipping task.")
             return True
 
         if attach_probabilities:
             # Completed runs are the input here, not something to skip: their
             # stored weights are what gets restored.
-            enzymado.data_loading.stores.log(
+            stores.log(
                 f"    Attach mode: adding probabilities to {len(model_map)} "
                 "completed models."
             )
         elif overwrite_results:
-            enzymado.data_loading.stores.log(
+            stores.log(
                 "    Overwrite enabled: existing artifacts for selected models will "
                 "be replaced."
             )
         else:
-            completed = enzymado.training.model_selection.find_completed_models(
+            completed = model_selection.find_completed_models(
                 model_map,
                 output_dir,
                 split_variant,
@@ -194,12 +180,12 @@ def _run_task(
                 task_scope,
             )
             if len(completed) == len(model_map):
-                enzymado.data_loading.stores.log(
+                stores.log(
                     f"    All {len(completed)} models already trained — skipping task."
                 )
                 return True
             if completed:
-                enzymado.data_loading.stores.log(
+                stores.log(
                     f"    {len(completed)}/{len(model_map)} models already done: "
                     f"{completed}"
                 )
@@ -225,10 +211,8 @@ def _run_task(
         )
         return True
     except Exception as task_exc:  # noqa: BLE001
-        enzymado.data_loading.stores.log(
-            f"  [ERROR] Task {task_name!r} failed: {task_exc}"
-        )
-        enzymado.data_loading.stores.log(traceback.format_exc())
+        stores.log(f"  [ERROR] Task {task_name!r} failed: {task_exc}")
+        stores.log(traceback.format_exc())
         return False
 
 
@@ -300,14 +284,12 @@ def _load_allowed_id_context(
     """Load an optional embedding allowlist and its sequence lookup index."""
     if allowed_ids_path is None:
         return None, {}
-    allowed_ids = enzymado.data_loading.stores.load_allowed_ids(allowed_ids_path)
+    allowed_ids = stores.load_allowed_ids(allowed_ids_path)
     sequence_to_id: dict[str, str] = {}
-    sequence_index_path = enzymado.data_loading.stores.resolve_sequence_index_path()
+    sequence_index_path = stores.resolve_sequence_index_path()
     if sequence_index_path is not None:
-        sequence_to_id = enzymado.data_loading.stores.load_sequence_to_id_index(
-            sequence_index_path
-        )
-    enzymado.data_loading.stores.log(
+        sequence_to_id = stores.load_sequence_to_id_index(sequence_index_path)
+    stores.log(
         f"[startup] Restricting training rows to {len(allowed_ids):,} "
         f"embedding IDs from {allowed_ids_path}"
     )
@@ -315,7 +297,7 @@ def _load_allowed_id_context(
 
 
 def _validate_embedding_filter(
-    embeddings: collections.abc.Mapping[str, enzymado.types.EmbeddingInfo],
+    embeddings: collections.abc.Mapping[str, types.EmbeddingInfo],
     emb_name_filter: str | None,
     *,
     kind: str,
@@ -330,20 +312,14 @@ def _validate_embedding_filter(
 
 
 def _select_run_tasks(
-    selected_tasks: list[
-        tuple[str, enzymado.data_loading.data_registry.TaskConfig]
-    ],
+    selected_tasks: list[tuple[str, data_registry.TaskConfig]],
     task_name_filters: frozenset[str],
-) -> list[tuple[str, enzymado.data_loading.data_registry.TaskConfig]]:
+) -> list[tuple[str, data_registry.TaskConfig]]:
     """Apply the CLI task-name filter while logging excluded tasks."""
-    run_tasks: list[
-        tuple[str, enzymado.data_loading.data_registry.TaskConfig]
-    ] = []
+    run_tasks: list[tuple[str, data_registry.TaskConfig]] = []
     for task_name, config in selected_tasks:
         if task_name_filters and task_name not in task_name_filters:
-            enzymado.data_loading.stores.log(
-                f"  Skipping {task_name!r} (not selected by CLI task filter)"
-            )
+            stores.log(f"  Skipping {task_name!r} (not selected by CLI task filter)")
             continue
         run_tasks.append((task_name, config))
     return run_tasks
@@ -355,67 +331,53 @@ def _log_startup_options(
     attention_overrides: dict[str, object],
 ) -> None:
     """Log the normalized benchmark selection and reproducibility controls."""
-    enzymado.data_loading.stores.log(
-        f"[startup] Python started. emb_name={options.emb_name_filter}"
-    )
-    enzymado.data_loading.stores.log(
-        f"[startup] Training random seed: {options.random_seed}"
-    )
+    stores.log(f"[startup] Python started. emb_name={options.emb_name_filter}")
+    stores.log(f"[startup] Training random seed: {options.random_seed}")
     if options.attach_probabilities:
-        enzymado.data_loading.stores.log(
+        stores.log(
             "[startup] Attach-probabilities mode: restoring stored weights, no "
             "training, published hard labels preserved."
         )
-    enzymado.data_loading.stores.log(
-        "[startup] Deterministic PyTorch algorithms: "
+    stores.log(
+        f"[startup] Deterministic PyTorch algorithms: "
         f"{options.deterministic_algorithms}"
     )
     if attention_overrides:
-        enzymado.data_loading.stores.log(
-            f"[startup] Attention experiment overrides: {attention_overrides}"
-        )
+        stores.log(f"[startup] Attention experiment overrides: {attention_overrides}")
     if options.model_prefix_filter is not None:
-        enzymado.data_loading.stores.log(
-            "[startup] Filtering model names by prefix: "
-            f"{options.model_prefix_filter}"
+        stores.log(
+            f"[startup] Filtering model names by prefix: {options.model_prefix_filter}"
         )
     if options.task_name_filters:
-        enzymado.data_loading.stores.log(
+        stores.log(
             f"[startup] Restricting tasks to: {sorted(options.task_name_filters)}"
         )
-    enzymado.data_loading.stores.log(
-        f"[startup] Restricting task scopes to: {sorted(task_scope_filters)}"
-    )
+    stores.log(f"[startup] Restricting task scopes to: {sorted(task_scope_filters)}")
     if options.skip_label_kinds:
-        enzymado.data_loading.stores.log(
+        stores.log(
             f"[startup] Skipping label kinds: {sorted(options.skip_label_kinds)}"
         )
-    enzymado.data_loading.stores.log(
-        f"[startup] Residue store mode: {options.residue_store_mode}"
-    )
+    stores.log(f"[startup] Residue store mode: {options.residue_store_mode}")
     if options.split_variant_filter is not None:
-        enzymado.data_loading.stores.log(
-            "[startup] Restricting split variant to: "
-            f"{options.split_variant_filter}"
+        stores.log(
+            f"[startup] Restricting split variant to: {options.split_variant_filter}"
         )
     if options.embedding_mode_filters:
-        enzymado.data_loading.stores.log(
+        stores.log(
             "[startup] Restricting embedding modes to: "
             f"{sorted(options.embedding_mode_filters)}"
         )
-    enzymado.data_loading.stores.log(
-        f"[startup] Overwrite results: {options.overwrite_results}"
-    )
+    stores.log(f"[startup] Overwrite results: {options.overwrite_results}")
 
 
 def _run_embedding_group(
-    embeddings: collections.abc.Mapping[str, enzymado.types.EmbeddingInfo],
-    run_tasks: list[tuple[str, enzymado.data_loading.data_registry.TaskConfig]],
+    embeddings: collections.abc.Mapping[str, types.EmbeddingInfo],
+    run_tasks: list[tuple[str, data_registry.TaskConfig]],
     options: _BenchmarkOptions,
     *,
     heading: str,
     attention_overrides: dict[str, object] | None = None,
-    training_route_override: enzymado.training.train.TrainingRouteSpec | None = None,
+    training_route_override: train.TrainingRouteSpec | None = None,
     model_map_fn: _ModelMapFn | None = None,
 ) -> list[str]:
     """Run one regular or attention manifest, returning the tasks that failed.
@@ -427,14 +389,9 @@ def _run_embedding_group(
     """
     failures: list[str] = []
     for emb_name, emb_info in embeddings.items():
-        if (
-            options.emb_name_filter is not None
-            and emb_name != options.emb_name_filter
-        ):
+        if options.emb_name_filter is not None and emb_name != options.emb_name_filter:
             continue
-        enzymado.data_loading.stores.log(
-            f"\n=== {heading}: {emb_name} (dim={emb_info['dim']}) ==="
-        )
+        stores.log(f"\n=== {heading}: {emb_name} (dim={emb_info['dim']}) ===")
         for task_name, config in run_tasks:
             ok = _run_task(
                 task_scope=config.task_scope,
@@ -517,15 +474,15 @@ def main(
     )
     _log_startup_options(options, task_scopes, attention_overrides)
 
-    embeddings = enzymado.data_loading.stores.load_embeddings(embeddings_json)
+    embeddings = stores.load_embeddings(embeddings_json)
     _validate_embedding_filter(embeddings, emb_name_filter, kind="")
     selected_tasks = [
         (name, config)
-        for name, config in enzymado.data_loading.data_registry.TASK_REGISTRY.items()
+        for name, config in data_registry.TASK_REGISTRY.items()
         if config.task_scope in task_scopes
     ]
     run_tasks = _select_run_tasks(selected_tasks, options.task_name_filters)
-    enzymado.data_loading.stores.log(
+    stores.log(
         f"[startup] Loaded. {len(embeddings)} embedding models, "
         f"{len(selected_tasks)} tasks."
     )
@@ -537,15 +494,13 @@ def main(
     )
 
     if attention_embeddings_json is not None:
-        attention_embeddings = enzymado.data_loading.stores.load_embeddings(
-            attention_embeddings_json
-        )
+        attention_embeddings = stores.load_embeddings(attention_embeddings_json)
         _validate_embedding_filter(
             attention_embeddings,
             emb_name_filter,
             kind="attention ",
         )
-        enzymado.data_loading.stores.log(
+        stores.log(
             f"[attention] {len(attention_embeddings)} attention embedding models found."
         )
         failures += _run_embedding_group(
@@ -554,18 +509,14 @@ def main(
             options,
             heading="Attention Embedding",
             attention_overrides=attention_overrides,
-            training_route_override=enzymado.training.train.ATTENTION_ROUTE,
-            model_map_fn=(
-                enzymado.training.model_selection.select_attention_models
-            ),
+            training_route_override=train.ATTENTION_ROUTE,
+            model_map_fn=model_selection.select_attention_models,
         )
 
     if failures:
-        enzymado.data_loading.stores.log(
-            f"Done with {len(failures)} failed task(s): {', '.join(failures)}"
-        )
+        stores.log(f"Done with {len(failures)} failed task(s): {', '.join(failures)}")
     else:
-        enzymado.data_loading.stores.log("Done.")
+        stores.log("Done.")
     return failures
 
 
@@ -762,9 +713,7 @@ def _run_cli() -> None:
         attach_probabilities=args.attach_probabilities,
     )
     if failures:
-        raise SystemExit(
-            f"{len(failures)} task(s) failed: {', '.join(failures)}"
-        )
+        raise SystemExit(f"{len(failures)} task(s) failed: {', '.join(failures)}")
 
 
 if __name__ == "__main__":

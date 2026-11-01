@@ -13,12 +13,13 @@ import csv
 from pathlib import Path
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "src"))
+from enzymado import paths_and_constants
+from enzymado.data_loading.data_registry import TASK_REGISTRY
+from enzymado.data_loading.stores import resolve_sequence_index_path
+from enzymado.data_loading.task_csv import clean_text, normalize_sequence
 
-from enzymado.data_loading.data_registry import TASK_REGISTRY  # noqa: E402
-from enzymado.data_loading.stores import resolve_sequence_index_path  # noqa: E402
-from enzymado.data_loading.task_csv import clean_text, normalize_sequence  # noqa: E402
+_P = paths_and_constants.Paths
+REPO_ROOT = _P.project_root
 
 
 def collect_task_sequences(task_name: str) -> set[str]:

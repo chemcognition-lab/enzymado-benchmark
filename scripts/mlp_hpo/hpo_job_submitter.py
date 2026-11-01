@@ -16,8 +16,11 @@ from pathlib import Path
 import shlex
 import subprocess
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
+REPO_ROOT = _P.project_root
+SCRIPT_DIR = _P.scripts_dir / "mlp_hpo"
 
 
 def build_parser() -> argparse.ArgumentParser:

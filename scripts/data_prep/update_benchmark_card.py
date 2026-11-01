@@ -20,26 +20,27 @@ import argparse
 import csv
 import datetime
 import json
-import pathlib
-import sys
+from pathlib import Path
 
-_REPO = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "src"))
+from enzymado import paths_and_constants
+from enzymado.data_loading import data_registry
+from enzymado.evaluation import metrics_registry
 
-from enzymado.data_loading import data_registry  # noqa: E402
-from enzymado.evaluation import metrics_registry  # noqa: E402
-from enzymado.training import model_registry  # noqa: E402
+_P = paths_and_constants.Paths
 
 # One entry per pooling and head combination that the benchmark actually runs.
 # Attention pooling is learned jointly with the head, so it has no counterpart
 # for gradient-boosted trees; that is why this is five and not six.
 BASELINES = [
-    ("no_attention", "linear"), ("no_attention", "mlp"),
-    ("no_attention", "xgboost"), ("attention", "linear"), ("attention", "mlp"),
+    ("no_attention", "linear"),
+    ("no_attention", "mlp"),
+    ("no_attention", "xgboost"),
+    ("attention", "linear"),
+    ("attention", "mlp"),
 ]
 
 
-def dataset_rows(config):
+def dataset_rows(config: data_registry.TaskConfig) -> tuple[int, int]:
     """Row count and distinct protein count for one task's published CSV."""
     path = sorted(config.dataset_paths.items())[0][1]
     rows, proteins = 0, set()
@@ -52,17 +53,18 @@ def dataset_rows(config):
     return rows, len(proteins)
 
 
-def embedding_models(repo):
+def embedding_models(repo: Path = _P.project_root) -> list[str]:
     """The manifest is machine-local, so fall back to its committed example."""
-    for name in ("embeddings_models_output.json",
-                 "embeddings_models_output.example.json"):
+    names = ("embeddings_models_output.json", "embeddings_models_output.example.json")
+    for name in names:
         path = repo / name
         if path.exists():
             return sorted(json.loads(path.read_text(encoding="utf-8")))
     return []
 
 
-def build_statistics(repo):
+def build_statistics(repo: Path = _P.project_root) -> dict[str, object]:
+    """Compute summary statistics across all registered benchmark tasks."""
     per_dataset, totals = {}, {"rows": 0, "proteins": 0}
     scope_rows: dict[str, int] = {}
     for name, config in sorted(data_registry.TASK_REGISTRY.items()):
@@ -85,14 +87,18 @@ def build_statistics(repo):
     }
     models = embedding_models(repo)
     scopes = sorted({c.task_scope for c in data_registry.TASK_REGISTRY.values()})
+    combinations = [{"pooling": pooling, "head": head} for pooling, head in BASELINES]
+    n_runs = sum(
+        len(d["split_variants"]) * len(BASELINES) * len(models)
+        for d in per_dataset.values()
+    )
 
     return {
         "generated": datetime.date.today().isoformat(),
         "datasets": {
             "total": len(per_dataset),
             "by_scope": {
-                scope: sum(1 for d in per_dataset.values()
-                           if d["task_scope"] == scope)
+                scope: sum(1 for d in per_dataset.values() if d["task_scope"] == scope)
                 for scope in scopes
             },
             "per_dataset": per_dataset,
@@ -110,9 +116,7 @@ def build_statistics(repo):
         "protein_language_models": {"total": len(models), "names": models},
         "baselines": {
             "total": len(BASELINES),
-            "combinations": [
-                {"pooling": pooling, "head": head} for pooling, head in BASELINES
-            ],
+            "combinations": combinations,
             "note": (
                 "Attention pooling is trained jointly with the head, so it pairs "
                 "only with the two neural heads."
@@ -125,33 +129,30 @@ def build_statistics(repo):
             "aggregate": ["bradley_terry_rating"],
         },
         "runs": {
-            "total": sum(
-                len(d["split_variants"]) * len(BASELINES) * len(models)
-                for d in per_dataset.values()
-            ),
+            "total": n_runs,
             "formula": "datasets x split variants x baselines x embeddings",
         },
     }
 
 
 def main() -> None:
+    """Refresh the statistics block in benchmark_card.json."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--card", type=pathlib.Path,
-                        default=_REPO / "benchmark_card.json")
+    parser.add_argument("--card", type=Path, default=_P.benchmark_card)
     args = parser.parse_args()
 
     card = json.loads(args.card.read_text(encoding="utf-8"))
-    card["statistics"] = build_statistics(_REPO)
+    card["statistics"] = build_statistics(_P.project_root)
     args.card.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")
 
     stats = card["statistics"]
-    print(f"  datasets              {stats['datasets']['total']}"
-          f"  {stats['datasets']['by_scope']}")
+    by_scope = stats["datasets"]["by_scope"]
+    n_metrics = stats["evaluation_metrics"]["total"]
+    print(f"  datasets              {stats['datasets']['total']}  {by_scope}")
     print(f"  datapoints            {stats['datapoints']['total']:,}")
     print(f"  protein LMs           {stats['protein_language_models']['total']}")
     print(f"  baselines             {stats['baselines']['total']}")
-    print(f"  evaluation metrics    {stats['evaluation_metrics']['total']}"
-          f"  (incluye el rating)")
+    print(f"  evaluation metrics    {n_metrics}  (includes rating)")
     print(f"  runs                  {stats['runs']['total']:,}")
     print(f"  -> {args.card}")
 

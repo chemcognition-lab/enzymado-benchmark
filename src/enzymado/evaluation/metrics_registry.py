@@ -28,9 +28,7 @@ def metric_specs_for_statistic(
 ) -> tuple[enzymado.types.MetricSpec, ...]:
     """Return metrics backed by one sufficient-statistic representation."""
     return tuple(
-        spec
-        for spec in metric_specs(task_type)
-        if spec.statistic is statistic
+        spec for spec in metric_specs(task_type) if spec.statistic is statistic
     )
 
 
@@ -190,8 +188,7 @@ def evaluate_predictions(
         if spec.fn is None:
             continue
         accepts_scores = (
-            spec.input_kind
-            is enzymado.types.MetricInput.PROBABILITIES_OR_PREDICTIONS
+            spec.input_kind is enzymado.types.MetricInput.PROBABILITIES_OR_PREDICTIONS
         )
         use_scores = score_flat is not None and accepts_scores
         values = score_flat if use_scores else pred_flat
@@ -205,9 +202,7 @@ def _confusion_columns(
     """Return floating-point TP, FP, FN, and TN columns."""
     if totals.ndim != 2 or totals.shape[1] != 4:
         raise ValueError(f"Expected counts with shape (N, 4), got {totals.shape}.")
-    return tuple(
-        totals[:, column].astype(np.float64) for column in range(4)
-    )
+    return tuple(totals[:, column].astype(np.float64) for column in range(4))
 
 
 def _ratio(
@@ -226,8 +221,8 @@ def _ratio(
 
 
 def _count_accuracy(totals: Array) -> Array:
-    true_positive, false_positive, false_negative, true_negative = (
-        _confusion_columns(totals)
+    true_positive, false_positive, false_negative, true_negative = _confusion_columns(
+        totals
     )
     total = true_positive + false_positive + false_negative + true_negative
     return _ratio(true_positive + true_negative, total)
@@ -251,8 +246,8 @@ def _count_f1(totals: Array) -> Array:
 
 
 def _count_auroc(totals: Array) -> Array:
-    true_positive, false_positive, false_negative, true_negative = (
-        _confusion_columns(totals)
+    true_positive, false_positive, false_negative, true_negative = _confusion_columns(
+        totals
     )
     true_positive_rate = _ratio(
         true_positive,
@@ -268,8 +263,8 @@ def _count_auroc(totals: Array) -> Array:
 
 
 def _count_auprc(totals: Array) -> Array:
-    true_positive, false_positive, false_negative, true_negative = (
-        _confusion_columns(totals)
+    true_positive, false_positive, false_negative, true_negative = _confusion_columns(
+        totals
     )
     precision = _count_precision(totals)
     recall = _count_recall(totals)
@@ -453,8 +448,7 @@ def _score_specs() -> tuple[enzymado.types.MetricSpec, ...]:
     return tuple(
         spec
         for spec in metric_specs("classification")
-        if spec.input_kind
-        is enzymado.types.MetricInput.PROBABILITIES_OR_PREDICTIONS
+        if spec.input_kind is enzymado.types.MetricInput.PROBABILITIES_OR_PREDICTIONS
     )
 
 
@@ -468,8 +462,7 @@ def ranking_metrics(
     totals = np.asarray(totals, dtype=np.float64)
     if totals.ndim != 2 or totals.shape[1] != 2 * n_bins:
         raise ValueError(
-            f"Expected histograms with shape (N, {2 * n_bins}), got "
-            f"{totals.shape}."
+            f"Expected histograms with shape (N, {2 * n_bins}), got {totals.shape}."
         )
     return aggregate_metrics(totals, specs or _score_specs(), use_scores=True)
 
@@ -600,9 +593,7 @@ def _validate_catalog() -> None:
         raise ValueError("Metric names must be unique within each task type.")
     for task_type in {spec.task_type for spec in METRICS}:
         primary = [
-            spec
-            for spec in METRICS
-            if spec.task_type == task_type and spec.is_primary
+            spec for spec in METRICS if spec.task_type == task_type and spec.is_primary
         ]
         if len(primary) != 1:
             raise ValueError(f"Task type '{task_type}' must have one primary metric.")
@@ -611,8 +602,7 @@ def _validate_catalog() -> None:
         if needs_aggregate and spec.aggregate_fn is None:
             raise ValueError(f"Metric '{spec.name}' requires an aggregate function.")
         accepts_scores = (
-            spec.input_kind
-            is enzymado.types.MetricInput.PROBABILITIES_OR_PREDICTIONS
+            spec.input_kind is enzymado.types.MetricInput.PROBABILITIES_OR_PREDICTIONS
         )
         if accepts_scores and spec.score_aggregate_fn is None:
             raise ValueError(f"Metric '{spec.name}' requires a score reducer.")

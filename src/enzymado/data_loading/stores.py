@@ -14,9 +14,8 @@ import safetensors
 import torch
 from torch.utils.data import DataLoader
 
-import enzymado.data_loading.collators
-import enzymado.data_loading.datasets
-import enzymado.paths_and_constants
+from enzymado import paths_and_constants
+from enzymado.data_loading import collators, datasets
 import enzymado.types
 
 from .features import (
@@ -27,7 +26,8 @@ from .features import (
 from .labels import FlatECLabelBuilder, HierarchicalECLabelBuilder
 from .task_csv import TaskCSVLoader, clean_text, normalize_sequence
 
-PROJECT_ROOT = enzymado.paths_and_constants.Paths.project_root
+_P = paths_and_constants.Paths
+PROJECT_ROOT = _P.project_root
 _PREFERRED_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_pool.csv"
 # Older checkouts named the index protein_sequences_unique.csv.
 _LEGACY_SEQ_INDEX = PROJECT_ROOT / "data/processed/protein_sequences_unique.csv"
@@ -182,9 +182,7 @@ def _load_sequence_key_map(
     }
     seq_index_path = resolve_sequence_index_path()
     seq_to_key = (
-        _sequence_keys_from_index(
-            seq_index_path, normalized_sequences, available_keys
-        )
+        _sequence_keys_from_index(seq_index_path, normalized_sequences, available_keys)
         if seq_index_path is not None and normalized_sequences
         else {}
     )
@@ -196,9 +194,7 @@ def _load_sequence_key_map(
 
 def _safetensor_keys(file_path: Path) -> list[str]:
     """Return the cleaned tensor keys stored in one safetensors file."""
-    with safetensors.safe_open(
-        str(file_path), framework="pt", device="cpu"
-    ) as handle:
+    with safetensors.safe_open(str(file_path), framework="pt", device="cpu") as handle:
         return [clean_text(str(raw_key)) for raw_key in handle.keys()]
 
 
@@ -638,18 +634,18 @@ def build_xy_pooled(bundle, batch_kind: str) -> tuple[torch.Tensor, torch.Tensor
 
 
 def get_dataloader(
-    bundle: enzymado.data_loading.datasets.TaskDatasetBundle,
+    bundle: datasets.TaskDatasetBundle,
     batch_size: int = 32,
     collate_fn: collections.abc.Callable[
         [list[dict[str, object]]],
-        enzymado.data_loading.collators.Batch,
+        collators.Batch,
     ]
     | None = None,
     *,
     shuffle: bool = False,
     seed: int = 0,
     num_workers: int = 4,
-) -> DataLoader[enzymado.data_loading.collators.Batch]:
+) -> DataLoader[collators.Batch]:
     """Build a DataLoader for one dataset bundle."""
     generator = None
     if shuffle:
@@ -679,7 +675,7 @@ def _pad_1d_array_list(arrays: list[np.ndarray], dtype: np.dtype) -> np.ndarray:
 
 
 def _build_label_only_payload(
-    bundle: enzymado.data_loading.datasets.TaskDatasetBundle,
+    bundle: datasets.TaskDatasetBundle,
 ) -> enzymado.types.TargetPayload:
     """Build targets from validated rows without materializing feature embeddings."""
     label_kind = bundle.config.label_kind
@@ -750,7 +746,7 @@ def _build_label_only_payload(
 
 
 def get_target_payload(
-    bundle: enzymado.data_loading.datasets.TaskDatasetBundle,
+    bundle: datasets.TaskDatasetBundle,
 ) -> enzymado.types.TargetPayload:
     """Collect task targets and optional masks without reloading embeddings."""
     return _build_label_only_payload(bundle)

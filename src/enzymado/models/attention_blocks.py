@@ -20,7 +20,7 @@ def _seq_emb_to_tensor(protein_emb, device: torch.device) -> torch.Tensor:
     """Move a protein embedding to its device without NumPy conversion for BF16.
 
     Accepts:
-      - torch.Tensor (e.g. BF16 from the residue collator) → just transferred to device.
+      - torch.Tensor (e.g. BF16 from the residue collator) → transferred to device.
       - np.ndarray with dtype=int16 (BF16 raw bits) → reinterpreted as bfloat16.
       - any other numpy-convertible source → upcast to float32.
     """

@@ -11,9 +11,7 @@ import numpy.typing as npt
 import torch
 import torch.nn as nn
 
-import enzymado.models.common
-import enzymado.models.nn_blocks
-import enzymado.models.training_protocol
+from enzymado.models import common, nn_blocks, training_protocol
 import enzymado.types
 
 type FloatArray = npt.NDArray[np.float32]
@@ -60,15 +58,13 @@ class ECMultiHeadClassifierImplementation:
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.validation_metric_ = self.validation_metric
-        self.device = (
-            torch.device(device) if device else enzymado.models.common.DEVICE
-        )
-        self.model: enzymado.models.nn_blocks.MultiHeadMLPModel | None = None
+        self.device = torch.device(device) if device else common.DEVICE
+        self.model: nn_blocks.MultiHeadMLPModel | None = None
         self.output_dims: dict[str, int] | None = None
         self.best_epoch_: int | None = None
         self.best_val_loss_: float | None = None
         self.current_epoch_ = 0
-        self.best_model_state_: enzymado.models.common.ModelState | None = None
+        self.best_model_state_: common.ModelState | None = None
         self.x_mean_: FloatArray | None = None
         self.x_scale_: FloatArray | None = None
 
@@ -141,16 +137,13 @@ class ECMultiHeadClassifierImplementation:
             target_masks,
         ):
             logits_by_level = self._forward(x_t)
-            loss = enzymado.models.common.compute_ec_batch_loss(
-                logits_by_level,
-                y_t,
-                target_mask_t,
-                criterion,
+            loss = common.compute_ec_batch_loss(
+                logits_by_level, y_t, target_mask_t, criterion
             )
             if loss is None:
                 continue
             optimizer.zero_grad()
-            enzymado.models.training_protocol.backward_checked(loss)
+            training_protocol.backward_checked(loss)
             optimizer.step()
 
     def _validation_objective(self, payload: ECValidationPayload) -> float:
@@ -158,7 +151,7 @@ class ECMultiHeadClassifierImplementation:
         if self.model is None:
             raise RuntimeError("EC classifier model has not been initialized.")
         self.model.eval()
-        auprc = enzymado.models.common.StreamingAUPRC(self.device)
+        auprc = common.StreamingAUPRC(self.device)
         x_val, y_val, target_mask_val = payload
         with torch.no_grad():
             for x_t, y_t, target_mask_t in self._iter_minibatches(
@@ -190,18 +183,11 @@ class ECMultiHeadClassifierImplementation:
         x_np = np.asarray(x, dtype=np.float32)
         if x_np.ndim != 2:
             raise ValueError(f"x must be pooled 2D, got shape {x_np.shape}")
-        self.x_mean_, self.x_scale_ = enzymado.models.common.fit_feature_scaler(x_np)
-        x_np = enzymado.models.common.apply_feature_scaler(
-            x_np,
-            self.x_mean_,
-            self.x_scale_,
-        )
+        self.x_mean_, self.x_scale_ = common.fit_feature_scaler(x_np)
+        x_np = common.apply_feature_scaler(x_np, self.x_mean_, self.x_scale_)
         if x_val is not None:
-            x_val = enzymado.models.common.apply_feature_scaler(
-                np.asarray(x_val, dtype=np.float32),
-                self.x_mean_,
-                self.x_scale_,
-            )
+            x_val_arr = np.asarray(x_val, dtype=np.float32)
+            x_val = common.apply_feature_scaler(x_val_arr, self.x_mean_, self.x_scale_)
         input_dim = x_np.shape[1]
 
         targets: ECTargets = {
@@ -213,29 +199,25 @@ class ECMultiHeadClassifierImplementation:
             for level_name, mask in target_mask.items()
         }
         self.output_dims = {
-            level_name: int(target.shape[1])
-            for level_name, target in targets.items()
+            level_name: int(target.shape[1]) for level_name, target in targets.items()
         }
-        self.model = enzymado.models.nn_blocks.MultiHeadMLPModel(
+        self.model = nn_blocks.MultiHeadMLPModel(
             input_dim,
             self.hidden_dims,
             self.output_dims,
             dropout=self.dropout,
         ).to(self.device)
-        start_epoch = enzymado.models.common.maybe_resume_torch_wrapper(
-            self,
-            checkpoint_path,
-        )
+        start_epoch = common.maybe_resume_torch_wrapper(self, checkpoint_path)
         optimizer = typing.cast(
             torch.optim.Optimizer,
-            enzymado.models.common.make_optimizer(
+            common.make_optimizer(
                 self.model.parameters(),
                 self.optimizer_name,
                 self.lr,
                 self.weight_decay,
             ),
         )
-        enzymado.models.common.restore_torch_training_state(self, optimizer)
+        common.restore_torch_training_state(self, optimizer)
         criterion = nn.BCEWithLogitsLoss(reduction="none")
 
         val_payload: ECValidationPayload | None = None
@@ -253,13 +235,7 @@ class ECMultiHeadClassifierImplementation:
             )
 
         def train_epoch() -> None:
-            self._train_epoch(
-                x_np,
-                targets,
-                target_masks,
-                optimizer,
-                criterion,
-            )
+            self._train_epoch(x_np, targets, target_masks, optimizer, criterion)
 
         validation_loss: collections.abc.Callable[[], float] | None = None
         if val_payload is not None:
@@ -269,7 +245,7 @@ class ECMultiHeadClassifierImplementation:
 
             validation_loss = val_loss
 
-        enzymado.models.common.run_wrapper_training(
+        common.run_wrapper_training(
             self,
             train_epoch,
             validation_loss,
@@ -294,11 +270,7 @@ class ECMultiHeadClassifierImplementation:
         if x_np.ndim != 2:
             raise ValueError(f"x must be pooled 2D, got shape {x_np.shape}")
         if self.x_mean_ is not None and self.x_scale_ is not None:
-            x_np = enzymado.models.common.apply_feature_scaler(
-                x_np,
-                self.x_mean_,
-                self.x_scale_,
-            )
+            x_np = common.apply_feature_scaler(x_np, self.x_mean_, self.x_scale_)
         preds_by_level: dict[str, list[FloatArray]] = {
             level_name: [] for level_name in self.output_dims
         }

@@ -1,6 +1,5 @@
 """Characterization tests for the benchmark command-line interface."""
 
-
 from pathlib import Path
 
 import pytest
@@ -39,7 +38,6 @@ def test_parser_defaults_are_stable() -> None:
         "diagnostic_z_threshold": 20.0,
         "diagnostic_grad_norm_threshold": 1000.0,
     }
-
 
 
 def test_completed_runs_are_successful_skips(

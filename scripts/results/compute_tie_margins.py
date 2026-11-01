@@ -34,7 +34,10 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import chi2
 
-_REPO = Path(__file__).resolve().parents[2]
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
+_REPO = _P.project_root
 RATED = {
     "regression": ("mae", "rmse", "kendall_tau"),
     "classification": ("accuracy", "precision", "recall", "f1", "auroc", "auprc"),
@@ -42,14 +45,30 @@ RATED = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--predictions-root", type=Path, default=_REPO / "results" / "predictions",
-                        help="Published runs, used as seed 42.")
-    parser.add_argument("--seed-root", type=Path, action="append", default=None,
-                        help="Predictions tree of one extra seed (repeatable).")
-    parser.add_argument("--out", type=Path, default=None,
-                        help="Output CSV (default: the path in the card's rating.tie_margins).")
-    parser.add_argument("--benchmark-card", type=Path, default=_REPO / "benchmark_card.json")
+    fmt = argparse.RawDescriptionHelpFormatter
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=fmt)
+    parser.add_argument(
+        "--predictions-root",
+        type=Path,
+        default=_P.results_predictions_dir,
+        help="Published runs, used as seed 42.",
+    )
+    parser.add_argument(
+        "--seed-root",
+        type=Path,
+        action="append",
+        default=None,
+        help="Predictions tree of one extra seed (repeatable).",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output CSV (default: the path in the card's rating.tie_margins).",
+    )
+    parser.add_argument(
+        "--benchmark-card", type=Path, default=_REPO / "benchmark_card.json"
+    )
     parser.add_argument("--exploded-train-r2", type=float, default=-1.0)
     return parser.parse_args()
 
@@ -62,8 +81,8 @@ def consistency(n: int) -> float:
 def main() -> None:
     args = parse_args()
     seed_roots = args.seed_root or [
-        _REPO / "results" / "noise_seeds" / "seed_43" / "predictions",
-        _REPO / "results" / "noise_seeds" / "seed_44" / "predictions",
+        _P.results_dir / "noise_seeds" / "seed_43" / "predictions",
+        _P.results_dir / "noise_seeds" / "seed_44" / "predictions",
     ]
     trees = {"published": args.predictions_root, **{str(p): p for p in seed_roots}}
     out = args.out
@@ -71,7 +90,8 @@ def main() -> None:
         card = json.loads(args.benchmark_card.read_text())
         out = _REPO / card["rating"]["tie_margins"]["path"]
 
-    runs = collections.defaultdict(dict)  # (pool, split, head, task) -> PLM -> tree -> test metrics
+    # (pool, split, head, task) -> PLM -> tree -> test metrics
+    runs = collections.defaultdict(dict)
     exploded = set()
     cells = set()
     for name, tree in trees.items():
@@ -83,7 +103,8 @@ def main() -> None:
             metrics = json.loads(path.read_text())
             runs[key].setdefault(emb, {})[name] = metrics["test"]
             train_r2 = metrics.get("train", {}).get("r2", 0.0)
-            if metrics["test"]["task_type"] == "regression" and train_r2 < args.exploded_train_r2:
+            is_reg = metrics["test"]["task_type"] == "regression"
+            if is_reg and train_r2 < args.exploded_train_r2:
                 exploded.add(key + (emb, name))
 
     rows = []
@@ -100,19 +121,38 @@ def main() -> None:
         task_type = next(iter(runs[key].values()))["published"]["task_type"]
         for metric in RATED[task_type]:
             if complete:
-                groups = [np.array([m[metric] for m in kept.values()]) for kept in complete.values()]
-                sigma = float(np.median([g.std(ddof=1) / consistency(len(g)) for g in groups]))
+                groups = [
+                    np.array([m[metric] for m in kept.values()])
+                    for kept in complete.values()
+                ]
+                sds = [g.std(ddof=1) / consistency(len(g)) for g in groups]
+                sigma = float(np.median(sds))
             elif head == "xgboost" and pool == "no_attention":
                 sigma = 0.0
             else:
                 sigma = float("nan")
-            rows.append(dict(task=task, split=split, metric=metric, model_family=head, pool_type=pool,
-                             sigma=sigma, n_plms=len(complete), n_runs_dropped=dropped, source="measured"))
+            rows.append(
+                dict(
+                    task=task,
+                    split=split,
+                    metric=metric,
+                    model_family=head,
+                    pool_type=pool,
+                    sigma=sigma,
+                    n_plms=len(complete),
+                    n_runs_dropped=dropped,
+                    source="measured",
+                )
+            )
 
-    index = {(r["task"], r["split"], r["metric"], r["model_family"], r["pool_type"]): r for r in rows}
+    def _cell_key(r: dict) -> tuple[str, str, str, str, str]:
+        return (r["task"], r["split"], r["metric"], r["model_family"], r["pool_type"])
+
+    index = {_cell_key(r): r for r in rows}
     for row in rows:
         if not np.isfinite(row["sigma"]) and row["pool_type"] == "attention":
-            donor = index.get((row["task"], row["split"], row["metric"], row["model_family"], "no_attention"))
+            donor_key = (*_cell_key(row)[:4], "no_attention")
+            donor = index.get(donor_key)
             if donor and np.isfinite(donor["sigma"]):
                 row["sigma"], row["source"] = donor["sigma"], "no_attention_fallback"
     missing = [r for r in rows if not np.isfinite(r["sigma"])]
@@ -125,7 +165,8 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows)
     fallbacks = sum(r["source"] != "measured" for r in rows)
-    print(f"{len(rows)} cells, {fallbacks} fallbacks, {len(exploded)} exploded runs left out -> {out}")
+    n_exp = len(exploded)
+    print(f"{len(rows)} cells, {fallbacks} fallbacks, {n_exp} exploded -> {out}")
 
 
 if __name__ == "__main__":

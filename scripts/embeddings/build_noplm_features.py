@@ -32,14 +32,20 @@ import numpy as np
 from safetensors.torch import save_file
 import torch
 
-_REPO = Path(__file__).resolve().parents[2]
-POOL = _REPO / "data" / "processed" / "protein_pool.csv"
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
+_REPO = _P.project_root
+POOL = _P.data_processed_dir / "protein_pool.csv"
 POOLED_OUT = (
-    _REPO / "data" / "embeddings_mean_pooled" / "protein_sequences_unique" / "noplm.safetensors"
+    _P.data_dir
+    / "embeddings_mean_pooled"
+    / "protein_sequences_unique"
+    / "noplm.safetensors"
 )
 # Residue shards are large; point --residue-out at the store that
 # embeddings_models_output.json names for noplm.
-RESIDUE_OUT = _REPO / "data" / "embeddings" / "protein_sequences_unique" / "noplm_shards"
+RESIDUE_OUT = _P.data_embeddings_dir / "protein_sequences_unique" / "noplm_shards"
 STANDARD = "ACDEFGHIKLMNPQRSTVWY"
 ONE_HOT_SHARES = {
     **{aa: {aa: 1.0} for aa in STANDARD},
@@ -66,7 +72,7 @@ FEATURES = (
 
 
 def descriptors(sequence: str) -> tuple[np.ndarray, bool, bool]:
-    """Return the 36 descriptors, whether residues were removed, and the flex fallback."""
+    """Return 36 descriptors, whether residues were removed, and flex fallback."""
     from Bio.SeqUtils import ProtParamData
     from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
@@ -158,7 +164,10 @@ def main() -> None:
     if not np.isfinite(np.stack(list(pooled.values()))).all():
         raise ValueError("Non-finite descriptor values.")
     args.pooled_out.parent.mkdir(parents=True, exist_ok=True)
-    save_file({key: torch.from_numpy(value) for key, value in pooled.items()}, str(args.pooled_out))
+    save_file(
+        {key: torch.from_numpy(value) for key, value in pooled.items()},
+        str(args.pooled_out),
+    )
     metadata = {
         "features": FEATURES,
         "proteins": len(pooled),
@@ -166,7 +175,9 @@ def main() -> None:
         "proteins_with_nonstandard_removed": removed,
         "proteins_with_flexibility_fallback": fallback,
     }
-    args.pooled_out.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n")
+    args.pooled_out.with_suffix(".json").write_text(
+        json.dumps(metadata, indent=2) + "\n"
+    )
     print(json.dumps(metadata | {"features": len(FEATURES)}))
 
 

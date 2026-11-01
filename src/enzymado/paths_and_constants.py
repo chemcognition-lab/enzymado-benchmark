@@ -7,6 +7,7 @@ class Paths:
     """Absolute project paths shared by data preparation scripts."""
 
     project_root: Path = Path(__file__).resolve().parents[2]
+    benchmark_card: Path = project_root / "benchmark_card.json"
 
     data_dir: Path = project_root / "data"
     data_raw_dir: Path = data_dir / "raw"
@@ -14,6 +15,8 @@ class Paths:
     data_processed_dir: Path = data_dir / "processed"
     data_processed_real_case: Path = data_processed_dir / "real_case"
     data_external_dir: Path = data_dir / "external"
+    data_embeddings_dir: Path = data_dir / "embeddings"
+    data_ligand_features_dir: Path = data_dir / "ligand_features"
 
     data_raw_biolip_dir: Path = data_raw_dir / "biolip"
     data_raw_fireprotdb_dir: Path = data_raw_dir / "fireprotdb"
@@ -27,6 +30,7 @@ class Paths:
     notebooks_dir: Path = project_root / "notebooks"
     results_dir: Path = project_root / "results"
     results_figures_dir: Path = results_dir / "figures"
+    results_predictions_dir: Path = results_dir / "predictions"
     scripts_dir: Path = project_root / "scripts"
     src_dir: Path = project_root / "src"
     tests_dir: Path = project_root / "tests"

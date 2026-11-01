@@ -94,9 +94,7 @@ def predict_from_loaders(
     )
     pred_test = predictor.predict_loader(test_loader, batch_kind=batch_kind)
 
-    y_train, target_mask_train = data_loading.get_target_payload(
-        prepared.train_bundle
-    )
+    y_train, target_mask_train = data_loading.get_target_payload(prepared.train_bundle)
     y_val, target_mask_val = (
         data_loading.get_target_payload(prepared.val_bundle)
         if use_validation and prepared.val_bundle is not None

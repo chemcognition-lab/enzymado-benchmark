@@ -4,7 +4,7 @@
 import argparse
 import csv
 import gzip
-import os
+from pathlib import Path
 from typing import TextIO
 
 DEFAULT_HEADER = (
@@ -36,7 +36,7 @@ def open_maybe_gzip(path: str) -> TextIO:
     """Open a plain-text or gzip-compressed input file."""
     if path.endswith(".gz"):
         return gzip.open(path, "rt", encoding="utf-8", newline="")
-    return open(path, "rt", encoding="utf-8", newline="")
+    return Path(path).open("r", encoding="utf-8", newline="")
 
 
 def detect_delimiter(line: str) -> str | None:
@@ -77,11 +77,12 @@ def create_parser() -> argparse.ArgumentParser:
 
 def convert_biolip(in_path: str, out_path: str) -> None:
     """Convert BioLiP rows to CSV while preserving their values and order."""
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    output_file = Path(out_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with (
         open_maybe_gzip(in_path) as fh,
-        open(out_path, "w", encoding="utf-8", newline="") as out_fh,
+        output_file.open("w", encoding="utf-8", newline="") as out_fh,
     ):
         writer = csv.writer(out_fh)
 

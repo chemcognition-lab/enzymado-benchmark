@@ -3,20 +3,16 @@
 import dataclasses
 from pathlib import Path
 
-import enzymado.data_loading.data_registry
-import enzymado.data_loading.task_data
-import enzymado.training.train
+from enzymado.data_loading import data_registry, task_data
+from enzymado.training import train
 
 
 @dataclasses.dataclass(frozen=True)
 class PreparedTask:
     """Prepared data and its selected training route."""
 
-    data: (
-        enzymado.data_loading.task_data.PooledTaskData
-        | enzymado.data_loading.task_data.LoaderTaskData
-    )
-    route: enzymado.training.train.TrainingRouteSpec
+    data: task_data.PooledTaskData | task_data.LoaderTaskData
+    route: train.TrainingRouteSpec
 
 
 @dataclasses.dataclass(frozen=True)
@@ -31,7 +27,7 @@ class TaskSizes:
 
 def prepare(
     *,
-    config: enzymado.data_loading.data_registry.TaskConfig,
+    config: data_registry.TaskConfig,
     task_name: str,
     emb_path: str | Path,
     split_variant: str,
@@ -39,11 +35,11 @@ def prepare(
     sequence_to_id: dict[str, str],
     residue_store_mode: str,
     embedding_dim: int | None,
-    route_override: enzymado.training.train.TrainingRouteSpec | None = None,
+    route_override: train.TrainingRouteSpec | None = None,
 ) -> PreparedTask:
     """Load one task and preserve the existing route-selection rules."""
-    if route_override is enzymado.training.train.ATTENTION_ROUTE:
-        prepared = enzymado.training.train.ATTENTION_ROUTE.prepare(  # type: ignore[misc]
+    if route_override is train.ATTENTION_ROUTE:
+        prepared = train.ATTENTION_ROUTE.prepare(  # type: ignore[misc]
             config,
             task_name,
             emb_path,
@@ -53,9 +49,9 @@ def prepare(
             residue_store_mode=residue_store_mode,
             embedding_dim=embedding_dim,
         )
-        route = enzymado.training.train.ATTENTION_ROUTE
+        route = train.ATTENTION_ROUTE
     else:
-        prepared = enzymado.data_loading.task_data.load_task_data(
+        prepared = task_data.load_task_data(
             task_name,
             emb_path,
             split_variant,
@@ -65,25 +61,19 @@ def prepare(
             embedding_dim=embedding_dim,
         )
         route = (
-            enzymado.training.train.GLOBAL_ROUTE
-            if isinstance(prepared, enzymado.data_loading.task_data.PooledTaskData)
-            else enzymado.training.train.RESIDUE_ROUTE
+            train.GLOBAL_ROUTE
+            if isinstance(prepared, task_data.PooledTaskData)
+            else train.RESIDUE_ROUTE
         )
 
-    return PreparedTask(
-        data=prepared,
-        route=route,
-    )
+    return PreparedTask(data=prepared, route=route)
 
 
 def summarize(
-    data: (
-        enzymado.data_loading.task_data.PooledTaskData
-        | enzymado.data_loading.task_data.LoaderTaskData
-    ),
+    data: task_data.PooledTaskData | task_data.LoaderTaskData,
 ) -> TaskSizes:
     """Calculate split sizes after the caller owns the prepared data."""
-    n_train, n_val, n_test = enzymado.training.train._dataset_sizes(data)
+    n_train, n_val, n_test = train._dataset_sizes(data)
     return TaskSizes(
         n_train=n_train,
         n_val=n_val,

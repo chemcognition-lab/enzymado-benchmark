@@ -577,6 +577,7 @@ class StructuredTrainingTests(unittest.TestCase):
     def test_auto_mode_materializes_small_residue_stores(
         self,
     ) -> None:
+        from enzymado.data_loading import task_data
         from enzymado.data_loading.task_data import _build_loader_data
 
         config = TaskConfig(
@@ -591,16 +592,16 @@ class StructuredTrainingTests(unittest.TestCase):
         fake_bundle = types.SimpleNamespace(dataset=[1], label_builder=None)
 
         with (
-            mock.patch(
-                "enzymado.data_loading.task_data.load_safetensors_embedding_store_subset",
+            mock.patch.object(
+                task_data,
+                "load_safetensors_embedding_store_subset",
                 return_value=materialized_store,
             ) as load_subset,
-            mock.patch(
-                "enzymado.data_loading.task_data.load_lazy_safetensors_embedding_store"
+            mock.patch.object(
+                task_data, "load_lazy_safetensors_embedding_store"
             ) as load_lazy,
-            mock.patch(
-                "enzymado.data_loading.task_data.build_task_dataset",
-                return_value=fake_bundle,
+            mock.patch.object(
+                task_data, "build_task_dataset", return_value=fake_bundle
             ),
         ):
             _build_loader_data(
@@ -622,6 +623,7 @@ class StructuredTrainingTests(unittest.TestCase):
     def test_auto_mode_uses_lazy_for_large_residue_stores(
         self,
     ) -> None:
+        from enzymado.data_loading import task_data
         from enzymado.data_loading.task_data import _build_loader_data
 
         config = TaskConfig(
@@ -637,16 +639,16 @@ class StructuredTrainingTests(unittest.TestCase):
         huge_sequence = "A" * 10_000
 
         with (
-            mock.patch(
-                "enzymado.data_loading.task_data.load_safetensors_embedding_store_subset"
+            mock.patch.object(
+                task_data, "load_safetensors_embedding_store_subset"
             ) as load_subset,
-            mock.patch(
-                "enzymado.data_loading.task_data.load_lazy_safetensors_embedding_store",
+            mock.patch.object(
+                task_data,
+                "load_lazy_safetensors_embedding_store",
                 return_value=lazy_store,
             ) as load_lazy,
-            mock.patch(
-                "enzymado.data_loading.task_data.build_task_dataset",
-                return_value=fake_bundle,
+            mock.patch.object(
+                task_data, "build_task_dataset", return_value=fake_bundle
             ),
         ):
             # embedding_dim=2_000_000 over a 10k-residue sequence estimates ~74 GiB,
@@ -670,6 +672,7 @@ class StructuredTrainingTests(unittest.TestCase):
     def test_load_task_embedding_store_keeps_lazy_strategy_for_non_residue_tasks(
         self,
     ) -> None:
+        from enzymado.data_loading import task_data
         from enzymado.data_loading.task_data import _build_loader_data
 
         config = TaskConfig(
@@ -684,16 +687,16 @@ class StructuredTrainingTests(unittest.TestCase):
         fake_bundle = types.SimpleNamespace(dataset=[1], label_builder=None)
 
         with (
-            mock.patch(
-                "enzymado.data_loading.task_data.load_safetensors_embedding_store_subset"
+            mock.patch.object(
+                task_data, "load_safetensors_embedding_store_subset"
             ) as load_subset,
-            mock.patch(
-                "enzymado.data_loading.task_data.load_lazy_safetensors_embedding_store",
+            mock.patch.object(
+                task_data,
+                "load_lazy_safetensors_embedding_store",
                 return_value=lazy_store,
             ) as load_lazy,
-            mock.patch(
-                "enzymado.data_loading.task_data.build_task_dataset",
-                return_value=fake_bundle,
+            mock.patch.object(
+                task_data, "build_task_dataset", return_value=fake_bundle
             ),
         ):
             _build_loader_data(
@@ -753,16 +756,16 @@ class StructuredTrainingTests(unittest.TestCase):
             mock.patch.object(
                 task_data, "_estimate_residue_store_gib", return_value=361.0
             ),
-            mock.patch(
-                "enzymado.data_loading.task_data.load_safetensors_embedding_store_subset"
+            mock.patch.object(
+                task_data, "load_safetensors_embedding_store_subset"
             ) as load_subset,
-            mock.patch(
-                "enzymado.data_loading.task_data.load_lazy_safetensors_embedding_store",
+            mock.patch.object(
+                task_data,
+                "load_lazy_safetensors_embedding_store",
                 return_value=lazy_store,
             ) as load_lazy,
-            mock.patch(
-                "enzymado.data_loading.task_data.build_task_dataset",
-                return_value=fake_bundle,
+            mock.patch.object(
+                task_data, "build_task_dataset", return_value=fake_bundle
             ),
         ):
             # Sanity: the budget honors the 250G cap despite the 480 GiB "available".
@@ -1224,8 +1227,9 @@ class StructuredTrainingTests(unittest.TestCase):
         # Column 1 is constant in train; a test value off it stays bounded.
         np.testing.assert_allclose(scaled[:, 1], x[:, 1])
         np.testing.assert_allclose(scaled_val[:, 1], [0.9])
-        np.testing.assert_allclose(scaled[:, [0, 2]].mean(axis=0), [0.0, 0.0], atol=1e-6)
-        np.testing.assert_allclose(scaled[:, [0, 2]].std(axis=0), [1.0, 1.0], atol=1e-6)
+        scaled_var = scaled[:, [0, 2]]
+        np.testing.assert_allclose(scaled_var.mean(axis=0), [0.0, 0.0], atol=1e-6)
+        np.testing.assert_allclose(scaled_var.std(axis=0), [1.0, 1.0], atol=1e-6)
 
     def test_attention_sequence_scaler_is_stable_and_neutralizes_constants(
         self,

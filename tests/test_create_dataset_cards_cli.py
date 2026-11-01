@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
 import runpy
 import sys
 
+from enzymado import paths_and_constants
 import enzymado.dataset_card.dataset_card_populator as dataset_card_populator
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "scripts"
-    / "data_prep"
-    / "create_dataset_cards.py"
-)
+_P = paths_and_constants.Paths
+SCRIPT_PATH = _P.scripts_dir / "data_prep" / "create_dataset_cards.py"
 
 
 def run_cli(monkeypatch, arguments: list[str]) -> list[tuple[str, object]]:

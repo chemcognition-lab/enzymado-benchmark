@@ -13,6 +13,7 @@ import numpy as np
 from scripts.results import compute_ratings as ratings_script
 import sklearn.metrics as skm
 
+from enzymado import paths_and_constants
 from enzymado.evaluation import binary_statistics, loaders, statistics_cache, task_types
 from enzymado.evaluation import metrics_registry as metrics_module
 from enzymado.evaluation.bootstrap import (
@@ -42,6 +43,8 @@ from enzymado.evaluation.rating_lib import (
 )
 import enzymado.types
 
+_P = paths_and_constants.Paths
+
 
 class TestMetrics(TestCase):
     def test_regression_mae_with_mask(self) -> None:
@@ -66,15 +69,18 @@ class TestMetrics(TestCase):
             binary_statistics.count_payload(PredictionPayload(y, p, None)),
             split="test",
         )
-        self.assertAlmostEqual(
-            metrics["f1"], 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4)
-        )
+        self.assertAlmostEqual(metrics["f1"], 2 * (3 / 4) * (3 / 4) / (3 / 4 + 3 / 4))
 
     def test_metric_catalog_dispatch(self) -> None:
         expected = {
             "regression": {"mae", "rmse", "r2", "kendall_tau"},
             "classification": {
-                "accuracy", "precision", "recall", "f1", "auroc", "auprc"
+                "accuracy",
+                "precision",
+                "recall",
+                "f1",
+                "auroc",
+                "auprc",
             },
         }
         for task_type, names in expected.items():
@@ -588,7 +594,6 @@ class TestDiscover(TestCase):
                 sigs,
             )
 
-
     def test_experiment_task_type_prefers_hparams_over_metrics(self) -> None:
         import json
         import tempfile
@@ -637,8 +642,12 @@ class TestRatingTieMargins(TestCase):
     def _cell(self, sigma) -> "ratings_script.Cell":
         scores = np.array([[0.50, 0.50], [0.49, 0.40], [0.50, 0.30]])
         return ratings_script.Cell(
-            task="t", split="random", metric="kendall_tau", weight=1.0,
-            scores=scores, sigma=sigma,
+            task="t",
+            split="random",
+            metric="kendall_tau",
+            weight=1.0,
+            scores=scores,
+            sigma=sigma,
         )
 
     def test_zero_margins_match_the_strict_comparison(self) -> None:
@@ -676,9 +685,7 @@ class TestGlobalRatings(TestCase):
         self.assertEqual(len(set(competitors)), 75)
         self.assertIn("noplm/xgboost/no_attention", competitors)
 
-    _RATING = json.loads(
-        (Path(__file__).resolve().parents[1] / "benchmark_card.json").read_text()
-    )["rating"]
+    _RATING = json.loads(_P.benchmark_card.read_text(encoding="utf-8"))["rating"]
 
     def test_property_task_weights_follow_five_descending_tiers(self) -> None:
         tasks = sorted(self._RATING["task_weights"]["properties"])
@@ -693,9 +700,7 @@ class TestGlobalRatings(TestCase):
         self.assertEqual(len(set(tiers)), 5)
 
     def test_card_covers_every_property_task_and_split(self) -> None:
-        card = json.loads(
-            (Path(__file__).resolve().parents[1] / "benchmark_card.json").read_text()
-        )
+        card = json.loads(_P.benchmark_card.read_text(encoding="utf-8"))
         self.assertEqual(
             set(self._RATING["task_weights"]["properties"]), set(card["properties"])
         )
@@ -703,12 +708,14 @@ class TestGlobalRatings(TestCase):
             self.assertAlmostEqual(sum(table.values()), 1.0)
 
     def test_scope_without_a_weight_table_weighs_tasks_equally(self) -> None:
-        weights = ratings_script._task_weights({"task_weights": {}}, "real_case", ["a", "b"])
+        cfg = {"task_weights": {}}
+        weights = ratings_script._task_weights(cfg, "real_case", ["a", "b"])
         self.assertEqual(weights, {"a": 1.0, "b": 1.0})
 
     def test_unweighted_property_task_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "new_task"):
-            ratings_script._task_weights(self._RATING, "properties", ["kcat", "new_task"])
+            tasks = ["kcat", "new_task"]
+            ratings_script._task_weights(self._RATING, "properties", tasks)
 
     def test_kendall_weight_is_normalized_within_regression(self) -> None:
         weights = ratings_script._metric_weights(
@@ -735,7 +742,8 @@ class TestGlobalRatings(TestCase):
 
     def test_excluded_metrics_are_renormalized_within_the_cell(self) -> None:
         """Dropping a metric must not cost its task any leaderboard influence."""
-        table = {name: 1.0 for name in ("accuracy", "precision", "recall", "f1", "auroc", "auprc")}
+        names = ("accuracy", "precision", "recall", "f1", "auroc", "auprc")
+        table = {name: 1.0 for name in names}
         weights = ratings_script._metric_weights(
             "classification", table, frozenset({"accuracy"})
         )

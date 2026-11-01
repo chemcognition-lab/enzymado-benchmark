@@ -119,5 +119,3 @@ class LoaderPredictor(typing.Protocol):
         """Return predictions for every sample yielded by ``dataloader``."""
 
         ...
-
-

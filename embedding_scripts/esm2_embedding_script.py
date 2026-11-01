@@ -28,7 +28,7 @@ def get_esm2_model(model_name):
 
 def read_fasta(fasta_path, split_char, id_field):
     sequences = dict()
-    with open(fasta_path, "r") as fasta_f:
+    with Path(fasta_path).open("r", encoding="utf-8") as fasta_f:
         for line in fasta_f:
             if line.startswith(">"):
                 uniprot_id = line.replace(">", "").strip().split(split_char)[id_field]

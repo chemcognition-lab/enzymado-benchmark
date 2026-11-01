@@ -15,13 +15,12 @@ Usage:
 from __future__ import annotations
 
 import json
-from pathlib import Path
-import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "src"))
+from enzymado import paths_and_constants
+from enzymado.data_loading.data_registry import TASK_REGISTRY
 
-from enzymado.data_loading.data_registry import TASK_REGISTRY  # noqa: E402
+_P = paths_and_constants.Paths
+REPO_ROOT = _P.project_root
 
 
 def main() -> int:

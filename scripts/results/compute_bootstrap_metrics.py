@@ -7,7 +7,8 @@ metrics are never required: the test point estimate is recomputed before
 bootstrap metadata is written, so this script alone produces both.
 
 Example:
-    python scripts/results/compute_bootstrap_metrics.py --filter-task ec_number --n-replicates 1000
+    python scripts/results/compute_bootstrap_metrics.py \
+        --filter-task ec_number --n-replicates 1000
 """
 
 from __future__ import annotations
@@ -17,20 +18,12 @@ import collections
 import hashlib
 import json
 import pathlib
-import sys
 import time
 
 import numpy as np
 
-
-def _repo_root() -> pathlib.Path:
-    """Return the repository root without relying on the launch directory."""
-    return pathlib.Path(__file__).resolve().parents[2]
-
-
-sys.path.insert(0, str(_repo_root() / "src"))
-
-from enzymado.evaluation import (  # noqa: E402, metrics_registry
+from enzymado import paths_and_constants
+from enzymado.evaluation import (
     binary_statistics,
     discover,
     loaders,
@@ -38,7 +31,14 @@ from enzymado.evaluation import (  # noqa: E402, metrics_registry
     statistics_cache,
     task_types,
 )
-from enzymado.evaluation import bootstrap as bootstrap_lib  # noqa: E402
+from enzymado.evaluation import bootstrap as bootstrap_lib
+
+_P = paths_and_constants.Paths
+
+
+def _repo_root() -> pathlib.Path:
+    """Return the repository root without relying on the launch directory."""
+    return _P.project_root
 
 
 def _task_seed(seed_root: int, signature: tuple[str, ...]) -> int:
@@ -383,8 +383,7 @@ def main() -> None:
         # results tree. Printing it and exiting 0 makes the gap invisible to
         # the scheduler and to any downstream check.
         raise SystemExit(
-            f"{len(skipped)} experiment(s) produced no bootstrap: "
-            + ", ".join(skipped)
+            f"{len(skipped)} experiment(s) produced no bootstrap: " + ", ".join(skipped)
         )
     print("\nBootstrap complete.")
 

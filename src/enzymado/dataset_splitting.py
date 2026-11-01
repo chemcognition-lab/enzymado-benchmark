@@ -161,9 +161,7 @@ def _generate_random_split(
             stratify_bins=request.stratify_bins,
         )
     else:
-        raise ValueError(
-            f"Unsupported random split unit: {request.random_split_unit}."
-        )
+        raise ValueError(f"Unsupported random split unit: {request.random_split_unit}.")
     return _GeneratedSplit(*output)
 
 

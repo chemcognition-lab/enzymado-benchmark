@@ -95,9 +95,8 @@ def _heatmap_legend(c: vis.Canvas, metrics: list[str], split: str) -> None:
             )
         x += 8 * 13 + 11 + 6
         x = word("HIGH") + 36
-    c.text(
-        c.w, y, f"mlp · mean pooling · {split} split · outlined = best".upper(), "note"
-    )
+    tag = f"mlp · mean pooling · {split} split · outlined = best".upper()
+    c.text(c.w, y, tag, "note")
 
 
 def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
@@ -334,9 +333,7 @@ def split_gap_box(out: Path, scores: pd.DataFrame) -> None:
             c.text(m_left - 12, yc, vis.TASK_LABEL[task], "row")
             c.text(c.w - 4, yc, f"{med:+.3f}", "value")
             y += row_h
-    c.note(
-        "MLP head · mean pooling · one dot per PLM · box: quartiles · whiskers: 1.5 IQR"
-    )
+    c.note("MLP head · mean pooling · one dot per PLM · box: IQR · whiskers: 1.5 IQR")
     c.save(out, "split_gap_box")
 
 

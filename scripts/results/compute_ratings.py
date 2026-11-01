@@ -17,15 +17,15 @@ import dataclasses
 import hashlib
 import json
 from pathlib import Path
-import sys
 import time
 
 import numpy as np
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "src"))
+from enzymado import paths_and_constants
+from enzymado.evaluation import discover, metrics_registry, rating_lib
 
-from enzymado.evaluation import discover, metrics_registry, rating_lib  # noqa: E402
+_P = paths_and_constants.Paths
+_REPO = _P.project_root
 
 
 @dataclasses.dataclass(frozen=True)
@@ -92,7 +92,7 @@ def _reference_embeddings() -> tuple[str, ...]:
 
 
 def _task_weights(rating: dict, scope: str, tasks: list[str]) -> dict[str, float]:
-    """Return each task's weight from the card; a scope without a table weighs tasks equally."""
+    """Return each task's weight from the card, or equal weights when absent."""
     table = rating.get("task_weights", {}).get(scope)
     if table is None:
         return {task: 1.0 for task in tasks}
@@ -179,9 +179,12 @@ def _metric_weights(
     label: str = "",
 ) -> dict[str, float]:
     """Normalize the card's metric weights to equal influence per task cell."""
-    unknown = sorted(set(weights) - set(metrics_registry.higher_is_better_for(task_type)))
+    known = set(metrics_registry.higher_is_better_for(task_type))
+    unknown = sorted(set(weights) - known)
     if unknown:
-        raise ValueError(f"Unknown {task_type} metrics in the rating weights: {unknown}.")
+        raise ValueError(
+            f"Unknown {task_type} metrics in the rating weights: {unknown}."
+        )
     kept = {
         name: float(weight)
         for name, weight in weights.items()
@@ -557,9 +560,7 @@ def _compute_leaderboard(
     """Compute, summarize, and persist one global leaderboard."""
     print(f"Building {name} leaderboard")
     started = time.perf_counter()
-    margins = (
-        None if args.tie_margins is None else _load_tie_margins(args.tie_margins)
-    )
+    margins = None if args.tie_margins is None else _load_tie_margins(args.tie_margins)
     task_weights = _task_weights(rating, name, sorted(task_types))
     competitors, cells, exclusions = _build_cells(
         sources,

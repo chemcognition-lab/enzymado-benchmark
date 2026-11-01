@@ -15,8 +15,8 @@ import numpy.typing as npt
 import torch
 
 import enzymado.data_loading as data_loading
-import enzymado.data_loading.stores
-import enzymado.models.common
+from enzymado.data_loading import stores
+from enzymado.models import common
 
 from . import xgb_support
 
@@ -276,10 +276,7 @@ class XGBResidueBinaryClassifier:
         # chosen because the residue embeddings did not fit RAM, so hold the
         # binned matrix externally too rather than risk a host-RAM OOM.
         store = self._dataloader_embedding_store(dataloader)
-        return isinstance(
-            store,
-            enzymado.data_loading.stores.LazySafetensorsResidueEmbeddingStore,
-        )
+        return isinstance(store, stores.LazySafetensorsResidueEmbeddingStore)
 
     def _resolve_cache_base(self) -> str:
         """Pick a base dir for the external cache.
@@ -459,8 +456,7 @@ class XGBResidueBinaryClassifier:
             )
             return
         xgb_support._progress_log(
-            "Residue XGBoost streaming fit starting "
-            f"| device={self.model_device_}",
+            f"Residue XGBoost streaming fit starting | device={self.model_device_}",
             label=progress_label,
         )
 
@@ -477,9 +473,7 @@ class XGBResidueBinaryClassifier:
                 split_name="train",
             )
         except Exception as exc:  # noqa: BLE001 - preserve retry contract.
-            if self.model_device_ == "cpu" or not xgb_support._is_xgb_cuda_failure(
-                exc
-            ):
+            if self.model_device_ == "cpu" or not xgb_support._is_xgb_cuda_failure(exc):
                 raise
             xgb_support._progress_log(
                 "GPU failure building residue QuantileDMatrix "
@@ -565,9 +559,7 @@ class XGBResidueBinaryClassifier:
         try:
             return typing.cast(_Booster, xgb_support.xgb.train(**train_kwargs))
         except Exception as exc:  # noqa: BLE001 - preserve retry contract.
-            if self.model_device_ == "cpu" or not xgb_support._is_xgb_cuda_failure(
-                exc
-            ):
+            if self.model_device_ == "cpu" or not xgb_support._is_xgb_cuda_failure(exc):
                 raise
             xgb_support._progress_log(
                 "GPU failure during residue XGBoost fit "
@@ -575,9 +567,7 @@ class XGBResidueBinaryClassifier:
                 label=progress_label,
             )
             self.model_device_ = "cpu"
-            train_kwargs["params"] = self._make_train_params(
-                device_override="cpu"
-            )
+            train_kwargs["params"] = self._make_train_params(device_override="cpu")
             return typing.cast(_Booster, xgb_support.xgb.train(**train_kwargs))
 
     def _finish_booster_fit(
@@ -596,8 +586,7 @@ class XGBResidueBinaryClassifier:
 
         if progress_label is not None:
             summary = (
-                f"Residue XGBoost fit done in "
-                f"{time.perf_counter() - fit_start:.1f}s"
+                f"Residue XGBoost fit done in {time.perf_counter() - fit_start:.1f}s"
             )
             if self.best_iteration_ is not None:
                 summary += f" | best_iteration={self.best_iteration_}"
@@ -620,8 +609,8 @@ class XGBResidueBinaryClassifier:
                 f"XGBResidueBinaryClassifier does not support batch_kind='{batch_kind}'"
             )
         try:
-            resume_booster, rounds_done, already_complete = (
-                self._prepare_fit_resume(checkpoint_path, progress_label)
+            resume_booster, rounds_done, already_complete = self._prepare_fit_resume(
+                checkpoint_path, progress_label
             )
             if already_complete:
                 return self
@@ -702,7 +691,7 @@ class XGBResidueBinaryClassifier:
                 )
             pred_rows.extend(self._split_flat_predictions(flat_pred, lengths))
 
-        return enzymado.models.common.pad_1d_array_list(pred_rows, dtype=np.float32)
+        return common.pad_1d_array_list(pred_rows, dtype=np.float32)
 
     def predict_loader(
         self,

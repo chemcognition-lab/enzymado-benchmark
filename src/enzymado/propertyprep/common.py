@@ -1,5 +1,6 @@
 """Shared cleaning-statistics helpers for property preparation."""
 
+
 def start_stats(total: int) -> dict[str, object]:
     """Create the legacy cleaning-statistics record in stable key order."""
     return {

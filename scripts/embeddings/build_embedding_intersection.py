@@ -9,13 +9,13 @@ import json
 from pathlib import Path
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from enzymado import paths_and_constants
+from enzymado.data_loading.stores import normalize_sequence
+
+_P = paths_and_constants.Paths
+REPO_ROOT = _P.project_root
 DEFAULT_EMBEDDINGS_JSON = REPO_ROOT / "embeddings_models_output_mean_pooled.json"
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "embedding_intersection"
-
-sys.path.insert(0, str(REPO_ROOT / "src"))
-
-from enzymado.data_loading.stores import normalize_sequence  # noqa: E402
+DEFAULT_OUTPUT_DIR = _P.results_dir / "embedding_intersection"
 
 
 def inspect_embedding_file(
@@ -195,13 +195,16 @@ def main() -> int:
     report_path = args.output_dir / "report.tsv"
     with report_path.open("w", encoding="utf-8") as handle:
         handle.write(
-            "model\tstatus\tn_ids\texpected_count\texpected_dim\tpath\tbad_shape_count\tbad_shape_examples\n"
+            "model\tstatus\tn_ids\texpected_count\texpected_dim\t"
+            "path\tbad_shape_count\tbad_shape_examples\n"
         )
         for model in sorted(statuses):
             row = statuses[model]
             handle.write(
-                f"{model}\t{row['status']}\t{row['n_ids']}\t{args.expected_count}\t{row['expected_dim']}\t"
-                f"{row['path']}\t{row['bad_shape_count']}\t{row['bad_shape_examples']}\n"
+                f"{model}\t{row['status']}\t{row['n_ids']}\t"
+                f"{args.expected_count}\t{row['expected_dim']}\t"
+                f"{row['path']}\t{row['bad_shape_count']}\t"
+                f"{row['bad_shape_examples']}\n"
             )
 
     for model in sorted(statuses):

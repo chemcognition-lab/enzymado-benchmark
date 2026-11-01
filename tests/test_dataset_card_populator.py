@@ -9,11 +9,14 @@ import pandas as pd
 import safetensors.torch
 import torch
 
+from enzymado import paths_and_constants
 import enzymado.dataset_card.clustering as dataset_clustering
 import enzymado.dataset_card.dataset_card_populator as dataset_card_populator
 import enzymado.dataset_card.statistics as dataset_statistics
 import enzymado.dataset_card.umap_plots as umap_plots
-import enzymado.paths_and_constants as paths_and_constants
+
+_P = paths_and_constants.Paths
+_C = paths_and_constants.Constants
 
 
 def _property_frame() -> pd.DataFrame:
@@ -140,15 +143,15 @@ def test_run_writes_the_existing_dataset_card_schema(tmp_path, monkeypatch) -> N
 
 def test_shared_paths_and_constants_keep_the_current_layout() -> None:
     """Lock path resolution and public column constants."""
-    paths = paths_and_constants.Paths()
+    paths = _P()
 
     assert paths.data_dir == paths.project_root / "data"
     assert paths.data_processed_properties == (
         paths.project_root / "data" / "processed" / "properties"
     )
     assert paths.results_figures_dir == paths.project_root / "results" / "figures"
-    assert paths_and_constants.Constants.dataset_id == "dataset_id"
-    assert paths_and_constants.Constants.protein_sequence == "protein_sequence"
+    assert _C.dataset_id == "dataset_id"
+    assert _C.protein_sequence == "protein_sequence"
 
 
 def test_dataset_card_cli_matches_recorded_identity_threshold(tmp_path) -> None:

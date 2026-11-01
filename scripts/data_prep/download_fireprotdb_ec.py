@@ -6,6 +6,7 @@ import csv
 import gzip
 import io
 import os
+from pathlib import Path
 import re
 import shutil
 import sys
@@ -57,7 +58,7 @@ _SQL_DUMP_MSG = (
 
 
 def open_text_stream(path):
-    with open(path, "rb") as fh:
+    with Path(path).open("rb") as fh:
         sig = fh.read(4)
     if sig.startswith(b"\x1f\x8b"):
         return gzip.open(path, "rt", encoding="utf-8", newline="")
@@ -70,7 +71,7 @@ def open_text_stream(path):
         if member.endswith(".sql"):
             raise RuntimeError(_SQL_DUMP_MSG)
         return io.TextIOWrapper(zf.open(member, "r"), encoding="utf-8", newline="")
-    return open(path, "rt", encoding="utf-8", newline="")
+    return Path(path).open("r", encoding="utf-8", newline="")
 
 
 def detect_delimiter(header_line):
@@ -153,8 +154,9 @@ def main():
             if ec_idx is None:
                 raise RuntimeError("Could not find an EC column in the header.")
 
-            os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-            with open(args.out, "w", encoding="utf-8", newline="") as out_fh:
+            output_path = Path(args.out)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with output_path.open("w", encoding="utf-8", newline="") as out_fh:
                 writer = csv.writer(out_fh, delimiter="\t")
                 writer.writerow(header)
 

@@ -16,13 +16,12 @@ import typing
 
 import requests
 
-import enzymado.paths_and_constants
+from enzymado import paths_and_constants
 import enzymado.types
 
+_P = paths_and_constants.Paths
 _SEQUENCE_INDEX_CACHE: dict[str, enzymado.types.SwissProtSequenceIndex] = {}
-_DEFAULT_SWISSPROT_PATH = (
-    enzymado.paths_and_constants.Paths.data_raw_swissprot_dir / "swissprot_ec.tsv"
-)
+_DEFAULT_SWISSPROT_PATH = _P.data_raw_swissprot_dir / "swissprot_ec.tsv"
 
 
 @dataclass(frozen=True)
@@ -133,9 +132,7 @@ def _search_uniprot_sequence(
     for entry in results:
         accession = entry.get("primaryAccession", "")
         entry_id = entry.get("uniProtkbId", "")
-        secondary = set(
-            typing.cast(list[str], entry.get("secondaryAccessions", []))
-        )
+        secondary = set(typing.cast(list[str], entry.get("secondaryAccessions", [])))
         if identifier == accession or identifier == entry_id or identifier in secondary:
             chosen = entry
             break

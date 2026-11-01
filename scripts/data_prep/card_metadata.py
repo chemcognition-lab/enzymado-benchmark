@@ -267,9 +267,7 @@ SOURCES = {
     "align_amylase_stability": {
         "source": "Protein Engineering Tournament (2023 ALIGN round)",
         "doi": "10.1002/prot.70008",
-        "description": (
-            "Thermostability for the same amylase variant library."
-        ),
+        "description": ("Thermostability for the same amylase variant library."),
         "label": (
             "log10 of the thermostability in the assay units of the tournament "
             "release, standardized on the training split. One row per variant: "

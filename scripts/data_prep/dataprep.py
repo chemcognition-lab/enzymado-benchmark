@@ -1,5 +1,7 @@
 """Prepare legacy BioLiP, FireProtDB, and BRENDA intermediate datasets."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import re
@@ -8,7 +10,9 @@ import numpy as np
 import pandas as pd
 from rdkit import Chem
 
-from enzymado.paths_and_constants import Paths
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
 
 EC_NUMBER_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])"
@@ -119,7 +123,7 @@ def add_negatives(
     return pd.concat([df, neg_df], ignore_index=True)
 
 
-def prep_biolip(p: Paths):
+def prep_biolip(p: _P):
     """
     Dataprep for Biolip dataset.
     """
@@ -291,7 +295,7 @@ def prep_biolip(p: Paths):
     return {"amount_of_removed_data": stats}
 
 
-def prep_fireprot(p: Paths) -> dict[str, object] | None:
+def prep_fireprot(p: _P) -> dict[str, object] | None:
     """Prepare DDG and DTM intermediate datasets from FireProtDB."""
     raw_path = p.data_raw_fireprotdb_dir / "fireprotdb_ec.tsv"
 
@@ -361,7 +365,7 @@ def parse_ph(x: object) -> float | None:
         return None
 
 
-def prep_brenda(p: Paths):
+def prep_brenda(p: _P):
     """
     Dataprep for phOpt (BRENDA).
     """
@@ -370,7 +374,7 @@ def prep_brenda(p: Paths):
     if not brenda_path.exists():
         return None
 
-    with open(brenda_path, "r") as f:
+    with brenda_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     brenda_data = data.get("data", {})
@@ -454,7 +458,7 @@ def prep_brenda(p: Paths):
 
 
 def main():
-    p = Paths()
+    p = _P()
 
     stats = {}
 
@@ -464,7 +468,7 @@ def main():
 
     results_dir = p.results_dir / "dataprep_datacards"
     results_dir.mkdir(parents=True, exist_ok=True)
-    with open(results_dir / "dataprep_stats.json", "w") as f:
+    with (results_dir / "dataprep_stats.json").open("w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2)
 
 

@@ -202,9 +202,7 @@ class XGBFlatECBlockClassifier:
                 target_mask_val,
             )
             if val_features.ndim != 2:
-                raise ValueError(
-                    f"x_val must be 2D, got shape {val_features.shape}"
-                )
+                raise ValueError(f"x_val must be 2D, got shape {val_features.shape}")
             if val_features.shape[0] != val_targets.shape[0]:
                 raise ValueError(
                     "x_val and y_val must contain the same number of rows for "
@@ -403,9 +401,7 @@ class XGBFlatECBlockClassifier:
                 label=progress_label,
             )
             booster_device = "cpu"
-            train_kwargs["params"] = self._make_train_params(
-                device_override="cpu"
-            )
+            train_kwargs["params"] = self._make_train_params(device_override="cpu")
             booster = typing.cast(
                 _Booster,
                 xgb_support.xgb.train(**train_kwargs),
@@ -475,8 +471,8 @@ class XGBFlatECBlockClassifier:
             y_val,
             target_mask_val,
         )
-        resumed, total_blocks, start_column, completed_blocks = (
-            self._restore_fit_state(data.targets.shape[1], checkpoint_path)
+        resumed, total_blocks, start_column, completed_blocks = self._restore_fit_state(
+            data.targets.shape[1], checkpoint_path
         )
         self._log_fit_setup(
             data,

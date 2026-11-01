@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from enzymado.models import training_protocol
 from enzymado.models.attention_blocks import (
     AttentionMultiHeadPredictor,
     attention_autocast,
@@ -21,7 +22,6 @@ from enzymado.models.common import (
     maybe_resume_torch_wrapper,
     restore_torch_training_state,
 )
-import enzymado.models.training_protocol
 from enzymado.training.attention_wrapper_base import _BaseAttentionWrapper
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
@@ -192,10 +192,10 @@ class AttentionECMultiHeadClassifierImplementation(_BaseAttentionWrapper):
                 if loss is None:
                     continue
                 if accumulation == 1:
-                    enzymado.models.training_protocol.backward_checked(loss)
+                    training_protocol.backward_checked(loss)
                     step(batch_index, batch, loss, max_abs_z)
                     continue
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 pending += 1
                 last = (batch_index, batch, loss, max_abs_z)
                 if pending == accumulation:

@@ -15,17 +15,9 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import sys
 
-
-def _repo_root() -> pathlib.Path:
-    """Return the repository root without relying on the launch directory."""
-    return pathlib.Path(__file__).resolve().parents[2]
-
-
-sys.path.insert(0, str(_repo_root() / "src"))
-
-from enzymado.evaluation import (  # noqa: E402, metrics_registry
+from enzymado import paths_and_constants
+from enzymado.evaluation import (
     binary_statistics,
     discover,
     loaders,
@@ -33,6 +25,13 @@ from enzymado.evaluation import (  # noqa: E402, metrics_registry
     statistics_cache,
     task_types,
 )
+
+_P = paths_and_constants.Paths
+
+
+def _repo_root() -> pathlib.Path:
+    """Return the repository root without relying on the launch directory."""
+    return _P.project_root
 
 
 def _compute_metrics(

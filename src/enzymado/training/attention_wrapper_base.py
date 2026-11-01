@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from enzymado.models import training_protocol
 from enzymado.models.attention_blocks import (
     MeanAggregation,
     batch_to_attention_tensors,
@@ -24,7 +25,6 @@ from enzymado.models.common import (
     run_training_with_early_stopping,
     validation_objective,
 )
-import enzymado.models.training_protocol
 
 _SEQUENCE_VARIANCE_EPS = 1e-12
 _DIAGNOSTIC_FLUSH_EVERY = 100
@@ -289,7 +289,7 @@ class _BaseAttentionWrapper:
         # z-score, so they pass through; numeric context is still scaled.
         mean[:, :ligand_dim] = 0.0
         scale[:, :ligand_dim] = 1.0
-        self.extra_mean_ =torch.from_numpy(mean.astype(np.float32, copy=False)).to(
+        self.extra_mean_ = torch.from_numpy(mean.astype(np.float32, copy=False)).to(
             self.device
         )
         self.extra_scale_ = torch.from_numpy(scale.astype(np.float32, copy=False)).to(
@@ -434,16 +434,11 @@ class _BaseAttentionWrapper:
         if self.extra_dim_ > 0:
             self._fit_extra_scaler(dataloader, batch_kind)
 
-
     def _selection_objective(self, logits_t, y_t):
         """Return the negated selection metric for concatenated validation output."""
-        enzymado.models.training_protocol.check_finite_tensors(
-            [logits_t], "validation logits"
-        )
+        training_protocol.check_finite_tensors([logits_t], "validation logits")
         scores = (
-            torch.sigmoid(logits_t)
-            if self.validation_metric == "auprc"
-            else logits_t
+            torch.sigmoid(logits_t) if self.validation_metric == "auprc" else logits_t
         )
         return validation_objective(
             y_t.reshape(-1).detach().cpu().numpy(),

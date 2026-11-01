@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from enzymado.models import training_protocol
 from enzymado.models.common import (
     batch_to_input,
     make_optimizer,
@@ -15,7 +16,6 @@ from enzymado.models.common import (
     restore_torch_training_state,
 )
 from enzymado.models.nn_blocks import LinearModel, MLPModel
-import enzymado.models.training_protocol
 from enzymado.training.torch_wrapper_base import BaseStandardWrapper
 
 
@@ -91,7 +91,7 @@ class LinearClassifierImplementation(BaseStandardWrapper):
             self.model.train()
             optimizer.zero_grad()
             loss = criterion(self._forward(x_t, mask_t), y_t)
-            enzymado.models.training_protocol.backward_checked(loss)
+            training_protocol.backward_checked(loss)
             optimizer.step()
 
         def val_loss():
@@ -174,7 +174,7 @@ class LinearClassifierImplementation(BaseStandardWrapper):
                     ).to(self.device)
                 optimizer.zero_grad()
                 loss = criterion(self._forward(x_t, mask_t), y_t)
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
@@ -324,7 +324,7 @@ class MLPClassifierImplementation(BaseStandardWrapper):
                 yb = y_t[idx]
                 optimizer.zero_grad()
                 loss = criterion(self._forward(xb, mb), yb)
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():
@@ -439,7 +439,7 @@ class MLPClassifierImplementation(BaseStandardWrapper):
                     ).to(self.device)
                 optimizer.zero_grad()
                 loss = criterion(self._forward(x_t, mask_t), y_t)
-                enzymado.models.training_protocol.backward_checked(loss)
+                training_protocol.backward_checked(loss)
                 optimizer.step()
 
         def val_loss():

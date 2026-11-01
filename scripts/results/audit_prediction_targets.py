@@ -8,21 +8,21 @@ import csv
 import json
 import lzma
 from pathlib import Path
-import sys
 from typing import Any
 
 import numpy as np
 from safetensors.torch import load as load_tensors
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from enzymado.artifacts.results_layout import (  # noqa: E402
+from enzymado import paths_and_constants
+from enzymado.artifacts.results_layout import (
     INVALIDATION_MARKER,
     find_prediction_artifact,
 )
-from enzymado.data_loading import TASK_REGISTRY  # noqa: E402
-from enzymado.evaluation.discover import discover_experiments  # noqa: E402
+from enzymado.data_loading import TASK_REGISTRY
+from enzymado.evaluation.discover import discover_experiments
+
+_P = paths_and_constants.Paths
+PROJECT_ROOT = _P.project_root
 
 SPLIT_TO_DATASET_VARIANT = {
     "random": "random",
@@ -160,7 +160,7 @@ def audit_prediction_targets(predictions_root: Path) -> list[dict[str, Any]]:
                 continue
             try:
                 observed = _load_y_true(prediction_path)
-            except Exception as exc:  # noqa: BLE001 - corrupt artifacts are audit findings.
+            except Exception as exc:  # noqa: BLE001 - report corrupt artifacts.
                 split_findings.append(
                     {
                         "split": split_name,

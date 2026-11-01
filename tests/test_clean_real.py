@@ -310,7 +310,8 @@ def test_erickson_row_fix_refuses_an_unexpected_label(tmp_path: Path) -> None:
         ["Enzyme ID", "Protein Sequence"],
         [{"Enzyme ID": "101", "Protein Sequence": "MKV"}],
     )
-    rows = [["30°C", c, "1"] for c in ["C6", "NP7", "NP7.5", "H7.5", "B8", "G9", "NP7"]]
+    conditions = ["C6", "NP7", "NP7.5", "H7.5", "B8", "G9", "NP7"]
+    rows = [["30°C", c, "1"] for c in conditions]
     values = tmp_path / "values.csv"
     _write_erickson_values(values, rows)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import time
 
-import enzymado.models.training_protocol
+from enzymado.models import training_protocol
 
 try:
     import xgboost as xgb
@@ -151,9 +151,7 @@ def _make_xgb_checkpoint_callback(wrapper, path: str | Path | None, interval: in
 
 def _maybe_resume_xgb_wrapper(wrapper, path: str | Path | None) -> bool:
     path_obj = Path(path) if path is not None else None
-    wrapper.training_contract_ = enzymado.models.training_protocol.resume_contract(
-        wrapper, path_obj
-    )
+    wrapper.training_contract_ = training_protocol.resume_contract(wrapper, path_obj)
     if path_obj is None:
         return False
     if not path_obj.exists():

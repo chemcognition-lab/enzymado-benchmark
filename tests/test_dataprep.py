@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -10,7 +9,10 @@ from scripts.data_prep.dataprep import (
     prep_fireprot,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from enzymado import paths_and_constants
+
+_P = paths_and_constants.Paths
+PROJECT_ROOT = _P.project_root
 
 
 def test_has_explicit_ec_number_accepts_supported_biolip_formats():

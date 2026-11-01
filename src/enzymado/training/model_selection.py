@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-import enzymado.artifacts.results_layout
-import enzymado.training.model_registry
+from enzymado.artifacts import results_layout
+from enzymado.training import model_registry
 
 
 def _filter_prefix(
@@ -26,7 +26,7 @@ def select_models(
     model_prefix: str | None,
 ) -> dict[str, dict[str, object]]:
     """Select standard models for one task and optional name prefix."""
-    model_map = enzymado.training.model_registry.get_model_map(task_type, label_kind)
+    model_map = model_registry.get_model_map(task_type, label_kind)
     return _filter_prefix(model_map, model_prefix)
 
 
@@ -36,10 +36,7 @@ def select_attention_models(
     model_prefix: str | None,
 ) -> dict[str, dict[str, object]]:
     """Select attention models for one task and optional name prefix."""
-    model_map = enzymado.training.model_registry.get_attention_model_map(
-        task_type,
-        label_kind,
-    )
+    model_map = model_registry.get_attention_model_map(task_type, label_kind)
     return _filter_prefix(model_map, model_prefix)
 
 
@@ -53,9 +50,7 @@ def filter_by_embedding_modes(
         return model_map
     selected: dict[str, dict[str, object]] = {}
     for name, info in model_map.items():
-        mode = enzymado.artifacts.results_layout.canonical_embedding_mode(
-            task_name, name
-        )
+        mode = results_layout.canonical_embedding_mode(task_name, name)
         if mode in embedding_modes:
             selected[name] = info
     return selected
@@ -72,7 +67,7 @@ def find_completed_models(
     """Return selected model names whose expected artifacts are complete."""
     completed = []
     for model_name in model_map:
-        run_dir = enzymado.artifacts.results_layout.build_results_run_dir(
+        run_dir = results_layout.build_results_run_dir(
             output_dir,
             split_variant,
             task_name,
@@ -80,6 +75,6 @@ def find_completed_models(
             model_name,
             task_scope=task_scope,
         )
-        if enzymado.artifacts.results_layout.is_run_complete(run_dir):
+        if results_layout.is_run_complete(run_dir):
             completed.append(model_name)
     return completed

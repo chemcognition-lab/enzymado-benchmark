@@ -2,6 +2,7 @@
 
 import torch
 
+from enzymado.models import training_protocol
 from enzymado.models.common import (
     DEVICE,
     apply_feature_scaler,
@@ -10,7 +11,6 @@ from enzymado.models.common import (
     run_wrapper_training,
     validation_objective,
 )
-import enzymado.models.training_protocol
 
 
 class BaseStandardWrapper:
@@ -80,13 +80,9 @@ class BaseStandardWrapper:
         tau are not averages, so scoring per batch and taking the mean would not
         give the value the leaderboard reports.
         """
-        enzymado.models.training_protocol.check_finite_tensors(
-            [logits_t], "validation logits"
-        )
+        training_protocol.check_finite_tensors([logits_t], "validation logits")
         scores = (
-            torch.sigmoid(logits_t)
-            if self.validation_metric == "auprc"
-            else logits_t
+            torch.sigmoid(logits_t) if self.validation_metric == "auprc" else logits_t
         )
         return validation_objective(
             y_t.reshape(-1).detach().cpu().numpy(),
