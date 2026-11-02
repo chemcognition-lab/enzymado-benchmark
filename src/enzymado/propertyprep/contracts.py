@@ -8,7 +8,6 @@ class Paths(typing.Protocol):
     """Filesystem locations required by property preparation."""
 
     data_interim_dir: Path
-    data_processed_datasets: Path
     data_processed_properties: Path
     data_raw_catpred_dir: Path
     data_raw_swissprot_dir: Path

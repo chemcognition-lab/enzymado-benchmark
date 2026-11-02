@@ -77,7 +77,6 @@ def _paths(root: Path) -> types.SimpleNamespace:
     processed_dir = data_dir / "processed"
     return types.SimpleNamespace(
         data_interim_dir=data_dir / "interim",
-        data_processed_datasets=processed_dir / "datasets",
         data_processed_properties=processed_dir / "properties",
         data_raw_catpred_dir=raw_dir / "catpred",
         data_raw_swissprot_dir=raw_dir / "swissprot",
@@ -113,8 +112,7 @@ def _snapshot(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
 def _build_fixture(root: Path) -> types.SimpleNamespace:
     paths = _paths(root)
     _write_csv(
-        paths.data_processed_datasets
-        / "biolip_binding/biolip_cleaned_with_negatives.csv",
+        paths.data_interim_dir / "biolip/biolip_cleaned_with_negatives.csv",
         [
             {
                 "protein_sequence": " acd ",

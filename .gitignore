@@ -65,6 +65,7 @@ Project_coding_style.md
 
 data/embeddings/
 data/embeddings_mean_pooled/
+data/ligand_features/
 *.h5
 data/fastas
 external/Profluent-E1/

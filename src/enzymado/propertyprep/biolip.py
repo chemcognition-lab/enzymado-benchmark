@@ -11,11 +11,7 @@ def prep_biolip_binding(
 ) -> dict[str, object] | None:
     """Prepare the final BioLiP binding dataset without processing other tasks."""
     print("\nProcessing BioLip Binding...")
-    biol_path = (
-        paths.data_processed_datasets
-        / "biolip_binding"
-        / "biolip_cleaned_with_negatives.csv"
-    )
+    biol_path = paths.data_interim_dir / "biolip" / "biolip_cleaned_with_negatives.csv"
     if not biol_path.exists():
         return None
 
