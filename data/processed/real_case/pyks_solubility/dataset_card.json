@@ -1,0 +1,113 @@
+{
+  "dataset_id": "pyks_solubility",
+  "property_name": "pyks_solubility",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Soluble expression of PyKS variants, as an enrichment ratio between the soluble and insoluble fractions. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "Soluble-expression deep mutational scan of the PyKS polyketide synthase",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "normalized_er_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Normalized enrichment ratio as the source reports it, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "pyks_solubility_random_80_10_10_standardized": {
+        "train": 5186,
+        "test": 650,
+        "val": 650
+      }
+    },
+    "label_distribution_by_method": {
+      "pyks_solubility_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 6486,
+          "mean": -0.0018,
+          "std": 0.9969,
+          "min": -3.4735,
+          "max": 5.5018,
+          "median": 0.0016
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 5186,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -3.4735,
+          "max": 5.5018,
+          "median": 0.0016
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 650,
+          "mean": -0.0084,
+          "std": 0.9628,
+          "min": -3.1845,
+          "max": 4.9036,
+          "median": -0.0009
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 650,
+          "mean": -0.0092,
+          "std": 1.0055,
+          "min": -2.9867,
+          "max": 3.9169,
+          "median": 0.0021
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "normalized_er": 0,
+        "split": 0,
+        "normalized_er_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 6486,
+    "distinct_proteins": 6486,
+    "sequence_length_summary": {
+      "min": 439,
+      "max": 439,
+      "mean": 439.0,
+      "median": 439.0,
+      "p95": 439,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 439,
+      "max": 439,
+      "mean": 439.0,
+      "median": 439.0,
+      "p95": 439,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 6486,
+      "distinct_proteins": 6486,
+      "distinct_protein_length_summary": {
+        "min": 439,
+        "max": 439,
+        "mean": 439.0,
+        "median": 439.0,
+        "p95": 439,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

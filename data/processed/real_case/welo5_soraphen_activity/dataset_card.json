@@ -1,0 +1,114 @@
+{
+  "dataset_id": "welo5_soraphen_activity",
+  "property_name": "welo5_soraphen_activity",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Conversion of soraphen A by WelO5* variants. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "Conversion panel of the WelO5* halogenase on soraphen A",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "log10_activity_standardized",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the conversion reported by the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "welo5_soraphen_activity_random_80_10_10_standardized": {
+        "test": 50,
+        "train": 404,
+        "val": 50
+      }
+    },
+    "label_distribution_by_method": {
+      "welo5_soraphen_activity_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 504,
+          "mean": 0.0006,
+          "std": 1.0019,
+          "min": -0.6313,
+          "max": 2.8134,
+          "median": -0.6313
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 404,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -0.6313,
+          "max": 2.8134,
+          "median": -0.6313
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 50,
+          "mean": -0.0043,
+          "std": 0.9997,
+          "min": -0.6313,
+          "max": 2.7186,
+          "median": -0.6313
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 50,
+          "mean": 0.0106,
+          "std": 1.0194,
+          "min": -0.6313,
+          "max": 2.7958,
+          "median": -0.6313
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "activity": 0,
+        "log10_activity": 0,
+        "split": 0,
+        "log10_activity_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 504,
+    "distinct_proteins": 504,
+    "sequence_length_summary": {
+      "min": 290,
+      "max": 290,
+      "mean": 290.0,
+      "median": 290.0,
+      "p95": 290,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 290,
+      "max": 290,
+      "mean": 290.0,
+      "median": 290.0,
+      "p95": 290,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 504,
+      "distinct_proteins": 504,
+      "distinct_protein_length_summary": {
+        "min": 290,
+        "max": 290,
+        "mean": 290.0,
+        "median": 290.0,
+        "p95": 290,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

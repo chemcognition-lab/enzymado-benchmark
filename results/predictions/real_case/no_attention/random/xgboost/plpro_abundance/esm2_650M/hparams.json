@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "plpro_abundance",
+    "embedding_model": "esm2_650M",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "plpro_abundance",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "fitness_abundance_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/plpro_abundance/plpro_abundance_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 4270,
+            "ordered_sha256": "ee0651d307a9a70d6a53129f2922e91eb8f87e44887fdc90e73d361222c11953"
+        },
+        "val": {
+            "count": 533,
+            "ordered_sha256": "195608581d7e9ba3708d4306adb9e4962c310f2357e7a99a132411d0bc28a222"
+        },
+        "test": {
+            "count": 532,
+            "ordered_sha256": "79bd972957d3b8636cb31baa42c5d40f2c1279572dd6184fd2dbe7d28696a977"
+        }
+    }
+}

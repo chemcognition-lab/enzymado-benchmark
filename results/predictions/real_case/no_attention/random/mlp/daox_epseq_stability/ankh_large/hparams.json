@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "daox_epseq_stability",
+    "embedding_model": "ankh_large",
+    "model_name": "mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "daox_epseq_stability",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log_stability_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/daox_epseq_stability/daox_epseq_stability_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5150,
+            "ordered_sha256": "ecdc1f41b312eafe4760021421cebe4b1b6aee4af87d6f0f5da9a9a18bdcacb7"
+        },
+        "val": {
+            "count": 642,
+            "ordered_sha256": "dc76e2975f873013146df42d6a306c3ef460114420e9ec018d68ad375554c208"
+        },
+        "test": {
+            "count": 642,
+            "ordered_sha256": "d6236a91f26f08419d0e002b55282f9b10a0bd47d88cae29e96a2a8414b5fdab"
+        }
+    }
+}

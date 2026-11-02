@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "pafa_htmek_kcat_km",
+    "embedding_model": "ankh3_large",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "pafa_htmek_kcat_km",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_kcat_km_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/pafa_htmek_kcat_km/pafa_htmek_kcat_km_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 832,
+            "ordered_sha256": "224f0d6acfdf15c75a4e967ce0c413a5aa2e02c2ddd501e2fa4a461af7faa8b5"
+        },
+        "val": {
+            "count": 104,
+            "ordered_sha256": "75560cc4cecc8b5b2300f4fd4b7f5c457cc0704e20138dc0b23ff07ca83163b8"
+        },
+        "test": {
+            "count": 106,
+            "ordered_sha256": "a92f0cec0f3a0f0a3d703dc517188fde209844ad3136d68783a87b4461c69ab5"
+        }
+    }
+}

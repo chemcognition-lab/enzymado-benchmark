@@ -1,0 +1,115 @@
+{
+  "dataset_id": "koudelakova_hld_panel",
+  "property_name": "koudelakova_hld_panel",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Activity of haloalkane dehalogenases on a panel of halogenated substrates. One row is one enzyme-substrate measurement over 13 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "Haloalkane dehalogenase (HLD) specificity panel (9 wild types of its Table S1, 30 halogenated substrates in the order of its Tables S3 and S5)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication. Its Table S2 records an insertion in DbeA1 between residues 142 and 143 (VAEEQDHAE), which the cleaning applies."
+  },
+  "label": {
+    "column": "log10_activity_standardized",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the activity in the units of the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "koudelakova_hld_panel_random_80_10_10_standardized": {
+        "train": 312,
+        "val": 39,
+        "test": 39
+      }
+    },
+    "label_distribution_by_method": {
+      "koudelakova_hld_panel_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 390,
+          "mean": 0.0073,
+          "std": 0.9808,
+          "min": -1.8139,
+          "max": 1.4916,
+          "median": 0.3248
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 312,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -1.8139,
+          "max": 1.4916,
+          "median": 0.3657
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 39,
+          "mean": -0.0325,
+          "std": 0.9723,
+          "min": -1.8139,
+          "max": 1.0935,
+          "median": 0.2699
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 39,
+          "mean": 0.1057,
+          "std": 0.8143,
+          "min": -1.8139,
+          "max": 1.154,
+          "median": 0.2387
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "transformed_activity": 0,
+        "log10_activity": 0,
+        "split": 0,
+        "log10_activity_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 390,
+    "distinct_proteins": 13,
+    "sequence_length_summary": {
+      "min": 286,
+      "max": 328,
+      "mean": 305.46,
+      "median": 304.0,
+      "p95": 328,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 286,
+      "max": 328,
+      "mean": 305.46,
+      "median": 304,
+      "p95": 319,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 390,
+      "distinct_proteins": 13,
+      "distinct_protein_length_summary": {
+        "min": 286,
+        "max": 328,
+        "mean": 305.46,
+        "median": 304,
+        "p95": 319,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

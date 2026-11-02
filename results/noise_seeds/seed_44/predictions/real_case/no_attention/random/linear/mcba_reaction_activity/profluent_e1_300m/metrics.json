@@ -1,0 +1,32 @@
+{
+    "train": {
+        "split": "train",
+        "task_type": "regression",
+        "n": 8484,
+        "ranking_source": "hard_labels",
+        "mae": 0.5490096394281424,
+        "rmse": 0.6886947958300694,
+        "r2": 0.5256995154607272,
+        "kendall_tau": 0.5551789321445808
+    },
+    "val": {
+        "split": "val",
+        "task_type": "regression",
+        "n": 1217,
+        "ranking_source": "hard_labels",
+        "mae": 0.554167324406303,
+        "rmse": 0.6940533881393484,
+        "r2": 0.48231540224461544,
+        "kendall_tau": 0.5396049985207158
+    },
+    "test": {
+        "split": "test",
+        "task_type": "regression",
+        "n": 1217,
+        "ranking_source": "hard_labels",
+        "mae": 0.5485081237504732,
+        "rmse": 0.6958569462162952,
+        "r2": 0.5000397624936055,
+        "kendall_tau": 0.5378256658344998
+    }
+}

@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "cyp2c9_abundance",
+    "embedding_model": "esmc_300m",
+    "model_name": "mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "cyp2c9_abundance",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "abundance_score_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/cyp2c9_abundance/cyp2c9_abundance_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5091,
+            "ordered_sha256": "d5b34f7b95ab0ebc61a1e3b21ab3bdd937440232d5bcf29a6d9adb31bf34e5e6"
+        },
+        "val": {
+            "count": 640,
+            "ordered_sha256": "0c60dd5ae35f7a4acafb1122d1911ce9978c7a8ae10bc79c943bf666e44aa827"
+        },
+        "test": {
+            "count": 640,
+            "ordered_sha256": "fe7b1d7e897310d84f1b014640f864e2b4c995ee40c1c51e543537d93cb983fe"
+        }
+    }
+}

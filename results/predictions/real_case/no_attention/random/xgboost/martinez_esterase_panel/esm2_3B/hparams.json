@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "martinez_esterase_panel",
+    "embedding_model": "esm2_3B",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "martinez_esterase_panel",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_specific_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/martinez_esterase_panel/martinez_esterase_panel_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 11388,
+            "ordered_sha256": "11af9439371f81b99654af3b7f1fb35079d3f9eb8c815d04b1d3c2e988127891"
+        },
+        "val": {
+            "count": 1314,
+            "ordered_sha256": "130dc3ba9d5ca2aac3223659af20a266349357f9418810667636b56d2a0de4ea"
+        },
+        "test": {
+            "count": 1314,
+            "ordered_sha256": "4222cf49375ffaea62532cc376d802c55ce533d2e7d166880c7a58397a8642e8"
+        }
+    }
+}

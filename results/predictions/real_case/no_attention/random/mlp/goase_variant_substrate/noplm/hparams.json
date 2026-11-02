@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "goase_variant_substrate",
+    "embedding_model": "noplm",
+    "model_name": "mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "goase_variant_substrate",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/goase_variant_substrate/goase_variant_substrate_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 965,
+            "ordered_sha256": "83008c1ce1065a3d65a512298da36a4051ed7dd68650ce567b6c8532059add4a"
+        },
+        "val": {
+            "count": 109,
+            "ordered_sha256": "9d70f0066ee645e93379eb396a71c2606bfd9ce3e97a79236eef2e310d23728c"
+        },
+        "test": {
+            "count": 109,
+            "ordered_sha256": "31942f9a1da4a9cc15ef7375e8615ce209bb8a749c2541b4167ca0933f97d118"
+        }
+    }
+}

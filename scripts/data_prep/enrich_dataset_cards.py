@@ -36,6 +36,7 @@ import statistics
 import sys
 
 import pandas as pd
+from safetensors import safe_open
 
 from enzymado import paths_and_constants
 from enzymado.data_loading import data_registry
@@ -52,13 +53,35 @@ CLUSTER_KEY = "entire_protein_pool_cluster_with_mmseqs2"
 LEGACY_BLOCKS = ("additional_important", "amount_of_removed_data")
 SEQ_IDENTITY = 0.5
 COMMON_IDS = _P.results_dir / "embedding_intersection" / "common_ids.txt"
+# Sequence sets embedded after common_ids.txt was written, each with the same 14
+# models: the 28 case studies added on 2026-10-30. Without them `used_in_runs`
+# reads zero for every dataset built on those sequences.
+POOLED_ROOT = _P.data_dir / "embeddings_mean_pooled"
+EXTRA_POOLED_DIRS = (POOLED_ROOT / "real_case_new28_sequences",)
 POOL = _P.data_processed_dir / "protein_pool.csv"
 DIVERSITY_DIR = _P.results_figures_dir / "cluster_diversity"
 
 
+def embedded_ids():
+    """Ids every one of the 14 models holds, across the published and later stores."""
+    ids = set(COMMON_IDS.read_text().split())
+    models = sorted(
+        p.stem for p in (POOLED_ROOT / "protein_sequences_unique").glob("*.safetensors")
+    )
+    for directory in EXTRA_POOLED_DIRS:
+        held = []
+        for model in models:
+            with safe_open(
+                str(directory / f"{model}.safetensors"), framework="pt", device="cpu"
+            ) as handle:
+                held.append(set(handle.keys()))
+        ids |= set.intersection(*held)
+    return ids
+
+
 def used_sequences():
     """Sequences every PLM embedded, the only ones any run trains or tests on."""
-    ids = set(COMMON_IDS.read_text().split())
+    ids = embedded_ids()
     pool = pd.read_csv(POOL)
     kept = pool[pool.sequence_id.isin(ids)].protein_sequence
     return set(kept.str.strip().str.upper())
@@ -297,6 +320,13 @@ def main() -> None:
         action="store_true",
         help="Recompute the MMseqs2 block (needs mmseqs on PATH).",
     )
+    parser.add_argument(
+        "--dataset",
+        action="append",
+        metavar="NAME",
+        help="Repeatable. Write only these cards, leaving every other "
+        "card on disk untouched. Defaults to all of them.",
+    )
     args = parser.parse_args()
     used = used_sequences()
 
@@ -310,6 +340,8 @@ def main() -> None:
 
     written, missing = 0, []
     for name, config in sorted(data_registry.TASK_REGISTRY.items()):
+        if args.dataset and name not in args.dataset:
+            continue
         meta = card_metadata.SOURCES.get(name)
         if meta is None:
             missing.append(name)
@@ -327,8 +359,10 @@ def main() -> None:
         existing["description"] = meta["description"]
         existing["origin_of_data"] = {
             "source_name": meta["source"],
-            "doi": meta["doi"],
-            "url": "https://doi.org/" + meta["doi"],
+            "doi": meta.get("doi"),
+            # A dataset whose publication the repo does not record carries no
+            # DOI; the note says the citation is pending rather than guessing one.
+            **({"url": "https://doi.org/" + meta["doi"]} if meta.get("doi") else {}),
             **({"note": meta["provenance_note"]} if "provenance_note" in meta else {}),
         }
         existing["label"] = {

@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "mcba_reaction_activity",
+    "embedding_model": "esm3_open",
+    "model_name": "mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "mcba_reaction_activity",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/mcba_reaction_activity/mcba_reaction_activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 8484,
+            "ordered_sha256": "fe6ee11bbf36245a352f166aa7b5cbe8bf66ab8599853c12b171b39631d19dda"
+        },
+        "val": {
+            "count": 1217,
+            "ordered_sha256": "f81e4cf004e0e003a33b8587965f42241c6f6601d4cafd2200110b7b25cacfe5"
+        },
+        "test": {
+            "count": 1217,
+            "ordered_sha256": "2a896bf0ea88f6084dfe603ac29c099c874439961efd632367296b4849a519f6"
+        }
+    }
+}

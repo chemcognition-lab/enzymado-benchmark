@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "goldman_aminotransferase",
+    "embedding_model": "esm2_3B",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "goldman_aminotransferase",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_specific_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/goldman_aminotransferase/goldman_aminotransferase_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 336,
+            "ordered_sha256": "c18f5e03d8294e4caf74ba5ba33be7f1ad088c8f2b10f0d462909a57399ddc0a"
+        },
+        "val": {
+            "count": 48,
+            "ordered_sha256": "128fe01fdebe91399e3a4dd86754a11d44baf6e7cd49e0e4085be35d7be27e0b"
+        },
+        "test": {
+            "count": 48,
+            "ordered_sha256": "0a5a9833ec7f49bcb4bc0d5a4ae0b08a0d8d2a8e049f64fd6e948ff5bc786813"
+        }
+    }
+}

@@ -1,0 +1,74 @@
+{
+    "train": {
+        "split": "train",
+        "task_type": "regression",
+        "n": 4989,
+        "ranking_source": "hard_labels",
+        "mae": 0.779825138979553,
+        "rmse": 0.9852855418744769,
+        "r2": 0.02921240191646368,
+        "kendall_tau": 0.1319746983405567
+    },
+    "val": {
+        "split": "val",
+        "task_type": "regression",
+        "n": 620,
+        "ranking_source": "hard_labels",
+        "mae": 0.7598961110296754,
+        "rmse": 0.943649835774481,
+        "r2": 0.04090869693284083,
+        "kendall_tau": 0.155649023954433
+    },
+    "test": {
+        "split": "test",
+        "task_type": "regression",
+        "n": 620,
+        "ranking_source": "hard_labels",
+        "mae": 0.7583513929593122,
+        "rmse": 0.9544711655236993,
+        "r2": 0.044614833703388146,
+        "kendall_tau": 0.17096598118987813
+    },
+    "test_bootstrap": {
+        "n_replicates": 1000,
+        "confidence_level": 0.95,
+        "primary_metric": "mae",
+        "task_type": "regression",
+        "seed": 2003075247,
+        "n_units": 620,
+        "sample_identity_status": "verified",
+        "sample_identity_sha256": "ab7a00dce448e2970fcbd6ae87a4ede975f34d90dc68934043147f526457a70e",
+        "paired_by_sample_id": true,
+        "paired_by_position": true,
+        "metrics": {
+            "mae": {
+                "mean": 0.7589606640135941,
+                "std": 0.02296895376517676,
+                "ci_lo": 0.7133244932953113,
+                "ci_hi": 0.8057914027965002,
+                "n_finite": 1000
+            },
+            "rmse": {
+                "mean": 0.955017311785009,
+                "std": 0.030783999978585424,
+                "ci_lo": 0.8937076823362962,
+                "ci_hi": 1.0166722465282199,
+                "n_finite": 1000
+            },
+            "r2": {
+                "mean": 0.04288597033830802,
+                "std": 0.015873887329071253,
+                "ci_lo": 0.01254299391830399,
+                "ci_hi": 0.07495711695096391,
+                "n_finite": 1000
+            },
+            "kendall_tau": {
+                "mean": 0.17010459863569607,
+                "std": 0.026048018629396878,
+                "ci_lo": 0.11949246173239757,
+                "ci_hi": 0.22016801343166975,
+                "n_finite": 1000
+            }
+        }
+    }
+}

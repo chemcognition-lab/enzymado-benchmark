@@ -1,0 +1,115 @@
+{
+  "dataset_id": "mcba_reaction_activity",
+  "property_name": "mcba_reaction_activity",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Activity of McbA amide synthetase single mutants on nine pharmaceutical amide-synthesis reactions. One row is one variant-reaction pair over 1,217 distinct variants, and the split is per row, so a variant can appear in train and in test on other reactions.",
+  "origin_of_data": {
+    "source_name": "McbA amide synthetase single-mutant matrix against 9 pharmaceutical amide targets (wild-type coding sequence of its Table S6, 518 residues)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "log10_activity_standardized",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the activity in the units of the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "mcba_reaction_activity_random_80_10_10_standardized": {
+        "val": 1217,
+        "test": 1217,
+        "train": 8484
+      }
+    },
+    "label_distribution_by_method": {
+      "mcba_reaction_activity_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 10918,
+          "mean": 0.0068,
+          "std": 0.9944,
+          "min": -2.0319,
+          "max": 2.2881,
+          "median": 0.4603
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 8484,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -2.0319,
+          "max": 2.0498,
+          "median": 0.4596
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 1217,
+          "mean": 0.0355,
+          "std": 0.9646,
+          "min": -2.0319,
+          "max": 1.9539,
+          "median": 0.4636
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 1217,
+          "mean": 0.0257,
+          "std": 0.9841,
+          "min": -2.0319,
+          "max": 2.2881,
+          "median": 0.4586
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "activity": 0,
+        "log10_activity": 0,
+        "split": 0,
+        "log10_activity_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 10918,
+    "distinct_proteins": 1217,
+    "sequence_length_summary": {
+      "min": 518,
+      "max": 518,
+      "mean": 518.0,
+      "median": 518.0,
+      "p95": 518,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 518,
+      "max": 518,
+      "mean": 518.0,
+      "median": 518,
+      "p95": 518,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 10918,
+      "distinct_proteins": 1217,
+      "distinct_protein_length_summary": {
+        "min": 518,
+        "max": 518,
+        "mean": 518.0,
+        "median": 518,
+        "p95": 518,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

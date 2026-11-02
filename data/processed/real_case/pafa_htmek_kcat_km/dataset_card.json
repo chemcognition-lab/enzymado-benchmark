@@ -1,0 +1,113 @@
+{
+  "dataset_id": "pafa_htmek_kcat_km",
+  "property_name": "pafa_htmek_kcat_km",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Michaelis-Menten the catalytic efficiency kcat/KM of PafA variants, measured one variant per chamber by high-throughput microfluidic expression and kinetics (HT-MEK). One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "HT-MEK kinetic characterization of PafA alkaline phosphatase variants",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "log10_kcat_km_standardized",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the catalytic efficiency kcat/KM in the units of the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "pafa_htmek_kcat_km_random_80_10_10_standardized": {
+        "train": 832,
+        "val": 104,
+        "test": 106
+      }
+    },
+    "label_distribution_by_method": {
+      "pafa_htmek_kcat_km_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 1042,
+          "mean": -0.0001,
+          "std": 1.0001,
+          "min": -5.0704,
+          "max": 1.35,
+          "median": 0.354
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 832,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -5.0704,
+          "max": 1.35,
+          "median": 0.354
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 104,
+          "mean": 0.0503,
+          "std": 0.7799,
+          "min": -2.8056,
+          "max": 0.874,
+          "median": 0.354
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 106,
+          "mean": -0.0502,
+          "std": 1.1756,
+          "min": -4.8882,
+          "max": 1.0871,
+          "median": 0.354
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "log10_kcat_km": 0,
+        "split": 0,
+        "log10_kcat_km_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 1042,
+    "distinct_proteins": 1042,
+    "sequence_length_summary": {
+      "min": 529,
+      "max": 529,
+      "mean": 529.0,
+      "median": 529.0,
+      "p95": 529,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 529,
+      "max": 529,
+      "mean": 529.0,
+      "median": 529.0,
+      "p95": 529,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 1042,
+      "distinct_proteins": 1042,
+      "distinct_protein_length_summary": {
+        "min": 529,
+        "max": 529,
+        "mean": 529.0,
+        "median": 529.0,
+        "p95": 529,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

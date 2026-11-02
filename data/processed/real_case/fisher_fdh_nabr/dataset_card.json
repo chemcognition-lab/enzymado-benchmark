@@ -1,0 +1,115 @@
+{
+  "dataset_id": "fisher_fdh_nabr",
+  "property_name": "fisher_fdh_nabr",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Halogenation conversion of a panel of substrates with bromide (NaBr) as the halide source. One row is one enzyme-substrate measurement over 42 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "Flavin-dependent halogenase substrate panel",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "log10_conversion_standardized",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the conversion reported by the source, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "fisher_fdh_nabr_random_80_10_10_standardized": {
+        "val": 252,
+        "train": 2100,
+        "test": 252
+      }
+    },
+    "label_distribution_by_method": {
+      "fisher_fdh_nabr_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 2604,
+          "mean": 0.0071,
+          "std": 1.0074,
+          "min": -0.4671,
+          "max": 3.0106,
+          "median": -0.4671
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2100,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -0.4671,
+          "max": 3.0106,
+          "median": -0.4671
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 252,
+          "mean": 0.0563,
+          "std": 1.0592,
+          "min": -0.4671,
+          "max": 2.993,
+          "median": -0.4671
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 252,
+          "mean": 0.0168,
+          "std": 1.0142,
+          "min": -0.4671,
+          "max": 3.0096,
+          "median": -0.4671
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "conversion": 0,
+        "log10_conversion": 0,
+        "split": 0,
+        "log10_conversion_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 2604,
+    "distinct_proteins": 42,
+    "sequence_length_summary": {
+      "min": 415,
+      "max": 625,
+      "mean": 509.69,
+      "median": 506.5,
+      "p95": 567,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 415,
+      "max": 625,
+      "mean": 509.69,
+      "median": 506.5,
+      "p95": 549,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 2604,
+      "distinct_proteins": 42,
+      "distinct_protein_length_summary": {
+        "min": 415,
+        "max": 625,
+        "mean": 509.69,
+        "median": 506.5,
+        "p95": 549,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

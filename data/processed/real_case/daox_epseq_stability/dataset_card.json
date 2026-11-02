@@ -1,0 +1,115 @@
+{
+  "dataset_id": "daox_epseq_stability",
+  "property_name": "daox_epseq_stability",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Stability of RgDAOx variants from an error-prone library, read out by EP-Seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "EP-Seq deep mutational scan of Rhodotorula gracilis D-amino acid oxidase (RgDAOx)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "log_stability_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Log stability as the source reports it, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "daox_epseq_stability_random_80_10_10_standardized": {
+        "train": 5150,
+        "test": 642,
+        "val": 642
+      }
+    },
+    "label_distribution_by_method": {
+      "daox_epseq_stability_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 6434,
+          "mean": -0.0015,
+          "std": 1.0014,
+          "min": -2.7598,
+          "max": 2.1276,
+          "median": 0.1435
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 5150,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -2.7598,
+          "max": 2.1276,
+          "median": 0.1435
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 642,
+          "mean": -0.0107,
+          "std": 0.9992,
+          "min": -2.6563,
+          "max": 1.7651,
+          "median": 0.1318
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 642,
+          "mean": -0.0039,
+          "std": 1.0146,
+          "min": -2.6227,
+          "max": 1.9646,
+          "median": 0.1449
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "log_stability": 0,
+        "split": 0,
+        "log_stability_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 6434,
+    "distinct_proteins": 6434,
+    "sequence_length_summary": {
+      "min": 365,
+      "max": 365,
+      "mean": 365.0,
+      "median": 365.0,
+      "p95": 365,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 365,
+      "max": 365,
+      "mean": 365.0,
+      "median": 365.0,
+      "p95": 365,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 6434,
+      "distinct_proteins": 6434,
+      "distinct_protein_length_summary": {
+        "min": 365,
+        "max": 365,
+        "mean": 365.0,
+        "median": 365.0,
+        "p95": 365,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id",
+      "log_stability",
+      "log_stability_standardized"
+    ]
+  }
+}

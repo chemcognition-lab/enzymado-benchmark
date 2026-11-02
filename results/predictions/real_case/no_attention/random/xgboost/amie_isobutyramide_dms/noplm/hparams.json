@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "amie_isobutyramide_dms",
+    "embedding_model": "noplm",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "amie_isobutyramide_dms",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "normalized_fitness_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/amie_isobutyramide_dms/amie_isobutyramide_dms_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 4989,
+            "ordered_sha256": "7d664587b2f19eb8b8f81efab6809195d17863be9fbd1cb8b8057d1663b27e4f"
+        },
+        "val": {
+            "count": 620,
+            "ordered_sha256": "55adec2f340b25a08903a9722326d24ddcef4e92d64317f899ead4b807ef2c5a"
+        },
+        "test": {
+            "count": 620,
+            "ordered_sha256": "ab7a00dce448e2970fcbd6ae87a4ede975f34d90dc68934043147f526457a70e"
+        }
+    }
+}

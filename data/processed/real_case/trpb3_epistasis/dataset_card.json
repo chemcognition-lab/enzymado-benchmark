@@ -1,0 +1,115 @@
+{
+  "dataset_id": "trpb3_epistasis",
+  "property_name": "trpb3_epistasis",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "description": "Fitness of every combination of three mutated positions in Tm9D8* TrpB, a library built to measure epistasis between them. Only three residues vary, so the sequences differ from one another at three positions at most.",
+  "origin_of_data": {
+    "source_name": "Three-site combinatorial library of the Thermotoga maritima tryptophan synthase beta subunit variant Tm9D8* (library 3A, positions 104, 105 and 106)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
+  "label": {
+    "column": "fitness_standardized",
+    "label_kind": "scalar_regression",
+    "description": "Fitness as the source reports it, standardized on the training split.",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-02",
+    "split_sizes_by_method": {
+      "trpb3_epistasis_random_80_10_10_standardized": {
+        "train": 6370,
+        "test": 800,
+        "val": 800
+      }
+    },
+    "label_distribution_by_method": {
+      "trpb3_epistasis_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 7970,
+          "mean": -0.0028,
+          "std": 0.9831,
+          "min": -10.4887,
+          "max": 20.1677,
+          "median": -0.013
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 6370,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -10.4887,
+          "max": 20.1677,
+          "median": -0.013
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 800,
+          "mean": -0.0263,
+          "std": 0.8914,
+          "min": -4.8285,
+          "max": 4.3684,
+          "median": -0.0131
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 800,
+          "mean": -0.002,
+          "std": 0.9331,
+          "min": -5.3118,
+          "max": 6.4541,
+          "median": -0.0119
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "fitness": 0,
+        "split": 0,
+        "fitness_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 7970,
+    "distinct_proteins": 7970,
+    "sequence_length_summary": {
+      "min": 397,
+      "max": 397,
+      "mean": 397.0,
+      "median": 397.0,
+      "p95": 397,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 397,
+      "max": 397,
+      "mean": 397.0,
+      "median": 397.0,
+      "p95": 397,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 7970,
+      "distinct_proteins": 7970,
+      "distinct_protein_length_summary": {
+        "min": 397,
+        "max": 397,
+        "mean": 397.0,
+        "median": 397.0,
+        "p95": 397,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id",
+      "fitness",
+      "fitness_standardized"
+    ]
+  }
+}

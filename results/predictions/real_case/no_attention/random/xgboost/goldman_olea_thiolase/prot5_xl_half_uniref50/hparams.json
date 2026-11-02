@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "goldman_olea_thiolase",
+    "embedding_model": "prot5_xl_half_uniref50",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "goldman_olea_thiolase",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/goldman_olea_thiolase/goldman_olea_thiolase_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 401,
+            "ordered_sha256": "958ae6beb46d8c51330c74b759cdf79d67ff40a376608ce1544f0ac027750bfa"
+        },
+        "val": {
+            "count": 74,
+            "ordered_sha256": "34d2686353af291f502c52a1071b61beb4e2a4f507854c5218bd62f975ff0f6a"
+        },
+        "test": {
+            "count": 75,
+            "ordered_sha256": "dd5e94f2452965253a1b1ba43dae8584e4d0e69b8c4b6e7a5428355a5e2373cf"
+        }
+    }
+}
