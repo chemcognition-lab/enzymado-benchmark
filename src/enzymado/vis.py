@@ -41,8 +41,10 @@ SEQ_CMAP = {
 INK, INK_2, INK_3 = "#131e1d", "#3f4e4d", "#5a6665"
 RULE, RULE_2, SURFACE, PAGE = "#b7c0bf", "#c9cfcf", "#dfe2e7", "#ffffff"
 
-TEXT_WIDTH = 5.5  # inches
-CANVAS_W = 746  # site pixels
+# 6.25 in of canvas plus the 0.1 in card padding on each side and the save margin
+# fill the 6.5 in \textwidth of the paper, so figures are included at \linewidth.
+TEXT_WIDTH = 6.25  # inches
+CANVAS_W = 848  # site pixels, same pixel size as the earlier 746 px at 5.5 in
 PANEL_RADIUS = 7.2184558 / 213.43906  # card corner, as in the diagram SVGs
 PANEL_MARGIN = 2.49 / 605.02
 CARD_PAD = 0.1 / TEXT_WIDTH
@@ -66,6 +68,23 @@ SHORT_MODEL = {
     "prot5_xl_half_uniref50": "prot5_xl_half",
     "prot5_xl_uniref50": "prot5_xl",
     "noplm": "no-PLM",
+}
+# Display names of the PLMs in figures and exported tables.
+PLM_LABEL = {
+    "prot5_xl_uniref50": "ProtT5-XL",
+    "prot5_xl_half_uniref50": "ProtT5-XL half",
+    "esm2_650M": "ESM-2 650M",
+    "esm2_3B": "ESM-2 3B",
+    "ankh_base": "Ankh base",
+    "ankh_large": "Ankh large",
+    "prost5": "ProstT5",
+    "esm3_open": "ESM3",
+    "esmc_300m": "ESM C 300M",
+    "esmc_600m": "ESM C 600M",
+    "ankh3_large": "Ankh3 large",
+    "ankh3_xl": "Ankh3 XL",
+    "profluent_e1_300m": "E1 300M",
+    "profluent_e1_600m": "E1 600M",
 }
 TASK_LABEL = {
     "kcat": "$k_\\mathrm{cat}$",
@@ -191,16 +210,25 @@ class Canvas:
         self.ax.plot(xs, ys, **kw)
 
     def dot(
-        self, x: float, y: float, colour: Colour, shape: str = "o", r: float = 4.6
+        self,
+        x: float,
+        y: float,
+        colour: Colour,
+        shape: str = "o",
+        r: float = 4.6,
+        *,
+        hollow: bool = False,
     ) -> None:
+        """A marker; hollow draws it as a coloured outline on the card surface."""
         self.ax.plot(
             [x],
             [y],
             shape,
             markersize=r * 2 * self.scale * 72,
             color=colour,
-            markeredgecolor=(0, 0, 0, 0.22),
-            markeredgewidth=0.5,
+            markerfacecolor=SURFACE if hollow else colour,
+            markeredgecolor=colour if hollow else (0, 0, 0, 0.22),
+            markeredgewidth=1.1 if hollow else 0.5,
             zorder=3,
         )
 
@@ -228,16 +256,18 @@ class Canvas:
         fmt: str = "{:.2f}",
         n: int = 4,
         top: float = 0,
+        foot: float = M_BOT,
     ) -> collections.abc.Callable[[float], float]:
         """Vertical rules with tick values and the axis name; returns value -> x.
 
-        top moves the name, ticks and rules down, leaving room for a panel heading.
+        top moves the name, ticks and rules down, leaving room for a panel heading;
+        foot is the space left under the rules.
         """
 
         def x_of(v: float) -> float:
             return left + (v - lo) / (hi - lo) * width
 
-        bottom = self.h - M_BOT
+        bottom = self.h - foot
         for v in np.linspace(lo, hi, n):
             self.line(
                 [x_of(v)] * 2,
