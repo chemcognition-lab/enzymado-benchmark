@@ -1,0 +1,106 @@
+{
+  "dataset_id": "amie_propionamide_dms",
+  "property_name": "amie_propionamide_dms",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "label": {
+    "column": "normalized_fitness_standardized",
+    "label_kind": "continuous",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-03",
+    "split_sizes_by_method": {
+      "amie_propionamide_dms_random_80_10_10_standardized": {
+        "val": 630,
+        "train": 5032,
+        "test": 630
+      }
+    },
+    "label_distribution_by_method": {
+      "amie_propionamide_dms_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 6292,
+          "mean": 0.0007,
+          "std": 0.9898,
+          "min": -12.8389,
+          "max": 2.1826,
+          "median": 0.0968
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 5032,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -12.8389,
+          "max": 2.1826,
+          "median": 0.0968
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 630,
+          "mean": 0.0046,
+          "std": 0.9583,
+          "min": -3.7797,
+          "max": 2.0058,
+          "median": 0.0988
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 630,
+          "mean": 0.0022,
+          "std": 0.9371,
+          "min": -3.9,
+          "max": 1.849,
+          "median": 0.0983
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "normalized_fitness": 0,
+        "split": 0,
+        "normalized_fitness_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 6292,
+    "distinct_proteins": 6292,
+    "sequence_length_summary": {
+      "min": 346,
+      "max": 346,
+      "mean": 346.0,
+      "median": 346.0,
+      "p95": 346,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 346,
+      "max": 346,
+      "mean": 346.0,
+      "median": 346.0,
+      "p95": 346,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 2,
+      "distinct_proteins": 2,
+      "distinct_protein_length_summary": {
+        "min": 346,
+        "max": 346,
+        "mean": 346.0,
+        "median": 346.0,
+        "p95": 346,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}

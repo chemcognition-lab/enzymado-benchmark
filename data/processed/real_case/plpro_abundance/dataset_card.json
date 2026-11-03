@@ -1,0 +1,101 @@
+{
+  "dataset_id": "plpro_abundance",
+  "property_name": "plpro_abundance",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "label": {
+    "column": "fitness_abundance_standardized",
+    "label_kind": "continuous",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-03",
+    "split_sizes_by_method": {
+      "plpro_abundance_random_80_10_10_standardized": {
+        "train": 4270,
+        "val": 533,
+        "test": 532
+      }
+    },
+    "label_distribution_by_method": {
+      "plpro_abundance_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 5335,
+          "mean": -0.0005,
+          "std": 0.998,
+          "min": -4.1195,
+          "max": 2.7577,
+          "median": 0.0631
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 4270,
+          "mean": 0.0,
+          "std": 1.0,
+          "min": -4.1195,
+          "max": 2.7577,
+          "median": 0.0632
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 533,
+          "mean": -0.0032,
+          "std": 0.9994,
+          "min": -3.2942,
+          "max": 2.3728,
+          "median": 0.066
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 532,
+          "mean": -0.0021,
+          "std": 0.9805,
+          "min": -2.8095,
+          "max": 2.6135,
+          "median": 0.0613
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "fitness_abundance": 0,
+        "split": 0,
+        "fitness_abundance_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 5335,
+    "distinct_proteins": 5335,
+    "sequence_length_summary": {
+      "min": 315,
+      "max": 315,
+      "mean": 315.0,
+      "median": 315,
+      "p95": 315,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 315,
+      "max": 315,
+      "mean": 315.0,
+      "median": 315,
+      "p95": 315,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 0,
+      "distinct_proteins": 0,
+      "distinct_protein_length_summary": null
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id",
+      "fitness_abundance",
+      "fitness_abundance_standardized"
+    ]
+  }
+}

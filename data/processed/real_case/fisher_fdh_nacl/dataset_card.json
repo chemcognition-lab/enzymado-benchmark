@@ -1,0 +1,108 @@
+{
+  "dataset_id": "fisher_fdh_nacl",
+  "property_name": "fisher_fdh_nacl",
+  "task_scope": "real_case",
+  "definitions": "benchmark_card.json#/definitions",
+  "label": {
+    "column": "log10_conversion_standardized",
+    "label_kind": "continuous",
+    "see_also": "benchmark_card.json#/definitions"
+  },
+  "statistics": {
+    "generated": "2026-11-03",
+    "split_sizes_by_method": {
+      "fisher_fdh_nacl_random_80_10_10_standardized": {
+        "val": 252,
+        "train": 2100,
+        "test": 252
+      }
+    },
+    "label_distribution_by_method": {
+      "fisher_fdh_nacl_random_80_10_10_standardized": {
+        "overall": {
+          "kind": "numeric",
+          "total_valid_labels": 2604,
+          "mean": 0.0064,
+          "std": 1.0147,
+          "min": -0.2213,
+          "max": 6.7792,
+          "median": -0.2213
+        },
+        "train": {
+          "kind": "numeric",
+          "total_valid_labels": 2100,
+          "mean": -0.0,
+          "std": 1.0,
+          "min": -0.2213,
+          "max": 6.7792,
+          "median": -0.2213
+        },
+        "val": {
+          "kind": "numeric",
+          "total_valid_labels": 252,
+          "mean": 0.0803,
+          "std": 1.1738,
+          "min": -0.2213,
+          "max": 6.3387,
+          "median": -0.2213
+        },
+        "test": {
+          "kind": "numeric",
+          "total_valid_labels": 252,
+          "mean": -0.0144,
+          "std": 0.9605,
+          "min": -0.2213,
+          "max": 6.4057,
+          "median": -0.2213
+        }
+      }
+    },
+    "nans_dups": {
+      "nan_counts_per_column": {
+        "dataset_id": 0,
+        "protein_sequence": 0,
+        "smiles": 0,
+        "conversion": 0,
+        "log10_conversion": 0,
+        "split": 0,
+        "log10_conversion_standardized": 0
+      },
+      "duplicate_rows_full": 0
+    },
+    "rows": 2604,
+    "distinct_proteins": 42,
+    "sequence_length_summary": {
+      "min": 415,
+      "max": 625,
+      "mean": 509.69,
+      "median": 506.5,
+      "p95": 567,
+      "count_greater_than_1024": 0,
+      "contains_non_standard_aas": 0
+    },
+    "distinct_protein_length_summary": {
+      "min": 415,
+      "max": 625,
+      "mean": 509.69,
+      "median": 506.5,
+      "p95": 549,
+      "count_greater_than_1024": 0
+    },
+    "used_in_runs": {
+      "note": "rows whose sequence every PLM embedded (common_ids)",
+      "rows": 124,
+      "distinct_proteins": 2,
+      "distinct_protein_length_summary": {
+        "min": 530,
+        "max": 567,
+        "mean": 548.5,
+        "median": 548.5,
+        "p95": 530,
+        "count_greater_than_1024": 0
+      }
+    },
+    "categorical_high_variance_columns": [
+      "dataset_id"
+    ]
+  }
+}
