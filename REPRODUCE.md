@@ -7,7 +7,7 @@ or to train your own model and get its weights, see [add_data.md](add_data.md).
 |---|---|---|---|
 | [1. Leaderboards](#level-1-recompute-the-leaderboards) | the two global ratings, from the published files | a laptop | minutes |
 | [2. One task](#level-2-rerun-one-task) | any task × embedding model × head you choose, retrained | one GPU, or a CPU for small tasks | minutes to hours |
-| [3. Everything](#level-3-rerun-everything-on-a-slurm-cluster) | all 2,100 runs (1,960 on the 14 PLMs, 140 on `noplm`), from embeddings up | a Slurm GPU cluster and about 5 TB of storage | days to weeks |
+| [3. Everything](#level-3-rerun-everything-on-a-slurm-cluster) | all 4,200 runs (3,920 on the 14 PLMs, 280 on `noplm`), from embeddings up | a Slurm GPU cluster and about 6 TB of storage | days to weeks |
 
 ## Setup
 
@@ -28,8 +28,8 @@ branches may register extra tasks, which changes the leaderboards.
 **In the repository:** the datasets and splits, the sequence index, the
 shared-ID list (`results/embedding_intersection/common_ids.txt`), and every
 published `metrics.json`, `hparams.json`, bootstrap file and leaderboard.
-**Not in the repository, so you rebuild them:** the embeddings (about 4.6 TB
-at residue level and 11 GB mean-pooled for the 14 PLMs), prediction files and
+**Not in the repository, so you rebuild them:** the embeddings (about 5.3 TB
+at residue level and 13 GB mean-pooled for the 14 PLMs), prediction files and
 model weights.
 
 **How exact is a rerun?** Every published run used seed 42. GPU kernels were
@@ -76,8 +76,9 @@ residues.
 A run trains one **head** (a small model) on frozen embeddings from one
 **embedding model**, for one task and one split.
 
-- **Heads.** `linear_`, `mlp_` and `xgb_` are trained on mean-pooled
-  embeddings. `attention_linear_` and `attention_mlp_` learn their own pooling
+- **Heads.** `linear_`, `mlp_` and `xgb_` are the heads without attention:
+  they take the embedding as described under Inputs below, mean-pooled on
+  protein tasks. `attention_linear_` and `attention_mlp_` learn their own pooling
   over residues, and only run when you pass a residue-level manifest
   (`--attention_embeddings_json`). Each head uses the classification,
   regression, EC or per-residue version that matches the task.
@@ -297,7 +298,7 @@ cp embeddings_models_output_mean_pooled.example.json embeddings_models_output_me
 Point each `"path"` in `embeddings_models_output.json` at its folder under
 `/scratch`. The mean-pooled template is already correct.
 
-**4. Training.** `run_training_cluster.slurm` trains the mean-pooled heads and
+**4. Training.** `run_training_cluster.slurm` trains the heads without attention and
 `run_training_attention_cluster.slurm` the attention heads, one array task per
 embedding model; their headers list the variables they read. Always set
 `OUTPUT_DIR`, whose default is the published `results/predictions`:

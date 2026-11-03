@@ -119,7 +119,10 @@ def test_fireprotdb_tabular_rows_and_blank_line_handling_are_preserved(
 
 
 def test_real_case_dataset_paths_and_targets_are_stable() -> None:
-    """Freeze the 36 real-case inputs and their stratification targets."""
+    """Freeze the 36 real-case inputs and their stratification targets.
+
+    Real case = case studies (the code says real_case, the docs case studies).
+    """
     assert len(real_case_splits.REAL_CASE_DATASETS) == 36
     assert real_case_splits.REAL_CASE_DATASETS[:8] == (
         (

@@ -121,7 +121,8 @@ def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
     plms = [e for e in grid.columns if e != "noplm"]
     grid = grid[plms + ["noplm"]]  # the reference without a PLM closes each row
     metric = df.groupby("task").metric.first()
-    cell_w, cell_h, gap, head_w, top_h, ref_gap = 62, 32, 4, 128, 136, 12
+    # top_h leaves the longest rotated name (prot5_xl_half) clear of the note.
+    cell_w, cell_h, gap, head_w, top_h, ref_gap = 62, 32, 4, 128, 152, 12
     xs = [
         head_w + j * (cell_w + gap) + ref_gap * (emb == "noplm")
         for j, emb in enumerate(grid.columns)

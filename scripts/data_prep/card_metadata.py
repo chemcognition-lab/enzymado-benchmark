@@ -11,7 +11,7 @@ them, and an entry says so rather than naming a paper nobody verified.
 """
 
 # Shared vocabulary, written into benchmark_card.json under "definitions" and
-# referenced from every card instead of being copied eighteen times.
+# referenced from every card instead of being copied into each one.
 DEFINITIONS = {
     "cleaning": (
         "Rows dropped between the raw download and the published CSV. A row is "

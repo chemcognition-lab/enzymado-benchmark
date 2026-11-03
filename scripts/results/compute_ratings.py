@@ -722,7 +722,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Compute exactly one Properties and one Real_case leaderboard."""
+    """Compute exactly one Properties and one Real_case (= case studies) leaderboard."""
     args = _parse_args()
     properties_sources = (
         Source(

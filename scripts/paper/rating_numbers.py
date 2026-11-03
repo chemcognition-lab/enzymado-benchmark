@@ -6,6 +6,7 @@ published ratings), with tie margins at z = 0, 0.98 and 3.92, and with equal tas
 weights. It then prints the leader's interval and bootstrap ranks, the spread of
 heads and poolings, the weighted tie share at each z, the per-task win shares, the
 release-date and PLM-attribute correlations, and the top of the real-case board.
+Real case = case studies (the code says real_case, the docs case studies).
 
 Example:
     python scripts/paper/rating_numbers.py

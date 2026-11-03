@@ -28,10 +28,10 @@ the numbers are comparable.
 | axis | values |
 |---|---|
 | **Property datasets** | 10: `binding`, `binding_site`, `active_sites`, `ec_number`, `solubility`, `kcat`, `km`, `ph_opt`, `dtm`, `ddg` |
-| **Case studies** | 8: amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase. All regression. Paths, flags and keys call this scope `real_case`. |
+| **Case studies** | 36: amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase and 28 more added on 2026-10-30, each with its dataset card under `data/processed/real_case/`. All regression. Paths, flags and keys call this scope `real_case`. |
 | **Protein language models** | 14, see the table below, plus `noplm`, a reference built without a language model |
 | **Split types** | 2: `random` and `similarity` (MMseqs2 at 30% identity and 80% coverage, whole clusters assigned to one split, 80/10/10). Case studies are `random` only. |
-| **Baselines** | 5: linear, MLP and XGBoost on mean-pooled embeddings, plus linear and MLP over learned attention pooling. Protein-level tasks pool the embedding; residue-level tasks (`active_sites`, `binding_site`) keep one embedding per residue. |
+| **Baselines** | 5: linear, MLP and XGBoost without attention, plus linear and MLP over learned attention pooling. Without attention, protein-level tasks use the mean-pooled embedding and residue-level tasks (`active_sites`, `binding_site`) keep one embedding per residue. |
 
 The 14 embedding models, with the manifest key each one is addressed by:
 
@@ -53,8 +53,8 @@ profile) as its pooled vector and a one-hot encoding of the 20 amino acids per r
 (`scripts/embeddings/build_noplm_features.py`). It runs through the same five baselines and
 competes in both leaderboards, so every PLM is compared with what needs no language model.
 
-That grid is **1,960 PLM runs** (1,400 on properties, 10 × 14 × 2 × 5, and 560 on real
-cases, 8 × 14 × 1 × 5) plus **140 `noplm` runs**.
+That grid is **3,920 PLM runs** (1,400 on properties, 10 × 14 × 2 × 5, and 2,520 on case
+studies, 36 × 14 × 1 × 5) plus **280 `noplm` runs**, 4,200 in all.
 
 Embeddings are **frozen**. Nothing fine-tunes the language model: the benchmark measures
 what the representation already carries, not what a full fine-tune could extract.
@@ -110,8 +110,8 @@ data_loading  →  training  →  prediction  →  evaluation
 
 1. **`data_loading`** turns a task name into a ready-to-train bundle: rows from the dataset
    CSV, embeddings pulled from safetensors shards, labels built per task type, and the
-   split assignment. Residue-level tasks stream embeddings lazily so that a 4.6 TB store
-   never has to fit in RAM.
+   split assignment. Residue-level tasks stream embeddings lazily so that 5.3 TB of residue
+   embeddings never have to fit in RAM.
 2. **`training`** takes that bundle plus an architecture from `models`, trains it with early
    stopping on the validation split, and returns a fitted estimator.
 3. **`prediction`** writes predictions for each split as compressed safetensors, alongside
@@ -148,7 +148,7 @@ Global attention pooling (`ResidualAttentionAggregation`) adds a learned attenti
 the mean of the residues: the mean of the layer-normalized residues queries the residues,
 and the result is added back to the mean, so a silent attention branch returns mean pooling
 exactly. Residue tasks use `AttentionResidueMixer`, the same block with every residue as a
-query and nothing pooled. Attention heads train like their mean-pool counterparts (same
+query and nothing pooled. Attention heads train like their counterparts without attention (same
 optimizer, learning rate, weight decay, dropout and early stopping, gradients accumulated to
 a batch of 256).
 
@@ -216,7 +216,7 @@ Everything that shapes the ratings lives in the **`rating` section of
   leaderboard).
 - **Exclusions.** A Kendall's tau or AUROC cell is withheld when even the best competitor
   stays below the no-skill references 0.1 / 0.55; no cell met that rule in the published
-  results. The property leaderboard rates 70 metric cells and the case-study one 16.
+  results. The property leaderboard rates 70 metric cells and the case-study one 72.
 
 Command-line flags of `compute_ratings.py` (`--tie-z`, `--tie-margins`,
 `--random-weight`, `--similarity-weight`) override the card for sensitivity analyses; for
@@ -336,7 +336,7 @@ embedding models; pass your own `--account`.
 
 ### Computing the embeddings
 
-The embedding stores are not distributed: they are about 4.6 TB at residue level. To rebuild
+The embedding stores are not distributed: they are about 5.3 TB at residue level. To rebuild
 them:
 
 ```bash

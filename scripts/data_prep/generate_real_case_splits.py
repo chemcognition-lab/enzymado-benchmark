@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerate point-stratified random splits for all real-case datasets."""
+"""Regenerate point-stratified random splits for all real-case datasets.
+
+Real case = case studies (the code says real_case, the docs case studies).
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""Unit tests for real-case dataset preprocessing utilities and scripts."""
+"""Unit tests for real-case dataset preprocessing utilities and scripts.
+
+Real case = case studies (the code says real_case, the docs case studies).
+"""
 
 from __future__ import annotations
 

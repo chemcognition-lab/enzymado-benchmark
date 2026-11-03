@@ -1,4 +1,7 @@
-"""Shared preprocessing utilities for real-case enzyme benchmark datasets."""
+"""Shared preprocessing utilities for real-case enzyme benchmark datasets.
+
+Real case = case studies (the code says real_case, the docs case studies).
+"""
 
 from __future__ import annotations
 
@@ -158,7 +161,10 @@ def resolve_raw_or_docs(
 
 
 def parse_output_root(description: str | None = None) -> Path:
-    """Parse the standard --output-root CLI argument for real-case scripts."""
+    """Parse the standard --output-root CLI argument for real-case scripts.
+
+    Real case = case studies (the code says real_case, the docs case studies).
+    """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
         "--output-root",
@@ -431,7 +437,7 @@ def write_processed_dataset(
     max_rows: int = 20000,
     min_unique_seqs: int = 10,
 ) -> Path:
-    """Validate and write a processed real-case dataset CSV."""
+    """Validate and write a processed real-case (real_case = case studies) CSV."""
     validate_dataset_rows(
         rows,
         task_name=task_name,

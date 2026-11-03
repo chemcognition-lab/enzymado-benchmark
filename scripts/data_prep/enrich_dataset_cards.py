@@ -6,8 +6,8 @@ Three things happen here:
 * the shared vocabulary goes into ``benchmark_card.json`` once, and each card
   points at it rather than carrying its own copy to drift out of sync;
 * provenance, a description and a statement of what the label is get written
-  from ``card_metadata`` for all eighteen datasets, including the real-case
-  suites, which had no cards at all;
+  from ``card_metadata`` for every dataset, including the real-case suites
+  (real_case = case studies), which had no cards at all;
 * the statistics that can be derived from the published CSVs are recomputed, so
   they stop disagreeing with the files they describe.
 
