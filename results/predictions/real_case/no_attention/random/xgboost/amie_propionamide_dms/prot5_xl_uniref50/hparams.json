@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "amie_propionamide_dms",
+    "embedding_model": "prot5_xl_uniref50",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "amie_propionamide_dms",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "normalized_fitness_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/amie_propionamide_dms/amie_propionamide_dms_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5032,
+            "ordered_sha256": "c478ffcd2b192d2462e8050adcf008f150bb26a1636e7cbfe4e78441bccabfd7"
+        },
+        "val": {
+            "count": 630,
+            "ordered_sha256": "c32fcbe7f9c5724aae68e31958d63075da0dc0fa03f7695d6aac3514bab8b407"
+        },
+        "test": {
+            "count": 630,
+            "ordered_sha256": "53f6490e495d63728456339fffe7d7915f949539aaa6a8918f599fbaecb817cc"
+        }
+    }
+}

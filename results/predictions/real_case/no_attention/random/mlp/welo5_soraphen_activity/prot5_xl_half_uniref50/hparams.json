@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "welo5_soraphen_activity",
+    "embedding_model": "prot5_xl_half_uniref50",
+    "model_name": "mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "welo5_soraphen_activity",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/welo5_soraphen_activity/welo5_soraphen_activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 404,
+            "ordered_sha256": "2365badec31403796c0aefb7f49c2ffc6fdc635300f139794c48ee1fdc96c36f"
+        },
+        "val": {
+            "count": 50,
+            "ordered_sha256": "70cb451982d7acd99b13ebef20dee2ef778f2b52cdca7869589ef5a208b1bd0b"
+        },
+        "test": {
+            "count": 50,
+            "ordered_sha256": "edfe8e9fb638c7094509bbb74dabc104660a0bfe8683f31438dcce81b2b7e896"
+        }
+    }
+}

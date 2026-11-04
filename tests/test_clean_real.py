@@ -1,4 +1,7 @@
-"""Tests for cleaning Erickson, Cleeveland, and ALIGN real-case datasets."""
+"""Tests for cleaning Erickson, Cleeveland, and ALIGN real-case datasets.
+
+Real case = case studies (the code says real_case, the docs case studies).
+"""
 
 from __future__ import annotations
 

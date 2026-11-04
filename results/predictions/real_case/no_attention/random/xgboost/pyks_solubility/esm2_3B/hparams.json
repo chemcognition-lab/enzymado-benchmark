@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "pyks_solubility",
+    "embedding_model": "esm2_3B",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "pyks_solubility",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "normalized_er_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/pyks_solubility/pyks_solubility_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5186,
+            "ordered_sha256": "a1e2d17abe235b832385d361e074a6f80870a0c42d382f071a542f40863fdb42"
+        },
+        "val": {
+            "count": 650,
+            "ordered_sha256": "798f07c0a790574bc9675608178d521fb18310258183709e483ef811ae182097"
+        },
+        "test": {
+            "count": 650,
+            "ordered_sha256": "a80be2e403238dbf8d7e311324e554ea375717e711302e32cb00bf47d1fb4904"
+        }
+    }
+}

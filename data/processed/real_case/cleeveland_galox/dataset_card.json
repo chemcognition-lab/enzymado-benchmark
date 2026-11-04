@@ -2,11 +2,11 @@
   "property_name": "cleeveland_galox",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
-  "description": "Specific activity of fungal copper radical oxidases, the family galactose oxidase belongs to, measured across a panel of alcohol and diol substrates. One row is one enzyme-substrate pair, which makes this the only real-case suite with a ligand axis.",
+  "description": "Specific activity of fungal copper radical oxidases, the family galactose oxidase belongs to, measured across a panel of sugar and alcohol substrates. One row is one enzyme-substrate pair, which makes this the only case study with a ligand axis.",
   "origin_of_data": {
-    "source_name": "Cleveland et al., Fusarium copper radical oxidases",
-    "doi": "10.1186/s13068-021-01984-0",
-    "url": "https://doi.org/10.1186/s13068-021-01984-0"
+    "source_name": "Cleveland et al., survey of AA5 copper radical oxidases",
+    "doi": "10.1007/s00018-021-03981-w",
+    "url": "https://doi.org/10.1007/s00018-021-03981-w"
   },
   "label": {
     "column": "log10_specific_activity_standardized",

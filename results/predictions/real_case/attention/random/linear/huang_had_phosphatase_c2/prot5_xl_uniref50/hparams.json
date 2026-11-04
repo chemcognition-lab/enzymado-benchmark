@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "huang_had_phosphatase_c2",
+    "embedding_model": "prot5_xl_uniref50",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "huang_had_phosphatase_c2",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_conversion_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/huang_had_phosphatase_c2/huang_had_phosphatase_c2_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 6240,
+            "ordered_sha256": "74793c1361f670abeb631a9fdf97d5a8531d628463dfe217af055843f4160613"
+        },
+        "val": {
+            "count": 837,
+            "ordered_sha256": "ff4ccc064e7bd606766da7ff2c77e489da303160e37e506a825670e73e66d362"
+        },
+        "test": {
+            "count": 843,
+            "ordered_sha256": "87ab3a3cc29be0e16cbc0ddeb10252053d66a4610fbded17afc35d8b46b0f025"
+        }
+    }
+}

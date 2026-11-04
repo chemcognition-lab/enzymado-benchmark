@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Normalize the repository's real-case datasets into benchmark-ready CSV files."""
+"""Normalize the repository's real-case datasets into benchmark-ready CSV files.
+
+Real case = case studies (the code says real_case, the docs case studies).
+"""
 
 from __future__ import annotations
 
@@ -192,7 +195,7 @@ def _run_align_cleaner(
 
 
 def main() -> None:
-    """Run the selected real-case dataset cleaner."""
+    """Run the selected real-case (real_case = case studies) dataset cleaner."""
     paths = _P()
     args = build_argument_parser().parse_args()
     default_erickson_interim = paths.data_interim_dir / "erickson" / "erickson_long.csv"

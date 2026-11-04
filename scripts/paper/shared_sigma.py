@@ -6,8 +6,9 @@ sigma. With three seeds the standard deviation of each PLM varies widely even wh
 the true noise is identical, so the observed spread of log SD across PLMs is
 compared with a simulation where 14 PLMs share one sigma. Uses the configurations
 where all 14 PLMs have three seeds: mean-pooled linear and MLP on the scalar
-property tasks and the real-case datasets. Writes the observed spread per cell and
-the simulated distribution, pooled over cells, for the noise figure.
+property tasks and the real-case datasets (real_case = case studies). Writes the
+observed spread per cell and the simulated distribution, pooled over cells, for
+the noise figure.
 
 Example:
     python scripts/paper/shared_sigma.py

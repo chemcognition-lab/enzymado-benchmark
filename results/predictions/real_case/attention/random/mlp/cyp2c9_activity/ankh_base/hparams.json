@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "cyp2c9_activity",
+    "embedding_model": "ankh_base",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "cyp2c9_activity",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "activity_score_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/cyp2c9_activity/cyp2c9_activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 4913,
+            "ordered_sha256": "8652e996330bbb6223599fdabf7a9567be04ad651846d0947a227f31967f06dc"
+        },
+        "val": {
+            "count": 615,
+            "ordered_sha256": "57ec3e2fe5da8b28fd3489ec72bc346582188c5f23239834cdcf8451d0939f69"
+        },
+        "test": {
+            "count": 615,
+            "ordered_sha256": "a70c8b78fdd5215ba687680fad3f4999726074ab5d81383fb7bfb9b8ca548f4d"
+        }
+    }
+}

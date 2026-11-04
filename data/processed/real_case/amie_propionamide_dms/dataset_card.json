@@ -3,13 +3,20 @@
   "property_name": "amie_propionamide_dms",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Fitness of AmiE single mutants on propionamide. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "Deep mutational scan of Pseudomonas aeruginosa aliphatic amidase AmiE (UniProt P11436, 346 residues)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "normalized_fitness_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "Normalized fitness as the source reports it, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "amie_propionamide_dms_random_80_10_10_standardized": {
         "val": 630,
@@ -88,8 +95,8 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 2,
-      "distinct_proteins": 2,
+      "rows": 6292,
+      "distinct_proteins": 6292,
       "distinct_protein_length_summary": {
         "min": 346,
         "max": 346,

@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "amie_acetamide_dms",
+    "embedding_model": "esmc_600m",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "amie_acetamide_dms",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "normalized_fitness_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/amie_acetamide_dms/amie_acetamide_dms_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5030,
+            "ordered_sha256": "4e3ac27be67b5695896efee3aafdadb189b968f6c854f75d5a80a0c3d56e5599"
+        },
+        "val": {
+            "count": 630,
+            "ordered_sha256": "9ec367aa45bd797a74f3545b4fec62eb05686394e3711a118ba948305906e8b2"
+        },
+        "test": {
+            "count": 630,
+            "ordered_sha256": "bc7af461044815d6b94862d02f56c993639f1aed1df93cebae5080f1ee716b17"
+        }
+    }
+}

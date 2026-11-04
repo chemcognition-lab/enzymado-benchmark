@@ -3,13 +3,20 @@
   "property_name": "trpb3_epistasis",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Fitness of every combination of three mutated positions in Tm9D8* TrpB, a library built to measure epistasis between them. Only three residues vary, so the sequences differ from one another at three positions at most.",
+  "origin_of_data": {
+    "source_name": "Three-site combinatorial library of the Thermotoga maritima tryptophan synthase beta subunit variant Tm9D8* (library 3A, positions 104, 105 and 106)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "fitness_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "Fitness as the source reports it, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "trpb3_epistasis_random_80_10_10_standardized": {
         "train": 6370,
@@ -88,9 +95,16 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 0,
-      "distinct_proteins": 0,
-      "distinct_protein_length_summary": null
+      "rows": 7970,
+      "distinct_proteins": 7970,
+      "distinct_protein_length_summary": {
+        "min": 397,
+        "max": 397,
+        "mean": 397.0,
+        "median": 397.0,
+        "p95": 397,
+        "count_greater_than_1024": 0
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id",

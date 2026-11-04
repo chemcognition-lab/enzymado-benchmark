@@ -3,13 +3,20 @@
   "property_name": "fisher_fdh_nabr",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Halogenation conversion of a panel of substrates with bromide (NaBr) as the halide source. One row is one enzyme-substrate measurement over 42 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "Flavin-dependent halogenase substrate panel",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log10_conversion_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the conversion reported by the source, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "fisher_fdh_nabr_random_80_10_10_standardized": {
         "val": 252,
@@ -90,14 +97,14 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 124,
-      "distinct_proteins": 2,
+      "rows": 2604,
+      "distinct_proteins": 42,
       "distinct_protein_length_summary": {
-        "min": 530,
-        "max": 567,
-        "mean": 548.5,
-        "median": 548.5,
-        "p95": 530,
+        "min": 415,
+        "max": 625,
+        "mean": 509.69,
+        "median": 506.5,
+        "p95": 549,
         "count_greater_than_1024": 0
       }
     },

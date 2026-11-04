@@ -5,7 +5,7 @@ Prints the sequence index and the sequences left out of every run, the property
 tables (rows, proteins, lengths, random split sizes) on the rows every PLM
 embedded, the rows the exclusion removed, the UniProt fragments, class balance,
 the EC label structure, and how related the sequences of each real-case dataset
-are.
+are. Real case = case studies (the code says real_case, the docs case studies).
 
 Example:
     python scripts/paper/data_numbers.py
@@ -142,7 +142,10 @@ def print_fragments() -> None:
 
 
 def print_real_case_relatedness() -> None:
-    """Similarity of each real-case sequence to the dataset's most common one."""
+    """Similarity of each real-case sequence to the dataset's most common one.
+
+    Real case = case studies (the code says real_case, the docs case studies).
+    """
     for task, config in data_registry.TASK_REGISTRY.items():
         if config.task_scope != "real_case":
             continue

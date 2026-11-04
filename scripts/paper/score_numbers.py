@@ -6,6 +6,7 @@ rows, the split, pooling and head ablations, the gains over the 2020 ProtT5
 models, the no-PLM gaps, the real-case medians, and EC accuracy under imbalance.
 Scores are the primary metric: Kendall's tau for regression, AUPRC for
 classification.
+Real case = case studies (the code says real_case, the docs case studies).
 
 Example:
     python scripts/paper/score_numbers.py
@@ -82,7 +83,7 @@ def ablations(plm: pd.DataFrame) -> None:
 
 
 def heatmap_rows(plm: pd.DataFrame, noplm: pd.DataFrame) -> None:
-    """Rows of the heatmap: MLP, mean pooling, similarity split."""
+    """Rows of the heatmap: MLP without attention, similarity split."""
     keep = (
         (plm["head"] == "mlp")
         & (plm.pool == "no_attention")

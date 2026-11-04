@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "huang_had_phosphatase_c2",
+    "embedding_model": "ankh_large",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "huang_had_phosphatase_c2",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_conversion_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/huang_had_phosphatase_c2/huang_had_phosphatase_c2_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 6240,
+            "ordered_sha256": "74793c1361f670abeb631a9fdf97d5a8531d628463dfe217af055843f4160613"
+        },
+        "val": {
+            "count": 837,
+            "ordered_sha256": "ff4ccc064e7bd606766da7ff2c77e489da303160e37e506a825670e73e66d362"
+        },
+        "test": {
+            "count": 843,
+            "ordered_sha256": "87ab3a3cc29be0e16cbc0ddeb10252053d66a4610fbded17afc35d8b46b0f025"
+        }
+    }
+}

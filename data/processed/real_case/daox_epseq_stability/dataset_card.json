@@ -3,13 +3,20 @@
   "property_name": "daox_epseq_stability",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Stability of RgDAOx variants from an error-prone library, read out by EP-Seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "EP-Seq deep mutational scan of Rhodotorula gracilis D-amino acid oxidase (RgDAOx)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log_stability_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "Log stability as the source reports it, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "daox_epseq_stability_random_80_10_10_standardized": {
         "train": 5150,
@@ -88,9 +95,16 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 0,
-      "distinct_proteins": 0,
-      "distinct_protein_length_summary": null
+      "rows": 6434,
+      "distinct_proteins": 6434,
+      "distinct_protein_length_summary": {
+        "min": 365,
+        "max": 365,
+        "mean": 365.0,
+        "median": 365.0,
+        "p95": 365,
+        "count_greater_than_1024": 0
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id",

@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "pafa_htmek_kcat",
+    "embedding_model": "ankh_large",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "pafa_htmek_kcat",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_kcat_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/pafa_htmek_kcat/pafa_htmek_kcat_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 818,
+            "ordered_sha256": "c7727cb4ca66a2bce2cc17f987a54a23b3a5d7f81f4bb225903f3a9d4d8c70df"
+        },
+        "val": {
+            "count": 100,
+            "ordered_sha256": "f7711b1393b0d490c4c2afce1b9656bda2735403cf13e1f5c86574cf85cec498"
+        },
+        "test": {
+            "count": 100,
+            "ordered_sha256": "01c11a36586dcabce9594135999df4b485ac5955ef9981206500d811defe9bfc"
+        }
+    }
+}

@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "trpb3_epistasis",
+    "embedding_model": "profluent_e1_600m",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "trpb3_epistasis",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "fitness_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/trpb3_epistasis/trpb3_epistasis_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 6370,
+            "ordered_sha256": "870b254770b44693ea6c58d9fb50b297aeabe17a9d7d21a9cfef802caa3e2df7"
+        },
+        "val": {
+            "count": 800,
+            "ordered_sha256": "85651bf4aa3dd9be2ed6a3986ab783bf360705eaf0f5697430ab51d04adbfdad"
+        },
+        "test": {
+            "count": 800,
+            "ordered_sha256": "4d16e1dfcec5c5a98eaccc8b073d3ddd45d4e5dec620702bd3dfc4171dd30636"
+        }
+    }
+}

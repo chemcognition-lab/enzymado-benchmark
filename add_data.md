@@ -235,7 +235,7 @@ rate only the tasks listed in `benchmark_card.json` (Step 5).
 
 ## Step 5. Describe the dataset
 
-Do this step only for a dataset that will join the published real-case
+Do this step only for a dataset that will join the published case-study
 leaderboard. Once your task is in the card, `compute_ratings.py` expects
 results for it from all 75 competitors, so recomputing the leaderboards fails
 until they exist. For your own experiment, skip to Step 6; the parity check at

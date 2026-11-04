@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "amie_isobutyramide_dms",
+    "embedding_model": "esmc_600m",
+    "model_name": "attention_mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "amie_isobutyramide_dms",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "normalized_fitness_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/amie_isobutyramide_dms/amie_isobutyramide_dms_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 4989,
+            "ordered_sha256": "7d664587b2f19eb8b8f81efab6809195d17863be9fbd1cb8b8057d1663b27e4f"
+        },
+        "val": {
+            "count": 620,
+            "ordered_sha256": "55adec2f340b25a08903a9722326d24ddcef4e92d64317f899ead4b807ef2c5a"
+        },
+        "test": {
+            "count": 620,
+            "ordered_sha256": "ab7a00dce448e2970fcbd6ae87a4ede975f34d90dc68934043147f526457a70e"
+        }
+    }
+}

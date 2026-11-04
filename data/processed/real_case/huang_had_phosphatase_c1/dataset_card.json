@@ -3,13 +3,20 @@
   "property_name": "huang_had_phosphatase_c1",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Phosphatase conversion across a substrate panel for the C1 cap-domain group of the haloacid dehalogenase (HAD) superfamily, the clade the source uses to group these enzymes. One row is one enzyme-substrate measurement over 96 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "HAD phosphatase substrate panel, C1 cap-domain group",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log10_conversion_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the conversion reported by the source, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "huang_had_phosphatase_c1_random_80_10_10_standardized": {
         "train": 12480,
@@ -90,13 +97,13 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 4125,
-      "distinct_proteins": 25,
+      "rows": 15840,
+      "distinct_proteins": 96,
       "distinct_protein_length_summary": {
-        "min": 199,
+        "min": 190,
         "max": 382,
-        "mean": 241.44,
-        "median": 228,
+        "mean": 231.0,
+        "median": 224.0,
         "p95": 272,
         "count_greater_than_1024": 0
       }

@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "plpro_activity",
+    "embedding_model": "prot5_xl_half_uniref50",
+    "model_name": "linear_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "batch_size": 256
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "plpro_activity",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "fitness_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/plpro_activity/plpro_activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 4270,
+            "ordered_sha256": "77ca99ad0249d8c3960701470b06dede55cc93aa77cf058b594450af29db739d"
+        },
+        "val": {
+            "count": 533,
+            "ordered_sha256": "fc7dbb2d0cb6d1894e651d32640ae95ef14b06d83cac34d6b8a1b566448487e7"
+        },
+        "test": {
+            "count": 532,
+            "ordered_sha256": "63154b55dd5e1494647ca0974f646a1072d42a6b307d2ce70c691487eaeccd89"
+        }
+    }
+}

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Convert EnzyArena campaign tables into Enzymado real-case task CSVs.
 
+Real case = case studies (the code says real_case, the docs case studies).
+
 EnzyArena publishes one row per experimental campaign, with the individual
 variants held in parallel Python-literal lists (``mutant_list``,
 ``value_list``, ``type_list``, ``mutant_sequence_list``). Enzymado expects one

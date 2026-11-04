@@ -14,7 +14,6 @@ class Paths:
     data_interim_dir: Path = data_dir / "interim"
     data_processed_dir: Path = data_dir / "processed"
     data_processed_real_case: Path = data_processed_dir / "real_case"
-    data_external_dir: Path = data_dir / "external"
     data_embeddings_dir: Path = data_dir / "embeddings"
     data_ligand_features_dir: Path = data_dir / "ligand_features"
 
@@ -25,7 +24,6 @@ class Paths:
     data_raw_real_case: Path = data_raw_dir / "real_case"
 
     data_processed_properties: Path = data_processed_dir / "properties"
-    data_processed_datasets: Path = data_processed_dir / "datasets"
     protein_pool_csv: Path = data_processed_dir / "protein_pool.csv"
     legacy_seq_index_csv: Path = data_processed_dir / "protein_sequences_unique.csv"
 

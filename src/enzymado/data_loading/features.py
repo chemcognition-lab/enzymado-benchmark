@@ -212,7 +212,7 @@ class ProteinResidueEmbeddingBuilder:
         )
 
 
-LIGAND_FEATURES_PATH = _P.data_processed_dir / "ligand_features/descriptastorus.npz"
+LIGAND_FEATURES_PATH = _P.data_ligand_features_dir / "descriptastorus.npz"
 _LIGAND_CACHE: dict[str, np.ndarray] | None = None
 
 

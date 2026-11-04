@@ -15,9 +15,18 @@ import pandas as pd
 from enzymado import paths_and_constants, vis
 
 _P = paths_and_constants.Paths
-METRIC_TAG = {"kendall_tau": "Kendall tau", "auprc": "AUPRC"}
-BRACKET_TAG = {"kendall_tau": "Kendall\n$\\tau$", "auprc": "AUPRC"}  # fonts lack τ
+BRACKET_TAG = {"kendall_tau": "Kendall $\\tau$", "auprc": "AUPRC"}  # fonts lack τ
 HUE = {"kendall_tau": "brown", "auprc": "green"}
+
+
+def _bracket(c: vis.Canvas, x: float, y0: float, y1: float, label: str = "") -> None:
+    """A bracket from y0 to y1 at x, with its label, if any, to the right."""
+    style = dict(color=vis.INK_3, linewidth=1.1, zorder=2)
+    c.line([x, x], [y0, y1], **style)
+    for edge in (y0, y1):
+        c.line([x, x + 5], [edge, edge], **style)
+    if label:
+        c.text(x + 10, (y0 + y1) / 2, label, "legend", ha="left")
 
 
 def leaderboard(out: Path, n_each: int = 5) -> None:
@@ -25,20 +34,31 @@ def leaderboard(out: Path, n_each: int = 5) -> None:
     lb["rank"] = range(1, len(lb) + 1)
     shown = list(lb.head(n_each).itertuples()) + list(lb.tail(n_each).itertuples())
     lo, hi = vis.padded([r.ci_lo for r in shown] + [r.ci_hi for r in shown], 0.06)
-    m_left, plot_w = 262, vis.CANVAS_W - 262 - 132
-    c = vis.Canvas(vis.CANVAS_W, vis.Y_PLOT + (2 * n_each + 1) * vis.ROW_H + vis.M_BOT)
+    tag_w, foot = 84, 8  # tag_w holds the top and bottom brackets on the right
+    m_left, plot_w = 262, vis.CANVAS_W - 262 - 132 - tag_w
+    c = vis.Canvas(vis.CANVAS_W, vis.Y_PLOT + (2 * n_each + 1) * vis.ROW_H + foot)
     c.title(f"Property leaderboard: top and bottom {n_each} of {len(lb)} models")
-    x_of = c.axis(m_left, plot_w, lo, hi, "Bradley–Terry rating", fmt="{:.0f}")
+    c.text(
+        c.w - 4,
+        vis.Y_TITLE,
+        "bar = 95% bootstrap interval · dashed = 1500, the mean".upper(),
+        "note",
+        va="baseline",
+    )
+    x_rating, x_se = c.w - tag_w - 52, c.w - tag_w - 4
+    x_of = c.axis(
+        m_left, plot_w, lo, hi, "Bradley–Terry rating", fmt="{:.0f}", foot=foot
+    )
     c.line(
         [x_of(1500)] * 2,
-        [vis.Y_PLOT, c.h - vis.M_BOT],
+        [vis.Y_PLOT, c.h - foot],
         color=vis.INK_3,
         linewidth=1,
         dashes=(3, 3),
         zorder=1,
     )
-    c.text(c.w - 52, vis.Y_TICKS, "rating", "tick", va="baseline")
-    c.text(c.w - 4, vis.Y_TICKS, "SE", "tick", va="baseline")
+    c.text(x_rating, vis.Y_TICKS, "rating", "tick", va="baseline")
+    c.text(x_se, vis.Y_TICKS, "SE", "tick", va="baseline")
     for slot, r in enumerate(shown[:n_each] + [None] + shown[n_each:]):
         y = vis.Y_PLOT + slot * vis.ROW_H + vis.ROW_H / 2
         if r is None:
@@ -60,43 +80,34 @@ def leaderboard(out: Path, n_each: int = 5) -> None:
         for edge in (r.ci_lo, r.ci_hi):
             c.line([x_of(edge)] * 2, [y - 4, y + 4], **bar)
         c.dot(x_of(r.rating), y, vis.TEAL if slot < n_each else vis.BROWN)
-        c.text(c.w - 52, y, f"{r.rating:.1f}", "value")
-        c.text(c.w - 4, y, f"±{r.bootstrap_se:.1f}", "tick")
-    c.legend([(vis.TEAL, f"top {n_each}"), (vis.BROWN, f"bottom {n_each}")])
-    c.note("bar = 95% bootstrap interval · dashed = 1500, the mean")
-    c.save(out, "leaderboard_properties")
+        c.text(x_rating, y, f"{r.rating:.1f}", "value")
+        c.text(x_se, y, f"±{r.bootstrap_se:.1f}", "tick")
+    for first, label in ((0, f"top {n_each}"), (n_each + 1, f"bottom {n_each}")):
+        y0 = vis.Y_PLOT + first * vis.ROW_H + 2
+        _bracket(c, c.w - tag_w + 14, y0, y0 + n_each * vis.ROW_H - 4, label)
+    c.save(out, "property_leaderboard")
 
 
-def _heatmap_legend(c: vis.Canvas, metrics: list[str], split: str) -> None:
-    y, x = c.h - 12, 0
-    renderer = c.fig.canvas.get_renderer()
-    inverse = c.ax.transData.inverted()
-
-    def word(s: str, **kw) -> float:
-        """Draw s at x and return where it ends, so the next item never overlaps."""
-        box = c.text(x, y, s, "note", ha="left", **kw).get_window_extent(renderer)
-        return inverse.transform((box.x1, 0))[0]
-
-    for metric in metrics:
-        x = word(METRIC_TAG[metric].upper(), color=vis.INK_2) + 10
-        x = word("LOW") + 6
-        for k in range(9):
-            c.ax.add_patch(
-                patches.FancyBboxPatch(
-                    (x + k * 13, y - 4),
-                    11,
-                    8,
-                    boxstyle="round,pad=0,rounding_size=1.5",
-                    facecolor=vis.SEQ_CMAP[HUE[metric]](k / 8),
-                    edgecolor=vis.RULE,
-                    linewidth=0.4,
-                    zorder=2,
-                )
+def _ramp_key(c: vis.Canvas, x: float, y0: float, y1: float, metric: str) -> None:
+    """A metric's name over its colour ramp, high on top, filling y0 to y1."""
+    c.text(x, y0, BRACKET_TAG[metric], "legend", ha="left", va="top")
+    n, top, swatch_w = 9, y0 + 24, 18
+    step = (y1 - top) / n
+    for k in range(n):
+        c.ax.add_patch(
+            patches.FancyBboxPatch(
+                (x, top + k * step),
+                swatch_w,
+                step - 3,
+                boxstyle="round,pad=0,rounding_size=1.5",
+                facecolor=vis.SEQ_CMAP[HUE[metric]](1 - k / (n - 1)),
+                edgecolor=vis.RULE,
+                linewidth=0.4,
+                zorder=2,
             )
-        x += 8 * 13 + 11 + 6
-        x = word("HIGH") + 36
-    tag = f"mlp · mean pooling · {split} split · outlined = best".upper()
-    c.text(c.w, y, tag, "note")
+        )
+    c.text(x + swatch_w + 8, top + (step - 3) / 2, "high", "tick", ha="left")
+    c.text(x + swatch_w + 8, y1 - (step - 3) / 2 - 3, "low", "tick", ha="left")
 
 
 def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
@@ -110,25 +121,32 @@ def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
     plms = [e for e in grid.columns if e != "noplm"]
     grid = grid[plms + ["noplm"]]  # the reference without a PLM closes each row
     metric = df.groupby("task").metric.first()
-    cell_w, cell_h, gap, head_w, top_h, ref_gap = 62, 32, 4, 128, 136, 12
+    # top_h leaves the longest rotated name (prot5_xl_half) clear of the note.
+    cell_w, cell_h, gap, head_w, top_h, ref_gap = 62, 32, 4, 128, 152, 12
     xs = [
         head_w + j * (cell_w + gap) + ref_gap * (emb == "noplm")
         for j, emb in enumerate(grid.columns)
     ]
     right = xs[-1] + cell_w + gap
-    c = vis.Canvas(right + 132, top_h + len(grid) * (cell_h + gap) + 30)
+    c = vis.Canvas(right + 132, top_h + len(grid) * (cell_h + gap) + 4)
     c.title("Results matrix with primary metrics by task and embedding")
+    c.text(
+        c.w - 4,
+        vis.Y_TITLE,
+        f"mlp · no attention · {split} split · outlined = best".upper(),
+        "note",
+        va="baseline",
+    )
     for x, emb in zip(xs, grid.columns):
         c.text(
             x + cell_w / 2,
             top_h - 8,
             vis.short(emb),
-            "note",
+            "tick",
             ha="left",
             va="bottom",
             rotation=45,
             rotation_mode="anchor",
-            fontsize=5.6,
         )
     for i, (task, row) in enumerate(grid.iterrows()):
         y = top_h + i * (cell_h + gap)
@@ -171,7 +189,6 @@ def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
                 f"{v:.2f}",
                 "value",
                 ha="center",
-                fontsize=5.8,
                 zorder=3,
                 color="#ffffff" if dark else vis.INK,
             )
@@ -181,56 +198,9 @@ def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
         rows = [i for i, _ in members]
         y0 = top_h + rows[0] * (cell_h + gap) + 2
         y1 = top_h + rows[-1] * (cell_h + gap) + cell_h - 2
-        style = dict(color=vis.INK_3, linewidth=1.1, zorder=2)
-        c.line([gutter, gutter], [y0, y1], **style)
-        for edge in (y0, y1):
-            c.line([gutter, gutter + 5], [edge, edge], **style)
-        c.text(
-            gutter + 10,
-            (y0 + y1) / 2,
-            BRACKET_TAG[m],
-            "legend",
-            ha="left",
-            fontsize=6.4,
-        )
-    _heatmap_legend(c, list(dict.fromkeys(metric[list(vis.TASK_LABEL)])), split)
-    c.save(out, "task_heatmap_two_hues")
-
-
-def split_gap(out: Path, scores: pd.DataFrame) -> None:
-    df = scores.query(
-        "scope == 'properties' and head == 'mlp' and pool == 'no_attention'"
-    )
-    mean = df.groupby(["task_type", "emb", "split"]).value.mean().unstack()
-    models = mean.loc["regression"].random.sort_values(ascending=False).index
-    m_left, panel_w, panel_gap, delta_w = 132, 232, 58, 46
-    c = vis.Canvas(vis.CANVAS_W, vis.Y_PLOT + len(models) * vis.ROW_H + vis.M_BOT)
-    c.title("Split type: random against similarity")
-    c.legend([(vis.TEAL, "random split"), (vis.BROWN, "similarity split")])
-    c.note("mlp head · mean pooling · mean over the tasks of each metric")
-    for i, emb in enumerate(models):
-        c.text(
-            m_left - 12,
-            vis.Y_PLOT + i * vis.ROW_H + vis.ROW_H / 2,
-            vis.short(emb),
-            "row",
-        )
-    for k, (task_type, name) in enumerate(
-        [("regression", "Kendall $\\tau$"), ("classification", "AUPRC")]
-    ):
-        left = m_left + k * (panel_w + panel_gap + delta_w)
-        pairs = mean.loc[task_type].loc[models]
-        x_of = c.axis(
-            left,
-            panel_w,
-            *vis.padded(list(pairs.random) + list(pairs.similarity)),
-            name,
-        )
-        for i, (a, b) in enumerate(zip(pairs.random, pairs.similarity)):
-            y = vis.Y_PLOT + i * vis.ROW_H + vis.ROW_H / 2
-            c.dumbbell(x_of(a), x_of(b), y, vis.TEAL, vis.BROWN)
-            c.text(left + panel_w + delta_w - 4, y, f"{b - a:+.2f}", "value")
-    c.save(out, "split_gap")
+        _bracket(c, gutter, y0, y1)
+        _ramp_key(c, gutter + 14, y0, y1, m)
+    c.save(out, "results_matrix")
 
 
 def split_gap_box(out: Path, scores: pd.DataFrame) -> None:
@@ -251,7 +221,8 @@ def split_gap_box(out: Path, scores: pd.DataFrame) -> None:
         order = by_task.median().sort_values(ascending=False).index
         groups.append((name, [(t, by_task.get_group(t).to_numpy()) for t in order]))
 
-    m_left, header_h, row_h = 132, 20, 26
+    # Wide enough for the group headings, which sit in the label column.
+    m_left, header_h, row_h = 172, 20, 26
     n_rows = sum(len(rows) for _, rows in groups)
     height = vis.Y_PLOT + n_rows * row_h + len(groups) * header_h + vis.M_BOT
     c = vis.Canvas(vis.CANVAS_W, height)
@@ -270,7 +241,7 @@ def split_gap_box(out: Path, scores: pd.DataFrame) -> None:
         c.w - m_left - 96,
         -0.10,
         0.50,
-        "random − similarity, primary metric (higher = larger loss)",
+        "Loss in performance, random minus similarity split (higher = larger loss)",
         Tick,
         n=7,
     )
@@ -334,7 +305,7 @@ def split_gap_box(out: Path, scores: pd.DataFrame) -> None:
             c.text(c.w - 4, yc, f"{med:+.3f}", "value")
             y += row_h
     c.note("MLP head · mean pooling · one dot per PLM · box: IQR · whiskers: 1.5 IQR")
-    c.save(out, "split_gap_box")
+    c.save(out, "split_gap")
 
 
 def main() -> None:
@@ -342,13 +313,12 @@ def main() -> None:
     parser.add_argument(
         "--out", type=Path, default=_P.project_root / "docs" / "figures"
     )
-    out = parser.parse_args().out
+    out = parser.parse_args().out / "results"
     out.mkdir(parents=True, exist_ok=True)
     vis.setup()
     scores = vis.primary_scores(plm_only=False)
     leaderboard(out)
     heatmap(out, scores)
-    split_gap(out, scores[scores.emb != "noplm"])
     split_gap_box(out, scores[scores.emb != "noplm"])
 
 

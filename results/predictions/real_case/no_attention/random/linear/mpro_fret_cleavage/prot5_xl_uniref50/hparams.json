@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "mpro_fret_cleavage",
+    "embedding_model": "prot5_xl_uniref50",
+    "model_name": "linear_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "batch_size": 256
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "mpro_fret_cleavage",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "functional_score_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/mpro_fret_cleavage/mpro_fret_cleavage_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 4595,
+            "ordered_sha256": "a95f2198ee763cdb29df240d3d1ece0b830423ed5eff11f3867b29cfae229de9"
+        },
+        "val": {
+            "count": 572,
+            "ordered_sha256": "736f9dc25f3274f67d0f12a7037637dd18a038359ba9d470b2ad54dfc82faddc"
+        },
+        "test": {
+            "count": 578,
+            "ordered_sha256": "cbe5ce9f3842c3b52c66e6553d2753aa8c62a17e879b354c7b10493db1a55daa"
+        }
+    }
+}

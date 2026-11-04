@@ -3,13 +3,20 @@
   "property_name": "goldman_olea_thiolase",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Activity of OleA thiolases from across the family on a shared substrate panel. One row is one enzyme-substrate measurement over 73 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "OleA thiolase family substrate-specificity panel",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log_activity_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "Log activity as the source reports it, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "goldman_olea_thiolase_random_80_10_10_standardized": {
         "val": 74,
@@ -89,14 +96,14 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 10,
-      "distinct_proteins": 1,
+      "rows": 550,
+      "distinct_proteins": 73,
       "distinct_protein_length_summary": {
-        "min": 338,
-        "max": 338,
-        "mean": 338.0,
-        "median": 338,
-        "p95": 338,
+        "min": 312,
+        "max": 371,
+        "mean": 341.29,
+        "median": 341,
+        "p95": 351,
         "count_greater_than_1024": 0
       }
     },

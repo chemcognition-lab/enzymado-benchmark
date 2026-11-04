@@ -3,13 +3,20 @@
   "property_name": "goase_variant_substrate",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Activity of galactose oxidase variants across a substrate matrix. One row is one enzyme-substrate measurement over 34 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "Variant-by-substrate activity matrix of galactose oxidase",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log10_activity_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the activity in the units of the source, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "goase_variant_substrate_random_80_10_10_standardized": {
         "train": 965,
@@ -90,9 +97,16 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 0,
-      "distinct_proteins": 0,
-      "distinct_protein_length_summary": null
+      "rows": 1183,
+      "distinct_proteins": 34,
+      "distinct_protein_length_summary": {
+        "min": 639,
+        "max": 639,
+        "mean": 639.0,
+        "median": 639.0,
+        "p95": 639,
+        "count_greater_than_1024": 0
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id",

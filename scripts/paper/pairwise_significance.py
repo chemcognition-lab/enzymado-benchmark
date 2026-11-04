@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Paired bootstrap tests of the best PLM against the other 13, per task and split.
 
-Uses the heatmap baseline (MLP head, mean pooling) and the primary metric. The
+Uses the heatmap baseline (MLP head without attention) and the primary metric. The
 1,000 stored bootstrap replicates share their resample indices across models, so
 the per-replicate difference best - other is a paired bootstrap of the gap. A PLM
 cannot be separated from the best when:

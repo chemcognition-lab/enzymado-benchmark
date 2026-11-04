@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "daox_epseq_activity",
+    "embedding_model": "ankh3_large",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "daox_epseq_activity",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/daox_epseq_activity/daox_epseq_activity_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5124,
+            "ordered_sha256": "54849be8138361117c3fec069da0ee5453b77ecc527945ac76d4b8568a2852af"
+        },
+        "val": {
+            "count": 640,
+            "ordered_sha256": "86699f3bbb73600410d0420bc9b99b0e40f24a533a0b140e5c6f0f2963dc8a97"
+        },
+        "test": {
+            "count": 640,
+            "ordered_sha256": "704edbe0d0d72fb6dfb93cfa5cf1d172cecb4cd6eeba57c77c98630db4ad522a"
+        }
+    }
+}

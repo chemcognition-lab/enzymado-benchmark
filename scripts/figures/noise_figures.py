@@ -130,8 +130,12 @@ def normality_panel(c: vis.Canvas, left: float, width: float) -> None:
 def noise_model(out: Path) -> None:
     c = vis.Canvas(vis.CANVAS_W, Y0 + PLOT_H + vis.M_BOT)
     c.title("How much scores move when only the seed changes")
-    shared_sigma_panel(c, 50, 254)
-    normality_panel(c, 404, 334)
+    # Both panels stretch with the canvas, keeping their 254:334 split and the
+    # 100 px gap; at the old 746 px canvas this gives exactly 254 and 334.
+    left_w = round((c.w - 158) * 254 / 588)
+    right_x = 50 + left_w + 100
+    shared_sigma_panel(c, 50, left_w)
+    normality_panel(c, right_x, c.w - 8 - right_x)
     c.legend(
         [
             (vis.TEAL, "14 PLMs · mean pool"),
@@ -147,7 +151,7 @@ def main() -> None:
     parser.add_argument(
         "--out", type=Path, default=_P.project_root / "docs" / "figures"
     )
-    out = parser.parse_args().out
+    out = parser.parse_args().out / "appendix"
     out.mkdir(parents=True, exist_ok=True)
     vis.setup()
     noise_model(out)

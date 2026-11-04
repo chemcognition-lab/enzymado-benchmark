@@ -3,13 +3,20 @@
   "property_name": "koudelakova_hld_panel",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Activity of haloalkane dehalogenases on a panel of halogenated substrates. One row is one enzyme-substrate measurement over 13 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "Haloalkane dehalogenase (HLD) specificity panel (9 wild types of its Table S1, 30 halogenated substrates in the order of its Tables S3 and S5)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication. Its Table S2 records an insertion in DbeA1 between residues 142 and 143 (VAEEQDHAE), which the cleaning applies."
+  },
   "label": {
     "column": "log10_activity_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the activity in the units of the source, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "koudelakova_hld_panel_random_80_10_10_standardized": {
         "train": 312,
@@ -90,14 +97,14 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 210,
-      "distinct_proteins": 7,
+      "rows": 390,
+      "distinct_proteins": 13,
       "distinct_protein_length_summary": {
         "min": 286,
-        "max": 310,
-        "mean": 299.86,
-        "median": 300,
-        "p95": 310,
+        "max": 328,
+        "mean": 305.46,
+        "median": 304,
+        "p95": 319,
         "count_greater_than_1024": 0
       }
     },

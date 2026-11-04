@@ -3,13 +3,20 @@
   "property_name": "goldman_aminotransferase",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Specific activity of aminotransferases from across the family on a shared substrate panel. One row is one enzyme-substrate measurement over 24 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences.",
+  "origin_of_data": {
+    "source_name": "Aminotransferase family substrate-specificity panel",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log10_specific_activity_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the specific activity in the units of the source, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "goldman_aminotransferase_random_80_10_10_standardized": {
         "test": 48,
@@ -89,14 +96,14 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 90,
-      "distinct_proteins": 5,
+      "rows": 432,
+      "distinct_proteins": 24,
       "distinct_protein_length_summary": {
-        "min": 363,
-        "max": 412,
-        "mean": 394.6,
-        "median": 397,
-        "p95": 405,
+        "min": 302,
+        "max": 476,
+        "mean": 376.17,
+        "median": 381.0,
+        "p95": 456,
         "count_greater_than_1024": 0
       }
     },

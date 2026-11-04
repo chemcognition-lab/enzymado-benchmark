@@ -447,7 +447,10 @@ def sync_align_benchmark_card(
     processed_dir: Path,
     project_root: Path,
 ) -> list[str]:
-    """Synchronize ALIGN real-case task entries inside benchmark_card.json."""
+    """Synchronize ALIGN real-case task entries inside benchmark_card.json.
+
+    Real case = case studies (the code says real_case, the docs case studies).
+    """
     with benchmark_card_path.open("r", encoding="utf-8") as handle:
         benchmark_card = json.load(handle)
 

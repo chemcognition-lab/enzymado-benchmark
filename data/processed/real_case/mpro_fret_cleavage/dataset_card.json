@@ -3,13 +3,20 @@
   "property_name": "mpro_fret_cleavage",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Peptide cleavage activity of Mpro single mutants in a FRET reporter assay. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "FRET cleavage deep mutational scan of the SARS-CoV-2 main protease (Mpro / 3CLpro, PDB 6LU7 chain A, 306 residues)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "functional_score_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "Functional score as the source reports it, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "mpro_fret_cleavage_random_80_10_10_standardized": {
         "train": 4595,
@@ -88,9 +95,16 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 0,
-      "distinct_proteins": 0,
-      "distinct_protein_length_summary": null
+      "rows": 5745,
+      "distinct_proteins": 5745,
+      "distinct_protein_length_summary": {
+        "min": 306,
+        "max": 306,
+        "mean": 306.0,
+        "median": 306,
+        "p95": 306,
+        "count_greater_than_1024": 0
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id",

@@ -3,13 +3,20 @@
   "property_name": "mcba_reaction_activity",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Activity of McbA amide synthetase single mutants on nine pharmaceutical amide-synthesis reactions. One row is one variant-reaction pair over 1,217 distinct variants, and the split is per row, so a variant can appear in train and in test on other reactions.",
+  "origin_of_data": {
+    "source_name": "McbA amide synthetase single-mutant matrix against 9 pharmaceutical amide targets (wild-type coding sequence of its Table S6, 518 residues)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "log10_activity_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "log10 of the activity in the units of the source, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "mcba_reaction_activity_random_80_10_10_standardized": {
         "val": 1217,
@@ -90,9 +97,16 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 0,
-      "distinct_proteins": 0,
-      "distinct_protein_length_summary": null
+      "rows": 10918,
+      "distinct_proteins": 1217,
+      "distinct_protein_length_summary": {
+        "min": 518,
+        "max": 518,
+        "mean": 518.0,
+        "median": 518,
+        "p95": 518,
+        "count_greater_than_1024": 0
+      }
     },
     "categorical_high_variance_columns": [
       "dataset_id"

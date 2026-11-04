@@ -1,0 +1,57 @@
+{
+    "schema_version": 1,
+    "task_name": "koudelakova_hld_panel",
+    "embedding_model": "noplm",
+    "model_name": "mlp_regressor",
+    "split_variant": "random",
+    "wrapper": "MLPRegressorTorch",
+    "params": {
+        "hidden_dims": [
+            2048
+        ],
+        "lr": 0.001,
+        "epochs": 100,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.1,
+        "batch_size": 256,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "koudelakova_hld_panel",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/koudelakova_hld_panel/koudelakova_hld_panel_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 312,
+            "ordered_sha256": "30a3db7cbbd9749363fd260bd427485dcc89b5559173265e7d84bcc8cf7e8ddf"
+        },
+        "val": {
+            "count": 39,
+            "ordered_sha256": "f328357eb9041b2cbd23a86f23765b9c75e7dd536caa7fa77fa8962a9b6558d5"
+        },
+        "test": {
+            "count": 39,
+            "ordered_sha256": "43b1b13d882a427e54a66d9e5fb59c44075f42c21426cad44ddf8faa392b58cb"
+        }
+    }
+}

@@ -7,7 +7,7 @@ or to train your own model and get its weights, see [add_data.md](add_data.md).
 |---|---|---|---|
 | [1. Leaderboards](#level-1-recompute-the-leaderboards) | the two global ratings, from the published files | a laptop | minutes |
 | [2. One task](#level-2-rerun-one-task) | any task × embedding model × head you choose, retrained | one GPU, or a CPU for small tasks | minutes to hours |
-| [3. Everything](#level-3-rerun-everything-on-a-slurm-cluster) | all 2,100 runs (1,960 on the 14 PLMs, 140 on `noplm`), from embeddings up | a Slurm GPU cluster and about 5 TB of storage | days to weeks |
+| [3. Everything](#level-3-rerun-everything-on-a-slurm-cluster) | all 4,200 runs (3,920 on the 14 PLMs, 280 on `noplm`), from embeddings up | a Slurm GPU cluster and about 6 TB of storage | days to weeks |
 
 ## Setup
 
@@ -28,8 +28,8 @@ branches may register extra tasks, which changes the leaderboards.
 **In the repository:** the datasets and splits, the sequence index, the
 shared-ID list (`results/embedding_intersection/common_ids.txt`), and every
 published `metrics.json`, `hparams.json`, bootstrap file and leaderboard.
-**Not in the repository, so you rebuild them:** the embeddings (about 4.6 TB
-at residue level and 11 GB mean-pooled for the 14 PLMs), prediction files and
+**Not in the repository, so you rebuild them:** the embeddings (about 5.3 TB
+at residue level and 13 GB mean-pooled for the 14 PLMs), prediction files and
 model weights.
 
 **How exact is a rerun?** Every published run used seed 42. GPU kernels were
@@ -63,7 +63,7 @@ Use these names with `--task_name`.
 minus the wild type's, so it has to learn what the mutation changed, not which
 protein it is.
 
-**Real cases** (need `--task_scope real_case`; regression, `random` split
+**Case studies** (need `--task_scope real_case`; regression, `random` split
 only): `align_amylase_activity`, `align_amylase_expression`,
 `align_amylase_stability`, `align_glucosidase_activity`,
 `align_glucosidase_expression`, `align_glucosidase_melting`,
@@ -76,8 +76,9 @@ residues.
 A run trains one **head** (a small model) on frozen embeddings from one
 **embedding model**, for one task and one split.
 
-- **Heads.** `linear_`, `mlp_` and `xgb_` are trained on mean-pooled
-  embeddings. `attention_linear_` and `attention_mlp_` learn their own pooling
+- **Heads.** `linear_`, `mlp_` and `xgb_` are the heads without attention:
+  they take the embedding as described under Inputs below, mean-pooled on
+  protein tasks. `attention_linear_` and `attention_mlp_` learn their own pooling
   over residues, and only run when you pass a residue-level manifest
   (`--attention_embeddings_json`). Each head uses the classification,
   regression, EC or per-residue version that matches the task.
@@ -159,13 +160,21 @@ environment in `envs_files/`.
 
 ### 2. Train
 
+Tasks with a substrate (`binding`, `kcat`, `km`, `cleeveland_galox`) also read
+its RDKit descriptors from `data/ligand_features/descriptastorus.npz`, which is
+not tracked. Build it once; it takes about 3 minutes on 8 CPUs:
+
+```bash
+python scripts/data_prep/build_ligand_features.py --workers 8
+```
+
 `scripts/run_benchmark.py` trains every task, embedding model and head unless
 you narrow it down:
 
 | Option | Selects | Default |
 |---|---|---|
 | `--task_name ph_opt` | one task; repeat for several | all tasks in the scope |
-| `--task_scope real_case` | real-case tasks | `properties` only |
+| `--task_scope real_case` | case-study tasks | `properties` only |
 | `--split_variant similarity` | `random` or `similarity` | `random` |
 | `--emb_name esm2_650M` | one embedding model from the manifest | all in the manifest |
 | `--model_prefix mlp_` | one head: `linear_`, `mlp_`, `xgb_`, `attention_linear_`, `attention_mlp_` | all |
@@ -191,10 +200,10 @@ Common mistakes:
 
 - **No `--output_dir`:** your runs are written into the published `results/`
   folder.
-- **A real-case task without `--task_scope real_case`:** the task is skipped
+- **A case-study task without `--task_scope real_case`:** the task is skipped
   with no error, and nothing trains.
 - **`train_task_pooled.slurm`** always passes `--task_scope properties`, so it
-  cannot run real-case tasks. Use the command above in a job instead.
+  cannot run case-study tasks. Use the command above in a job instead.
 
 ### 3. Score and compare
 
@@ -212,8 +221,13 @@ python scripts/results/compute_bootstrap_metrics.py \
   --filter-task ph_opt --n-replicates 1000
 ```
 
-Run them in that order: the second reuses a cache the first writes. Each run's
-scores are in a `metrics.json` at
+The bootstrap gives the leaderboard its scores. The leaderboard also needs a
+tie margin for every cell. A task missing from the published file
+(`results/noise_seeds/tie_margins_v4.csv`) gets them from
+`compute_tie_margins.py`, which needs the train scores only
+`compute_metrics.py` writes. If you run both scripts, keep that order: `compute_metrics.py` rewrites the whole `metrics.json`, so run
+after the bootstrap it erases the intervals the bootstrap wrote there. Each
+run's scores are in a `metrics.json` at
 `results_rerun/predictions/<scope>/<attention|no_attention>/<split>/<head>/<task>/<embedding>/`,
 the same layout as `results/predictions/`. To compare every rerun with the
 published number and its interval:
@@ -258,7 +272,9 @@ environments that `run_embeddings_cluster.slurm` expects (`.venv-prot5`,
 pinned files in `envs_files/`. Compute nodes have no internet, so download
 every model's weights into the cache the job reads (`HF_HOME`, set at the top
 of `run_embeddings_cluster.slurm`) beforehand. ESM3 is gated on Hugging Face,
-so you need a token with access to it.
+so you need a token with access to it. Finally, in a CPU job rather than on
+the login node, build the ligand descriptors with
+`python scripts/data_prep/build_ligand_features.py --workers 8` (see Level 2).
 
 **2. Embeddings.** One array task per model, at most two at a time:
 
@@ -282,7 +298,7 @@ cp embeddings_models_output_mean_pooled.example.json embeddings_models_output_me
 Point each `"path"` in `embeddings_models_output.json` at its folder under
 `/scratch`. The mean-pooled template is already correct.
 
-**4. Training.** `run_training_cluster.slurm` trains the mean-pooled heads and
+**4. Training.** `run_training_cluster.slurm` trains the heads without attention and
 `run_training_attention_cluster.slurm` the attention heads, one array task per
 embedding model; their headers list the variables they read. Always set
 `OUTPUT_DIR`, whose default is the published `results/predictions`:
@@ -293,7 +309,7 @@ sbatch --account=<your-account> --mail-type=NONE --array=0-13%2 \
   scripts/slurm/run_training_cluster.slurm
 ```
 
-Add `TASK_SCOPES=real_case` for the real-case datasets. The EC and residue
+Add `TASK_SCOPES=real_case` for the case studies. The EC and residue
 tasks need far more memory and time than the rest (up to 256 GB and several
 hours per run), so submit each as its own array with `TASK_NAMES` and a larger
 `--mem`, one task per array: `--export` splits its values at commas. Finished runs

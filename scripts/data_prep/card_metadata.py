@@ -5,11 +5,13 @@ so they live here, once, and are written into the cards by
 ``enrich_dataset_cards.py``.
 
 Every DOI in SOURCES was resolved against Crossref and its title checked against
-the work it is meant to name, rather than written from memory.
+the work it is meant to name, rather than written from memory. The 28 case studies
+added on 2026-10-30 carry ``"doi": None``: the repo records no publication for
+them, and an entry says so rather than naming a paper nobody verified.
 """
 
 # Shared vocabulary, written into benchmark_card.json under "definitions" and
-# referenced from every card instead of being copied eighteen times.
+# referenced from every card instead of being copied into each one.
 DEFINITIONS = {
     "cleaning": (
         "Rows dropped between the raw download and the published CSV. A row is "
@@ -312,13 +314,13 @@ SOURCES = {
         ),
     },
     "cleeveland_galox": {
-        "source": "Cleveland et al., Fusarium copper radical oxidases",
-        "doi": "10.1186/s13068-021-01984-0",
+        "source": "Cleveland et al., survey of AA5 copper radical oxidases",
+        "doi": "10.1007/s00018-021-03981-w",
         "description": (
             "Specific activity of fungal copper radical oxidases, the family "
-            "galactose oxidase belongs to, measured across a panel of alcohol "
-            "and diol substrates. One row is one enzyme-substrate pair, which "
-            "makes this the only real-case suite with a ligand axis."
+            "galactose oxidase belongs to, measured across a panel of sugar "
+            "and alcohol substrates. One row is one enzyme-substrate pair, which "
+            "makes this the only case study with a ligand axis."
         ),
         "label": (
             "log10 of the specific activity in the assay units of the source, "
@@ -343,6 +345,426 @@ SOURCES = {
             "log10(x + 1) of the sum of aromatic products in the assay units of "
             "the source, standardized on the training split. A fifth of the "
             "values are 0."
+        ),
+    },
+    "amie_acetamide_dms": {
+        "source": (
+            "Deep mutational scan of Pseudomonas aeruginosa aliphatic amidase AmiE (UniProt P11436, 346 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Fitness of AmiE single mutants on acetamide. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Normalized fitness as the source reports it, standardized on the training split."
+        ),
+    },
+    "amie_isobutyramide_dms": {
+        "source": (
+            "Deep mutational scan of Pseudomonas aeruginosa aliphatic amidase AmiE (UniProt P11436, 346 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Fitness of AmiE single mutants on isobutyramide. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Normalized fitness as the source reports it, standardized on the training split."
+        ),
+    },
+    "amie_propionamide_dms": {
+        "source": (
+            "Deep mutational scan of Pseudomonas aeruginosa aliphatic amidase AmiE (UniProt P11436, 346 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Fitness of AmiE single mutants on propionamide. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Normalized fitness as the source reports it, standardized on the training split."
+        ),
+    },
+    "ao_3fcr_transaminase": {
+        "source": (
+            "Chiral amine panel of Aspergillus oryzae amine transaminase variants (3FCR, 3HMU and 6SNU scaffolds; specific activity table of the supplementary information, 30 enantiopure amines of its Figure 3)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Specific activity of engineered amine transaminase variants on a panel of enantiopure chiral amines. One row is one enzyme-substrate measurement over 79 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the specific activity in the units of the source, standardized on the training split."
+        ),
+    },
+    "cyp2c9_abundance": {
+        "source": (
+            "VAMP-seq abundance deep mutational scan of human cytochrome P450 2C9 (UniProt P11712, 490 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Steady-state protein abundance of CYP2C9 single mutants, read out by VAMP-seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Abundance score as the source reports it, standardized on the training split."
+        ),
+    },
+    "cyp2c9_activity": {
+        "source": (
+            "Click-seq activity deep mutational scan of human cytochrome P450 2C9 (UniProt P11712, 490 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Catalytic activity of CYP2C9 single mutants, read out by Click-seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Activity score as the source reports it, standardized on the training split."
+        ),
+    },
+    "daox_epseq_activity": {
+        "source": (
+            "EP-Seq deep mutational scan of Rhodotorula gracilis D-amino acid oxidase (RgDAOx)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Catalytic activity of RgDAOx variants from an error-prone library, read out by EP-Seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Log activity as the source reports it, standardized on the training split."
+        ),
+    },
+    "daox_epseq_stability": {
+        "source": (
+            "EP-Seq deep mutational scan of Rhodotorula gracilis D-amino acid oxidase (RgDAOx)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Stability of RgDAOx variants from an error-prone library, read out by EP-Seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Log stability as the source reports it, standardized on the training split."
+        ),
+    },
+    "fisher_fdh_nabr": {
+        "source": (
+            "Flavin-dependent halogenase substrate panel"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Halogenation conversion of a panel of substrates with bromide (NaBr) as the halide source. One row is one enzyme-substrate measurement over 42 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the conversion reported by the source, standardized on the training split."
+        ),
+    },
+    "fisher_fdh_nacl": {
+        "source": (
+            "Flavin-dependent halogenase substrate panel"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Halogenation conversion of a panel of substrates with chloride (NaCl) as the halide source. One row is one enzyme-substrate measurement over 42 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the conversion reported by the source, standardized on the training split."
+        ),
+    },
+    "goase_variant_substrate": {
+        "source": (
+            "Variant-by-substrate activity matrix of galactose oxidase"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Activity of galactose oxidase variants across a substrate matrix. One row is one enzyme-substrate measurement over 34 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the activity in the units of the source, standardized on the training split."
+        ),
+    },
+    "goldman_aminotransferase": {
+        "source": (
+            "Aminotransferase family substrate-specificity panel"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Specific activity of aminotransferases from across the family on a shared substrate panel. One row is one enzyme-substrate measurement over 24 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the specific activity in the units of the source, standardized on the training split."
+        ),
+    },
+    "goldman_olea_thiolase": {
+        "source": (
+            "OleA thiolase family substrate-specificity panel"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Activity of OleA thiolases from across the family on a shared substrate panel. One row is one enzyme-substrate measurement over 73 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "Log activity as the source reports it, standardized on the training split."
+        ),
+    },
+    "huang_had_phosphatase_c0": {
+        "source": (
+            "HAD phosphatase substrate panel, C0 cap-domain group"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Phosphatase conversion across a substrate panel for the C0 cap-domain group of the haloacid dehalogenase (HAD) superfamily, the clade the source uses to group these enzymes. One row is one enzyme-substrate measurement over 34 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the conversion reported by the source, standardized on the training split."
+        ),
+    },
+    "huang_had_phosphatase_c1": {
+        "source": (
+            "HAD phosphatase substrate panel, C1 cap-domain group"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Phosphatase conversion across a substrate panel for the C1 cap-domain group of the haloacid dehalogenase (HAD) superfamily, the clade the source uses to group these enzymes. One row is one enzyme-substrate measurement over 96 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the conversion reported by the source, standardized on the training split."
+        ),
+    },
+    "huang_had_phosphatase_c2": {
+        "source": (
+            "HAD phosphatase substrate panel, C2 cap-domain group"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Phosphatase conversion across a substrate panel for the C2 cap-domain group of the haloacid dehalogenase (HAD) superfamily, the clade the source uses to group these enzymes. One row is one enzyme-substrate measurement over 48 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the conversion reported by the source, standardized on the training split."
+        ),
+    },
+    "koudelakova_hld_panel": {
+        "source": (
+            "Haloalkane dehalogenase (HLD) specificity panel (9 wild types of its Table S1, 30 halogenated substrates in the order of its Tables S3 and S5)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication. Its Table S2 records an insertion in DbeA1 between residues 142 and 143 (VAEEQDHAE), which the cleaning applies."
+        ),
+        "description": (
+            "Activity of haloalkane dehalogenases on a panel of halogenated substrates. One row is one enzyme-substrate measurement over 13 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the activity in the units of the source, standardized on the training split."
+        ),
+    },
+    "martinez_esterase_panel": {
+        "source": (
+            "Microbial esterase substrate panel (Martinez-Martinez et al.)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Specific activity of microbial esterases on a shared substrate panel. One row is one enzyme-substrate measurement over 146 distinct enzymes, and the split is per row, so the same enzyme appears in train and in test: the score is about new substrates, not new sequences."
+        ),
+        "label": (
+            "log10 of the specific activity in the units of the source, standardized on the training split."
+        ),
+    },
+    "mcba_reaction_activity": {
+        "source": (
+            "McbA amide synthetase single-mutant matrix against 9 pharmaceutical amide targets (wild-type coding sequence of its Table S6, 518 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Activity of McbA amide synthetase single mutants on nine pharmaceutical amide-synthesis reactions. One row is one variant-reaction pair over 1,217 distinct variants, and the split is per row, so a variant can appear in train and in test on other reactions."
+        ),
+        "label": (
+            "log10 of the activity in the units of the source, standardized on the training split."
+        ),
+    },
+    "mpro_fret_cleavage": {
+        "source": (
+            "FRET cleavage deep mutational scan of the SARS-CoV-2 main protease (Mpro / 3CLpro, PDB 6LU7 chain A, 306 residues)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Peptide cleavage activity of Mpro single mutants in a FRET reporter assay. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Functional score as the source reports it, standardized on the training split."
+        ),
+    },
+    "pafa_htmek_kcat": {
+        "source": (
+            "HT-MEK kinetic characterization of PafA alkaline phosphatase variants"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Michaelis-Menten kcat of PafA variants, measured one variant per chamber by high-throughput microfluidic expression and kinetics (HT-MEK). One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "log10 of kcat in the units of the source, standardized on the training split."
+        ),
+    },
+    "pafa_htmek_kcat_km": {
+        "source": (
+            "HT-MEK kinetic characterization of PafA alkaline phosphatase variants"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Michaelis-Menten the catalytic efficiency kcat/KM of PafA variants, measured one variant per chamber by high-throughput microfluidic expression and kinetics (HT-MEK). One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "log10 of the catalytic efficiency kcat/KM in the units of the source, standardized on the training split."
+        ),
+    },
+    "pafa_htmek_km": {
+        "source": (
+            "HT-MEK kinetic characterization of PafA alkaline phosphatase variants"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Michaelis-Menten KM of PafA variants, measured one variant per chamber by high-throughput microfluidic expression and kinetics (HT-MEK). One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "log10 of KM in the units of the source, standardized on the training split."
+        ),
+    },
+    "plpro_abundance": {
+        "source": (
+            "Deep mutational scan of the SARS-CoV-2 papain-like protease (PLpro)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Steady-state abundance of PLpro single mutants. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Abundance fitness as the source reports it, standardized on the training split."
+        ),
+    },
+    "plpro_activity": {
+        "source": (
+            "Deep mutational scan of the SARS-CoV-2 papain-like protease (PLpro)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Protease activity of PLpro single mutants. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Activity fitness as the source reports it, standardized on the training split."
+        ),
+    },
+    "pyks_solubility": {
+        "source": (
+            "Soluble-expression deep mutational scan of the PyKS polyketide synthase"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Soluble expression of PyKS variants, as an enrichment ratio between the soluble and insoluble fractions. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "Normalized enrichment ratio as the source reports it, standardized on the training split."
+        ),
+    },
+    "trpb3_epistasis": {
+        "source": (
+            "Three-site combinatorial library of the Thermotoga maritima tryptophan synthase beta subunit variant Tm9D8* (library 3A, positions 104, 105 and 106)"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Fitness of every combination of three mutated positions in Tm9D8* TrpB, a library built to measure epistasis between them. Only three residues vary, so the sequences differ from one another at three positions at most."
+        ),
+        "label": (
+            "Fitness as the source reports it, standardized on the training split."
+        ),
+    },
+    "welo5_soraphen_activity": {
+        "source": (
+            "Conversion panel of the WelO5* halogenase on soraphen A"
+        ),
+        "doi": None,
+        "provenance_note": (
+            "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+        ),
+        "description": (
+            "Conversion of soraphen A by WelO5* variants. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families."
+        ),
+        "label": (
+            "log10 of the conversion reported by the source, standardized on the training split."
         ),
     },
 }

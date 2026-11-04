@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "pyks_solubility",
+    "embedding_model": "noplm",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "pyks_solubility",
+        "batch_kind": "protein_global",
+        "label_kind": "scalar_regression",
+        "target_column": "normalized_er_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/pyks_solubility/pyks_solubility_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 5186,
+            "ordered_sha256": "a1e2d17abe235b832385d361e074a6f80870a0c42d382f071a542f40863fdb42"
+        },
+        "val": {
+            "count": 650,
+            "ordered_sha256": "798f07c0a790574bc9675608178d521fb18310258183709e483ef811ae182097"
+        },
+        "test": {
+            "count": 650,
+            "ordered_sha256": "a80be2e403238dbf8d7e311324e554ea375717e711302e32cb00bf47d1fb4904"
+        }
+    }
+}

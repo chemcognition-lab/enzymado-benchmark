@@ -1,0 +1,55 @@
+{
+    "schema_version": 1,
+    "task_name": "fisher_fdh_nacl",
+    "embedding_model": "esmc_600m",
+    "model_name": "attention_linear_regressor",
+    "split_variant": "random",
+    "wrapper": "AttentionRegressorTorch",
+    "params": {
+        "hidden_dims": [],
+        "lr": 0.001,
+        "epochs": 200,
+        "optimizer_name": "adamw",
+        "weight_decay": 0.1,
+        "dropout": 0.0,
+        "early_stopping_patience": 20,
+        "early_stopping_min_delta": 0.0001,
+        "gradient_accumulation_steps": 16
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "kendall_tau",
+        "objective": "negative_kendall_tau",
+        "mode": "min",
+        "initialization": "reference_only",
+        "eligible_epochs": "trained_with_defined_metric",
+        "undefined_metric": "ineligible_epoch",
+        "non_finite": "fail_run"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "fisher_fdh_nacl",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_conversion_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/fisher_fdh_nacl/fisher_fdh_nacl_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 2100,
+            "ordered_sha256": "4a51d93b82a64b4e42457a4d92f5c68d89e27a0ef0f41eac1b544be184637092"
+        },
+        "val": {
+            "count": 252,
+            "ordered_sha256": "110ba21b5a59c228f48b187a22f78d4c345172465be8c19225444cce874dc0e3"
+        },
+        "test": {
+            "count": 252,
+            "ordered_sha256": "5821618774e6f482692c57ed1e0f8b5be3015cea8ef0be9ad217f2b23a3134f5"
+        }
+    }
+}

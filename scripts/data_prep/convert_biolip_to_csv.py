@@ -69,7 +69,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         dest="out_path",
-        default="data/processed/biolip/BioLiP_nr.csv",
+        default="data/interim/biolip/BioLiP_nr.csv",
         help="Output CSV path.",
     )
     return parser

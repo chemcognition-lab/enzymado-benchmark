@@ -16,8 +16,8 @@ the numbers are comparable.
 </p>
 
 <p align="center">
-  <b><a href="https://huggingface.co/spaces/Enzymado/Enzymado">Explore the results in the browser</a></b>
-  — leaderboards, per-dataset comparisons, label distributions and UMAP projections,
+  <b><a href="https://huggingface.co/spaces/Enzymado/Enzymado">Explore the results in the browser</a></b>:
+  leaderboards, per-dataset comparisons, label distributions and UMAP projections,
   recomputed from the published numbers in this repository.
 </p>
 
@@ -28,10 +28,10 @@ the numbers are comparable.
 | axis | values |
 |---|---|
 | **Property datasets** | 10: `binding`, `binding_site`, `active_sites`, `ec_number`, `solubility`, `kcat`, `km`, `ph_opt`, `dtm`, `ddg` |
-| **Real-case datasets** | 8: amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase. All regression. |
+| **Case studies** | 36: amylase (activity / expression / stability), glucosidase (activity / expression / melting), GalOx, PETase and 28 more added on 2026-10-30, each with its dataset card under `data/processed/real_case/`. All regression. Paths, flags and keys call this scope `real_case`. |
 | **Protein language models** | 14, see the table below, plus `noplm`, a reference built without a language model |
-| **Split types** | 2: `random` and `similarity` (MMseqs2 at 30% identity and 80% coverage, whole clusters assigned to one split, 80/10/10). Real-case datasets are `random` only. |
-| **Baselines** | 5: linear, MLP and XGBoost on mean-pooled embeddings, plus linear and MLP over learned attention pooling. Protein-level tasks pool the embedding; residue-level tasks (`active_sites`, `binding_site`) keep one embedding per residue. |
+| **Split types** | 2: `random` and `similarity` (MMseqs2 at 30% identity and 80% coverage, whole clusters assigned to one split, 80/10/10). Case studies are `random` only. |
+| **Baselines** | 5: linear, MLP and XGBoost without attention, plus linear and MLP over learned attention pooling. Without attention, protein-level tasks use the mean-pooled embedding and residue-level tasks (`active_sites`, `binding_site`) keep one embedding per residue. |
 
 The 14 embedding models, with the manifest key each one is addressed by:
 
@@ -53,8 +53,8 @@ profile) as its pooled vector and a one-hot encoding of the 20 amino acids per r
 (`scripts/embeddings/build_noplm_features.py`). It runs through the same five baselines and
 competes in both leaderboards, so every PLM is compared with what needs no language model.
 
-That grid is **1,960 PLM runs** (1,400 on properties, 10 × 14 × 2 × 5, and 560 on real
-cases, 8 × 14 × 1 × 5) plus **140 `noplm` runs**.
+That grid is **3,920 PLM runs** (1,400 on properties, 10 × 14 × 2 × 5, and 2,520 on case
+studies, 36 × 14 × 1 × 5) plus **280 `noplm` runs**, 4,200 in all.
 
 Embeddings are **frozen**. Nothing fine-tunes the language model: the benchmark measures
 what the representation already carries, not what a full fine-tune could extract.
@@ -87,7 +87,7 @@ reading the results:
   The fragment list and its UniProt release are in `data/processed/uniprot_fragments.{csv,json}`.
   Residue tasks keep fragments: their labels are positions on the deposited sequence and all
   fall inside it.
-- **Real-case targets that span two or more orders of magnitude are modeled as log10**
+- **Case-study targets that span two or more orders of magnitude are modeled as log10**
   (GalOx and PETase activity, amylase activity and stability, glucosidase activity and
   expression), with zeros offset by the smallest positive value at one significant figure
   (`scripts/data_prep/clean_real.py`). PETase rows also carry the reaction temperature, pH
@@ -110,8 +110,8 @@ data_loading  →  training  →  prediction  →  evaluation
 
 1. **`data_loading`** turns a task name into a ready-to-train bundle: rows from the dataset
    CSV, embeddings pulled from safetensors shards, labels built per task type, and the
-   split assignment. Residue-level tasks stream embeddings lazily so that a 4.6 TB store
-   never has to fit in RAM.
+   split assignment. Residue-level tasks stream embeddings lazily so that 5.3 TB of residue
+   embeddings never have to fit in RAM.
 2. **`training`** takes that bundle plus an architecture from `models`, trains it with early
    stopping on the validation split, and returns a fitted estimator.
 3. **`prediction`** writes predictions for each split as compressed safetensors, alongside
@@ -138,9 +138,9 @@ wrapper.
 
 | route | tasks | input |
 |---|---|---|
-| `protein_global` + `binary` / `scalar_regression` | `solubility`, `ph_opt`, real cases | pooled protein vector |
+| `protein_global` + `binary` / `scalar_regression` | `solubility`, `ph_opt`, case studies | pooled protein vector |
 | `protein_global` + `multilabel_ec` | `ec_number` | pooled vector; hierarchical multi-head classifier, or one flat concatenated target for XGBoost with unknown descendants masked per column |
-| `protein_ligand_global` | `binding`, `kcat`, `km`, `cleeveland_galox` | pooled vector joined with the 200 descriptastorus `RDKit2DNormalized` descriptors of the substrate (`data/processed/ligand_features/descriptastorus.npz`, built by `scripts/data_prep/build_ligand_features.py`) |
+| `protein_ligand_global` | `binding`, `kcat`, `km`, `cleeveland_galox` | pooled vector joined with the 200 descriptastorus `RDKit2DNormalized` descriptors of the substrate (`data/ligand_features/descriptastorus.npz`, not tracked: build it once with `scripts/data_prep/build_ligand_features.py`) |
 | `mutation_delta_global` | `ddg`, `dtm` | mutant minus wild-type embedding |
 | `protein_residue` + `residue_binary_vector` | `active_sites`, `binding_site` | one embedding per residue, through `DataLoader` batches |
 
@@ -148,7 +148,7 @@ Global attention pooling (`ResidualAttentionAggregation`) adds a learned attenti
 the mean of the residues: the mean of the layer-normalized residues queries the residues,
 and the result is added back to the mean, so a silent attention branch returns mean pooling
 exactly. Residue tasks use `AttentionResidueMixer`, the same block with every residue as a
-query and nothing pooled. Attention heads train like their mean-pool counterparts (same
+query and nothing pooled. Attention heads train like their counterparts without attention (same
 optimizer, learning rate, weight decay, dropout and early stopping, gradients accumulated to
 a batch of 256).
 
@@ -188,7 +188,7 @@ resamples, after their ordered test sample identities are checked.
 
 ### Ratings
 
-Per-task results become two global leaderboards (`properties` and `real_case`) via
+Per-task results become two global leaderboards (`properties` and the case studies, `real_case`) via
 weighted **Bradley–Terry maximum likelihood** over paired bootstrap battles, centered at
 1500. In each of 1,000 bootstrap rounds every pair of the 75 competitors (15 embeddings × 5
 baselines) plays one battle per rated metric on every task and split; refits per round give
@@ -203,8 +203,8 @@ Everything that shapes the ratings lives in the **`rating` section of
   MAE already scores the error size, and accuracy is uninformative on rare labels.
 - **Task weights.** Property tasks are weighted by how directly they test knowledge of
   enzymes, in five equal steps: `ec_number`, `active_sites` 1.0; `kcat`, `binding_site`
-  0.8; `km`, `ph_opt` 0.6; `ddg`, `dtm` 0.4; `binding`, `solubility` 0.2. Real-case
-  datasets weigh equally.
+  0.8; `km`, `ph_opt` 0.6; `ddg`, `dtm` 0.4; `binding`, `solubility` 0.2. The case
+  studies weigh equally.
 - **Split weights.** Each property task weight is split 0.4 random / 0.6 similarity.
 - **Training-noise ties.** A battle is a tie, half a win each, when the gap is within
   `z * sqrt(sigma_a^2 + sigma_b^2)` with z = 1.96, sigma being the training-noise SD of each
@@ -216,7 +216,7 @@ Everything that shapes the ratings lives in the **`rating` section of
   leaderboard).
 - **Exclusions.** A Kendall's tau or AUROC cell is withheld when even the best competitor
   stays below the no-skill references 0.1 / 0.55; no cell met that rule in the published
-  results. The property leaderboard rates 70 metric cells and the real-case one 16.
+  results. The property leaderboard rates 70 metric cells and the case-study one 72.
 
 Command-line flags of `compute_ratings.py` (`--tie-z`, `--tie-margins`,
 `--random-weight`, `--similarity-weight`) override the card for sensitivity analyses; for
@@ -303,19 +303,40 @@ python scripts/results/compute_tie_margins.py
 python scripts/results/compute_ratings.py
 ```
 
-`compute_bootstrap_metrics.py` alone is enough: it recomputes the test point estimates and
-writes them with the bootstrap. Per-row sufficient statistics are cached under
-`results/evaluation_statistics/` (untracked), each keyed by the SHA-256 of its prediction
-file; the bootstrap builds a missing entry itself, and running `compute_metrics.py` first
-only fills the cache in advance. The `--n-replicates` default is 200; the published results
-use 1,000.
+The two scoring scripts do different jobs:
+
+- `compute_bootstrap_metrics.py` gives the leaderboard its scores, and it needs nothing run
+  before it. For each run it recomputes the test metrics, resamples the test set and writes
+  the replicates to `results/bootstrap/.../test.npz`, which `compute_ratings.py` reads. It
+  also writes the test point estimates and their intervals into the run's `metrics.json`
+  (`test` and `test_bootstrap`), keeping any `train` and `val` blocks already there. It does
+  not compute train or val. The `--n-replicates` default is 200; the published results use
+  1,000.
+- `compute_metrics.py` computes point estimates for every split (train, val and test) into
+  `metrics.json`, without resampling. Use it to look at a model's numbers on any split, and
+  before `compute_tie_margins.py`: the tie margins read the test metrics of the seed
+  retrainings, which have no bootstrap, and drop regression runs whose train R2 is below
+  -1, a train block only `compute_metrics.py` writes. Without it that filter keeps every
+  run.
+
+The leaderboard needs both the bootstrap and a tie margin (sigma) for every cell:
+`compute_ratings.py` reads sigma from the file named in `benchmark_card.json`
+(`results/noise_seeds/tie_margins_v4.csv`) and stops if a cell has none. To rate again a
+task already in that file, the bootstrap is all you need. A new task first needs its seed
+retrainings, `compute_metrics.py` on every seed (42 included) and `compute_tie_margins.py`.
+
+`compute_metrics.py` rewrites the whole `metrics.json`, so running it after the bootstrap
+erases the `test_bootstrap` block (the `test.npz` replicates and the leaderboard are not
+affected). When you need both, run `compute_metrics.py` first. For classification, both
+scripts share a per-row count cache under `results/evaluation_statistics/` (untracked,
+keyed by the SHA-256 of each prediction file), which either one builds when it is missing.
 
 On a Slurm cluster, `scripts/slurm/` wraps the same entry points as array jobs over the 14
 embedding models; pass your own `--account`.
 
 ### Computing the embeddings
 
-The embedding stores are not distributed: they are about 4.6 TB at residue level. To rebuild
+The embedding stores are not distributed: they are about 5.3 TB at residue level. To rebuild
 them:
 
 ```bash

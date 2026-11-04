@@ -1,0 +1,51 @@
+{
+    "schema_version": 1,
+    "task_name": "ao_3fcr_transaminase",
+    "embedding_model": "ankh_base",
+    "model_name": "xgb_regression",
+    "split_variant": "random",
+    "wrapper": "XGBRegressor",
+    "params": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_jobs": -1,
+        "device": "cuda",
+        "eval_metric": "rmse",
+        "early_stopping_rounds": 20,
+        "random_state": 42
+    },
+    "selection_protocol": {
+        "version": 3,
+        "metric": "rmse",
+        "mode": "min",
+        "early_stopping_rounds": 20,
+        "initialization": "not_applicable"
+    },
+    "random_seed": 42,
+    "deterministic_algorithms": false,
+    "task_config": {
+        "registry_name": "ao_3fcr_transaminase",
+        "batch_kind": "protein_ligand_global",
+        "label_kind": "scalar_regression",
+        "target_column": "log10_specific_activity_standardized",
+        "numeric_feature_columns": [],
+        "dataset_paths": {
+            "random": "data/processed/real_case/ao_3fcr_transaminase/ao_3fcr_transaminase_random_80_10_10_standardized.csv"
+        }
+    },
+    "sample_identity": {
+        "train": {
+            "count": 1628,
+            "ordered_sha256": "66ff98909704591a28559a497c723973d43aee368e685b756c39ea683be1e250"
+        },
+        "val": {
+            "count": 203,
+            "ordered_sha256": "253eb4dc7fce7f34ec0d9a429903beaa1b2880131e0ba978160e014b4dea323b"
+        },
+        "test": {
+            "count": 203,
+            "ordered_sha256": "9f1454c30f27b064376e30804dc5397da7d6d0fb0d5def1dab17dff50cf62ed1"
+        }
+    }
+}

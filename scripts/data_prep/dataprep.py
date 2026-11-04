@@ -273,9 +273,7 @@ def prep_biolip(p: _P):
         lig_col="smiles",
     )
 
-    out_dir = p.data_processed_datasets / "biolip_binding"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "biolip_cleaned_with_negatives.csv"
+    out_path = p.data_interim_dir / "biolip" / "biolip_cleaned_with_negatives.csv"
 
     neg_df.to_csv(out_path, index=False)
     print(f"Saved biolip cleaned dataset to {out_path}")

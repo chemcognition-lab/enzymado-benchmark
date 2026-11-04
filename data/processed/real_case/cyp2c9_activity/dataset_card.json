@@ -3,13 +3,20 @@
   "property_name": "cyp2c9_activity",
   "task_scope": "real_case",
   "definitions": "benchmark_card.json#/definitions",
+  "description": "Catalytic activity of CYP2C9 single mutants, read out by Click-seq. One row is one variant of a single wild-type enzyme, so every sequence differs from every other by a few mutations and the split does not separate protein families.",
+  "origin_of_data": {
+    "source_name": "Click-seq activity deep mutational scan of human cytochrome P450 2C9 (UniProt P11712, 490 residues)",
+    "doi": null,
+    "note": "Citation pending: the preprocessing script records the enzyme and the source tables, not the publication."
+  },
   "label": {
     "column": "activity_score_standardized",
-    "label_kind": "continuous",
+    "label_kind": "scalar_regression",
+    "description": "Activity score as the source reports it, standardized on the training split.",
     "see_also": "benchmark_card.json#/definitions"
   },
   "statistics": {
-    "generated": "2026-11-03",
+    "generated": "2026-11-02",
     "split_sizes_by_method": {
       "cyp2c9_activity_random_80_10_10_standardized": {
         "train": 4913,
@@ -88,8 +95,8 @@
     },
     "used_in_runs": {
       "note": "rows whose sequence every PLM embedded (common_ids)",
-      "rows": 1,
-      "distinct_proteins": 1,
+      "rows": 6143,
+      "distinct_proteins": 6143,
       "distinct_protein_length_summary": {
         "min": 490,
         "max": 490,
