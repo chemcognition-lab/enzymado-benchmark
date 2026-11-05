@@ -1,7 +1,7 @@
 # Dataset Card: `align_amylase_expression` — *Bacillus subtilis* $\alpha$-Amylase Secreted Expression (ALIGN Tournament)
 
-> ** JSON Companion**: [`align_amylase_expression_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/align_amylase_expression_dataset_card_enriched.json)
-> ** Computed Statistics**: [`data/processed/real_case/align_amylase_expression/dataset_card.json#/statistics`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_amylase_expression/dataset_card.json)
+> ** JSON Companion**: [`align_amylase_expression_dataset_card_enriched.json`](../../docs/data_cards/align_amylase_expression_dataset_card_enriched.json)
+> ** Computed Statistics**: [`data/processed/real_case/align_amylase_expression/dataset_card.json#/statistics`](../../data/processed/real_case/align_amylase_expression/dataset_card.json)
 
 ---
 
@@ -14,15 +14,15 @@
 | **Task / Label / Layout** | `protein_global` / `scalar_regression` / **Layout A (protein-only)** |
 | **Enzyme & EC Number** | Endo-1,4-$\alpha$-D-glucan glucanohydrolase ($\alpha$-amylase AmyE, GH13) — **EC `3.2.1.1`** |
 | **Source Organism & Wild-Type ID** | *Bacillus subtilis* — UniProt **`P00692`** (425 aa mature catalytic sequence; PDB `1BAG`, `1UA7`) |
-| **Primary Benchmark Paper** | Armer, C. et al. (2025). *Proteins: Structure, Function, and Bioinformatics*, 93(12), 2005–2014. DOI: `10.1002/prot.70008` ([`align_tournament2025_proteins.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/align_tournament2025_proteins.pdf), [`align_tournament2025_suppinfo.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/align_tournament2025_suppinfo.pdf)) |
+| **Primary Benchmark Paper** | Armer, C. et al. (2025). *Proteins: Structure, Function, and Bioinformatics*, 93(12), 2005–2014. DOI: `10.1002/prot.70008` (`align_tournament2025_proteins.pdf`, `align_tournament2025_suppinfo.pdf`) |
 | **Upstream Donor & Preprint** | Donated by **International Flavors and Fragrances (IFF)**; van der Flier et al. (2023) *bioRxiv* `10.1101/2023.09.25.559319v2`, OSF `10.17605/OSF.IO/QRN3C`, and patents EP 2,698,434 A1 / US 8,323,945 B2 / US 8,975,056 B2 / US 9,090,887 B2 |
-| **Processed Dataset Size** | **9,421** unique 425-aa protein variants (from 9,473 deduplicated measurements; **7,537** train / **942** val / **942** test) |
+| **Processed Dataset Size** | **9,421** unique 425-aa protein variants (from 9,473 deduplicated measurements; **7,541** train / **940** val / **940** test) |
 
 ---
 
 ## 2. How to Think About This Dataset
 
-- **What a row represents**: Each row in [`align_amylase_expression.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_amylase_expression/align_amylase_expression.csv) represents one unique 425-residue *Bacillus subtilis* $\alpha$-amylase (`AmyE`) variant sequence (`protein_sequence`), the count of deduplicated cross-campaign measurements averaged for that sequence (`n_measurements`, equal to `1` for 9,369 variants and `2` for 52 variants), and its linear-scale secreted expression ratio (`expression`).
+- **What a row represents**: Each row in [`align_amylase_expression.csv`](../../data/processed/real_case/align_amylase_expression/alpha_amylase__expression.csv) represents one unique 425-residue *Bacillus subtilis* $\alpha$-amylase (`AmyE`) variant sequence (`protein_sequence`), the count of deduplicated cross-campaign measurements averaged for that sequence (`n_measurements`, equal to `1` for 9,369 variants and `2` for 52 variants), and its linear-scale secreted expression ratio (`expression`).
 - **Biochemical meaning of the label**: The label quantifies the concentration of soluble $\alpha$-amylase secreted into the extracellular culture supernatant after 3 days of *B. subtilis* growth in microtiter plates at $37\,^\circ\text{C}$, measured in parts per million (`ppm`) by size-exclusion chromatography (UHPLC/HPLC SEC at $220\text{ nm}$ against a purified $\alpha$-amylase calibrator, or Bradford protein assay) and normalized to the parent control on each plate. Because it measures cumulative extracellular accumulation in a Gram-positive host, it captures the combined effects of translation rate, Sec-translocon export efficiency, co-translational folding, and resistance to extracellular *Bacillus* proteases. Unlike `align_amylase_activity` and `align_amylase_stability`, `expression` is kept on a **linear scale** (`[0.05, 3.194]`, mean $= 0.6929$, SD $= 0.4534$, median $= 0.616$, skewness $= +0.5625$) because the distribution is already compact and strictly positive.
 - **What predictive success actually demonstrates**: Success on `align_amylase_expression` shows that a model can predict how single-point mutations (`7,546` variants from `dataset=1`) and rational combinations of up to 11 mutations (`1,875` variants from `dataset=2`) perturb extracellular soluble protein yield in *B. subtilis*. Under the default 80/10/10 random split, test evaluation reflects a mix of dense single-mutant interpolation and combinatorial multi-mutant regression across shared mutational building blocks.
 
@@ -51,7 +51,7 @@
 ## 5. How the Dataset Was Built & Cleaned
 
 1. **Upstream screening & tournament release**: IFF donated `11,724` training rows (`8,500` in `dataset=1`, `3,224` in `dataset=2`) and `570` test rows (`dataset=2`) from its *B. subtilis* AmyE engineering campaigns (van der Flier et al. 2023; EP 2,698,434 A1; US 8,323,945 B2; US 8,975,056 B2; US 9,090,887 B2).
-2. **Tournament test-set overlap removal**: In [`scripts/data_prep/real_cases/align_tournament.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py), [`load_align_rows`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py#L130-L195) drops all `570` rows from `test (with values).csv` because 100% of their sequences already appear in `train.csv` (`570 tournament test rows already in train`).
+2. **Tournament test-set overlap removal**: In [`scripts/data_prep/real_cases/align_tournament.py`](../../scripts/data_prep/real_cases/align_tournament.py), [`load_align_rows`](../../scripts/data_prep/real_cases/align_tournament.py#L130-L195) drops all `570` rows from `test (with values).csv` because 100% of their sequences already appear in `train.csv` (`570 tournament test rows already in train`).
 3. **Exact measurement deduplication**: `1,750` exact duplicate rows in `train.csv` are removed, leaving `9,974` unique interim rows in `data/interim/align/align_amylase.csv`.
 4. **Task filtering, repeat averaging, and linear scaling**: Filtering for finite `expression` retains `9,473` measurements across `9,421` unique sequences (`553` interim rows lack an expression measurement). The `52` sequences with 2 distinct measurements (`dataset=1` and `dataset=2`) are averaged by arithmetic mean (`n_measurements = 2`), and the target is retained on the linear scale (`expression`) before train-split `z`-score standardization.
 
@@ -71,7 +71,7 @@
 
 ## 7. Split Semantics, Leakage & Caveats
 
-- **Standardized split**: [`align_amylase_expression_random_80_10_10_standardized.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_amylase_expression/align_amylase_expression_random_80_10_10_standardized.csv) partitions the `9,421` unique variants into **7,537 train / 942 val / 942 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split keyed on unique sequence, with `z`-score standardization fit on the training split ($\mu_{\text{train}} = 0.6929$, $\sigma_{\text{train}} = 0.4534$).
+- **Standardized split**: [`align_amylase_expression_random_80_10_10_standardized.csv`](../../data/processed/real_case/align_amylase_expression/alpha_amylase__expression_random_80_10_10_standardized.csv) partitions the `9,421` unique variants into **7,541 train / 940 val / 940 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split keyed on unique sequence, with `z`-score standardization fit on the training split ($\mu_{\text{train}} = 0.6929$, $\sigma_{\text{train}} = 0.4534$).
 - **Caveats & leakage analysis**:
   - **Zero exact sequence overlap**, with $>97.4\%$ pairwise sequence identity across all 9,421 variants of *B. subtilis* AmyE.
   - **Pooled single + multi-mutant regime**: Both `dataset=1` single mutants and `dataset=2` combinatorial multi-mutants are present in train, val, and test; use `source_dataset` in `data/interim/align/align_amylase.csv` if evaluating strict single-to-multi-mutant generalization.

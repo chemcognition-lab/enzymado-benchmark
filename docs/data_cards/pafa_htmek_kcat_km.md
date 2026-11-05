@@ -2,13 +2,13 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `1,042` unique variants (`832` train / `104` val / `106` test)
 > **Primary Citation:** Markin, C. J. *et al.* Revealing enzyme functional architecture via high-throughput microfluidic enzyme kinetics. *Science* **373**, eabf8761 (2021). [DOI: 10.1126/science.abf8761](https://doi.org/10.1126/science.abf8761)
-> **Machine-Readable Contract:** [`pafa_htmek_kcat_km_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_kcat_km_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/pafa_htmek_kcat_km/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/pafa_htmek_kcat_km/dataset_card.json)
+> **Machine-Readable Contract:** [`pafa_htmek_kcat_km_dataset_card_enriched.json`](../../docs/data_cards/pafa_htmek_kcat_km_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/pafa_htmek_kcat_km/dataset_card.json`](../../data/processed/real_case/pafa_htmek_kcat_km/dataset_card.json)
 
 ---
 
 ## 1. How to Think About This Dataset
 
-- **Complete, Uncensored 1,042-Variant HT-MEK Catalytic Efficiency Landscape:** `pafa_htmek_kcat_km` measures the apparent second-order rate constant ($\log_{10}(k_{\text{cat}}/K_M)$ in $\text{M}^{-1}\text{s}^{-1}$) for **all 1,042 variants** of *Elizabethkingia meningoseptica* PafA hydrolyzing the fluorogenic aryl phosphate monoester **cMUP**. Unlike [`pafa_htmek_kcat`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_kcat.md) and [`pafa_htmek_km`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_km.md) ($N = 1,018$), which drop 24 non-saturating loss-of-function variants, `pafa_htmek_kcat_km` retains all 24 severely compromised variants via their lower-limit-of-detection (LLoD) upper bounds.
+- **Complete, Uncensored 1,042-Variant HT-MEK Catalytic Efficiency Landscape:** `pafa_htmek_kcat_km` measures the apparent second-order rate constant ($\log_{10}(k_{\text{cat}}/K_M)$ in $\text{M}^{-1}\text{s}^{-1}$) for **all 1,042 variants** of *Elizabethkingia meningoseptica* PafA hydrolyzing the fluorogenic aryl phosphate monoester **cMUP**. Unlike [`pafa_htmek_kcat`](../../docs/data_cards/pafa_htmek_kcat.md) and [`pafa_htmek_km`](../../docs/data_cards/pafa_htmek_km.md) ($N = 1,018$), which drop 24 non-saturating loss-of-function variants, `pafa_htmek_kcat_km` retains all 24 severely compromised variants via their lower-limit-of-detection (LLoD) upper bounds.
 - **Composite Readout of Catalysis and Kinetic Folding Partitioning ($f_a$):** Although immobilized enzyme concentration $\text{[E]}$ is calibrated and divided out in every chamber via C-terminal eGFP fluorescence, mutations at **232 positions promote kinetic partitioning during $37\,^\circ\text{C}$ cell-free expression into a long-lived, catalytically inactive misfolded state (`M`)** whose eGFP tag remains fluorescent. Apparent $k_{\text{cat}}/K_M$ therefore equals $(k_{\text{cat}}/K_M)_{\text{chem}} \times f_a$.
 - **Partially Binding-Limited Near Wild Type:** Because cMUP is a fast, activated aryl monoester, substrate binding is partially rate-limiting for wild-type PafA ($\sim 1.4 \times 10^6\text{ M}^{-1}\text{s}^{-1}$); small destabilizations of the chemical transition state are buffered on cMUP until the chemical barrier exceeds the binding barrier.
 
@@ -34,7 +34,7 @@
 
 ## 4. How the Dataset Was Built & Target Transformation
 
-- **Enzymado Ingestion ([`pafa_htmek.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/pafa_htmek.py)):** Reads all 1,042 rows of `data/raw/real_cases/pafa_htmek/pafa_htmek_summary.csv` and computes:
+- **Enzymado Ingestion ([`pafa_htmek.py`](../../scripts/data_prep/real_cases/pafa_htmek.py)):** Reads all 1,042 rows of `data/raw/real_cases/pafa_htmek/pafa_htmek_summary.csv` and computes:
   $$y_{\text{raw}} = \log_{10}\!\left(\frac{k_{\text{cat}}}{K_M}\ [\text{M}^{-1}\text{s}^{-1}]\right)$$
   spanning $2.3222$ ($210\text{ M}^{-1}\text{s}^{-1}$) to $6.7243$ ($5.3 \times 10^6\text{ M}^{-1}\text{s}^{-1}$), standardized with $\mu_{\text{train}} = 5.798685$, $\sigma_{\text{train}} = 0.685639$.
 

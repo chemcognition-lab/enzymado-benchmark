@@ -2,7 +2,7 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `504` unique variants (`404` train / `50` val / `50` test)
 > **Primary Citation:** Büchler, J. *et al.* Algorithm-aided engineering of aliphatic halogenase WelO5* for the asymmetric late-stage functionalization of soraphens. *Nature Communications* **13**, 371 (2022). [DOI: 10.1038/s41467-022-27999-1](https://doi.org/10.1038/s41467-022-27999-1)
-> **Machine-Readable Contract:** [`welo5_soraphen_activity_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/welo5_soraphen_activity_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/welo5_soraphen_activity/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/welo5_soraphen_activity/dataset_card.json)
+> **Machine-Readable Contract:** [`welo5_soraphen_activity_dataset_card_enriched.json`](../../docs/data_cards/welo5_soraphen_activity_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/welo5_soraphen_activity/dataset_card.json`](../../data/processed/real_case/welo5_soraphen_activity/dataset_card.json)
 
 ---
 
@@ -37,7 +37,7 @@
 
 - **Upstream Definition:** Total chlorination conversion is quantified by UPLC-MS in Single Ion Monitoring (SIM) mode from the peak areas of monochlorinated isomers **1a** and **1b** ($m/z\ 523.2$), hydroxylated byproduct **1c** ($m/z\ 505.2$), and unreacted Soraphen A **1** ($m/z\ 489.3$):
   $$\text{tot. Cl conversion} = \frac{\text{SIM}_{1a} + \text{SIM}_{1b}}{\text{SIM}_{1a} + \text{SIM}_{1b} + \text{SIM}_{1c} + \text{SIM}_{1}}, \qquad A = \frac{\text{tot. Cl conversion}_{\text{mutant}}}{\text{tot. Cl conversion}_{\text{GAP}}}$$
-- **Enzymado Ingestion ([`welo5_soraphen.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/welo5_soraphen.py)):** Reads all 504 rows from `data/raw/real_cases/welo5_soraphen/WelO5_data.xlsx` (`Data` sheet), substitutes positions 81, 88, and 161 on the 290-aa wild-type sequence (`welo5_wt.fasta`), and computes:
+- **Enzymado Ingestion ([`welo5_soraphen.py`](../../scripts/data_prep/real_cases/welo5_soraphen.py)):** Reads all 504 rows from `data/raw/real_cases/welo5_soraphen/WelO5_data.xlsx` (`Data` sheet), substitutes positions 81, 88, and 161 on the 290-aa wild-type sequence (`welo5_wt.fasta`), and computes:
   $$y_{\text{raw}} = \log_{10}(A + 10^{-3})$$
   followed by z-score standardization using the training split mean ($\mu_{\text{train}} = -2.265699$) and standard deviation ($\sigma_{\text{train}} = 1.163178$).
 

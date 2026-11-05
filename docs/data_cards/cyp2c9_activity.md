@@ -2,7 +2,7 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `6,143` unique variants (`4,913` train / `615` val / `615` test)
 > **Primary Citation:** Amorosi, C. J. *et al.* Massively parallel characterization of CYP2C9 variant enzyme activity and abundance. *The American Journal of Human Genetics* **108**, 1735–1751 (2021). [DOI: 10.1016/j.ajhg.2021.07.001](https://doi.org/10.1016/j.ajhg.2021.07.001)
-> **Machine-Readable Contract:** [`cyp2c9_activity_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/cyp2c9_activity_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/cyp2c9_activity/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/cyp2c9_activity/dataset_card.json)
+> **Machine-Readable Contract:** [`cyp2c9_activity_dataset_card_enriched.json`](../../docs/data_cards/cyp2c9_activity_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/cyp2c9_activity/dataset_card.json`](../../data/processed/real_case/cyp2c9_activity/dataset_card.json)
 
 ---
 
@@ -10,7 +10,7 @@
 
 - **Clinical Pharmacogene DMS via Click-seq:** `cyp2c9_activity` characterizes **6,142 single missense variants plus 1 wild-type sequence (`6,143` total)** across positions 2–490 of **human Cytochrome P450 2C9 (CYP2C9, 490 aa)**, the primary hepatic monooxygenase responsible for clearing $\sim 15\%$ of clinical drugs including the narrow-therapeutic-index anticoagulant *S*-warfarin and the anticonvulsant phenytoin.
 - **Mechanism-Based Suicide Probe Readout (TAHA-ABP):** Expressed in a humanized *Saccharomyces cerevisiae* strain (`YMD4256`) carrying chromosomally integrated human cytochrome P450 reductase (CPR) and cytochrome $b_5$, catalytically active CYP2C9 oxidizes the tienilic acid hexynyl amide activity-based probe (**TAHA-ABP**) into a reactive thiophene sulfoxide/epoxide intermediate that covalently alkylates the enzyme. CuAAC click chemistry appends a CF488A fluorophore for 4-gate FACS sorting and UMI-deduplicated barcode sequencing.
-- **Coupled Activity + Abundance Readout:** Because Click-seq measures total probe labeling per cell without normalizing for protein abundance, **steady-state protein abundance explains $\sim 56\%$ of the variance in `activity_score`** ($r = 0.748$, $R^2 = 0.56$ across 4,421 missense variants shared with [`cyp2c9_abundance`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/cyp2c9_abundance.md)), while heme-coordinating residues (`Cys435`, `Glu354`, `Arg357`, `Arg97`, `Gly431`, `Arg433`, `Gly437`) selectively abolish activity without destabilizing the fold.
+- **Coupled Activity + Abundance Readout:** Because Click-seq measures total probe labeling per cell without normalizing for protein abundance, **steady-state protein abundance explains $\sim 56\%$ of the variance in `activity_score`** ($r = 0.748$, $R^2 = 0.56$ across 4,421 missense variants shared with [`cyp2c9_abundance`](../../docs/data_cards/cyp2c9_abundance.md)), while heme-coordinating residues (`Cys435`, `Glu354`, `Arg357`, `Arg97`, `Gly431`, `Arg433`, `Gly437`) selectively abolish activity without destabilizing the fold.
 
 ---
 
@@ -35,7 +35,7 @@
 ## 4. How the Dataset Was Built & Target Transformation
 
 - **Upstream Definition:** Weighted average across 4 FACS bins ($w_1 = 0.05$, $w_2 = 0.2$, $w_3 = 0.25$, $w_4 = 1.0$, calibrated against 14 monogenic controls at $R^2 = 0.986$), linearly normalized per replicate so that the median synonymous variant equals `1.0` and the median nonsense variant (first 90% of protein) equals `0.0`.
-- **Enzymado Ingestion ([`cyp2c9_dms.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/cyp2c9_dms.py)):** Reads `data/raw/real_cases/cyp2c9_dms/mavedb_00000095_a_1_scores.csv` (`6,524` rows), maps `p.=` to the 490-aa wild-type sequence (`score = 1.0`), drops `131` nonsense (`Ter`) and `250` single-site synonymous (`=`) rows, retains all `6,142` missense rows (`6,143` total), and z-score standardizes using the training split ($\mu_{\text{train}} = 0.541096$, $\sigma_{\text{train}} = 0.365358$).
+- **Enzymado Ingestion ([`cyp2c9_dms.py`](../../scripts/data_prep/real_cases/cyp2c9_dms.py)):** Reads `data/raw/real_cases/cyp2c9_dms/mavedb_00000095_a_1_scores.csv` (`6,524` rows), maps `p.=` to the 490-aa wild-type sequence (`score = 1.0`), drops `131` nonsense (`Ter`) and `250` single-site synonymous (`=`) rows, retains all `6,142` missense rows (`6,143` total), and z-score standardizes using the training split ($\mu_{\text{train}} = 0.541096$, $\sigma_{\text{train}} = 0.365358$).
 
 ---
 

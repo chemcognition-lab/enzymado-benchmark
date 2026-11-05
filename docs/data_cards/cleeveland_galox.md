@@ -1,7 +1,7 @@
 # Dataset Card: `cleeveland_galox` — Fungal AA5_2 Copper Radical Oxidase Substrate Specificity Survey
 
-> ** JSON Companion**: [`cleeveland_galox_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/cleeveland_galox_dataset_card_enriched.json)
-> ** Computed Statistics**: [`data/processed/real_case/cleeveland_galox/dataset_card.json#/statistics`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/cleeveland_galox/dataset_card.json)
+> ** JSON Companion**: [`cleeveland_galox_dataset_card_enriched.json`](../../docs/data_cards/cleeveland_galox_dataset_card_enriched.json)
+> ** Computed Statistics**: [`data/processed/real_case/cleeveland_galox/dataset_card.json#/statistics`](../../data/processed/real_case/cleeveland_galox/dataset_card.json)
 
 ---
 
@@ -14,15 +14,15 @@
 | **Task / Label / Layout** | `protein_ligand_global` / `scalar_regression` / **Layout B + numeric conditions** (`protein_sequence`, `smiles`, `substrate_concentration`) |
 | **Enzyme Family & EC Numbers** | Auxiliary Activity Family 5 Subfamily 2 (AA5_2) fungal copper radical oxidases (CROs) — **EC `1.1.3.9`** (galactose 6-oxidase), **EC `1.1.3.13`** (alcohol oxidase), **EC `1.1.3.7`** (aryl-alcohol oxidase) |
 | **Source Organisms** | 11 fungal species across Ascomycota & Basidiomycota (12 recombinant enzymes: `ExeGalOx`, `MreGalOx`, `PfeGalOx`, `FoxGalOxB`, `UmaRafOx`, `PhuRafOx`, `AflAlcOx`, `PruAlcOx` [`PruAA5_2A`], `FoxAlcOx`, `AsyAlcOx`, `PorAlcOx`, `CglAlcOx`) |
-| **Primary Survey Paper (`review` / `si`)** | Cleveland, M. E. et al. (2021). "A survey of substrate specificity among Auxiliary Activity Family 5 copper radical oxidases." *Cellular and Molecular Life Sciences*, 78, 8187–8208. DOI: `10.1007/s00018-021-03981-w` ([`cleveland_galox2021_cmls.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/cleveland_galox2021_cmls.pdf), [`cleveland_galox2021_cmls_suppinfo.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/cleveland_galox2021_cmls_suppinfo.pdf) Tables S5–S10) |
-| **Companion Paper (`main` / `si`)** | Cleveland, M. et al. (2021). "Two *Fusarium* copper radical oxidases with high activity on aryl alcohols." *Biotechnology for Biofuels*, 14, 138. DOI: `10.1186/s13068-021-01984-0` ([`cleveland_galox2021_biotechbiofuels.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/cleveland_galox2021_biotechbiofuels.pdf), [`cleveland_galox2021_suppinfo.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/cleveland_galox2021_suppinfo.pdf)) |
+| **Primary Survey Paper (`review` / `si`)** | Cleveland, M. E. et al. (2021). "A survey of substrate specificity among Auxiliary Activity Family 5 copper radical oxidases." *Cellular and Molecular Life Sciences*, 78, 8187–8208. DOI: `10.1007/s00018-021-03981-w` (`cleveland_galox2021_cmls.pdf`, `cleveland_galox2021_cmls_suppinfo.pdf` Tables S5–S10) |
+| **Companion Paper (`main` / `si`)** | Cleveland, M. et al. (2021). "Two *Fusarium* copper radical oxidases with high activity on aryl alcohols." *Biotechnology for Biofuels*, 14, 138. DOI: `10.1186/s13068-021-01984-0` (`cleveland_galox2021_biotechbiofuels.pdf`, `cleveland_galox2021_suppinfo.pdf`) |
 | **Processed Dataset Size** | **385** active enzyme–substrate pairs (**12** unique proteins $\times$ **40** unique substrates; **350** rows $\le 1024$ aa; **316** train / **34** val / **35** test) |
 
 ---
 
 ## 2. How to Think About This Dataset
 
-- **What a row represents**: Each row in [`cleeveland_galox.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/cleeveland_galox/cleeveland_galox.csv) represents one catalytically active **(AA5_2 enzyme, small-molecule substrate)** pair (`protein_sequence` and canonical isomeric `smiles`), the assay `substrate_concentration` (in $\text{mM}$: `300.0`, `30.0`, `5.0`, or `2.5`), and the base-10 log-transformed initial-rate specific activity (`log10_specific_activity`, where raw specific activity is in $\mu\text{mol}\cdot\text{min}^{-1}\cdot\text{mg}^{-1}$ of purified enzyme).
+- **What a row represents**: Each row in [`cleeveland_galox.csv`](../../data/processed/real_case/cleeveland_galox/cleeveland.csv) represents one catalytically active **(AA5_2 enzyme, small-molecule substrate)** pair (`protein_sequence` and canonical isomeric `smiles`), the assay `substrate_concentration` (in $\text{mM}$: `300.0`, `30.0`, `5.0`, or `2.5`), and the base-10 log-transformed initial-rate specific activity (`log10_specific_activity`, where raw specific activity is in $\mu\text{mol}\cdot\text{min}^{-1}\cdot\text{mg}^{-1}$ of purified enzyme).
 - **Incomplete $12 \times 40$ screening matrix & positive-only survivorship filtering**:
   - In Cleveland et al. (2021) *Cell. Mol. Life Sci.* (`review` Fig. 2, p. 7; `si` Tables S5–S10, pp. 9–16), 12 purified AA5_2 homologs were screened in triplicate across a panel of 40 substrates ($12 \times 40 = 480$ cells).
   - Out of those 480 cells, **385 cells** exhibited measurable specific activity ($\ge 0.01\,\mu\text{mol}\cdot\text{min}^{-1}\cdot\text{mg}^{-1}$, up to $705.0\,\mu\text{mol}\cdot\text{min}^{-1}\cdot\text{mg}^{-1}$), whereas **94 cells** fell below the limit of detection ($9 \times 10^{-4}\,\mu\text{mol}\cdot\text{min}^{-1}\cdot\text{mg}^{-1}$, marked `n.m.` in Tables S5–S10) and **1 cell** was not assayed (`AsyAlcOx` on glycolaldehyde dimer, marked `NA` in Table S9).
@@ -60,8 +60,8 @@
 
 ## 5. How the Dataset Was Built & Cleaned
 
-1. **Provenance reconciliation (`10.1007/s00018-021-03981-w` vs. `10.1186/s13068-021-01984-0`)**: While [`scripts/data_prep/card_metadata.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/card_metadata.py) cites the companion *Fusarium* AAO paper by the same first and last authors (`Cleveland et al. 2021 Biotechnol. Biofuels 14:138`, `main`), the 12 proteins in `proteins.csv` and 385 specific activity rows in `og_dataset_clev.csv` are extracted directly from **Supplementary Tables S5–S10** of the 12-enzyme survey paper (`Cleveland et al. 2021 Cell. Mol. Life Sci. 78:8187–8208`, `review` / `si`).
-2. **Joining & validation**: In [`scripts/data_prep/real_cases/cleveland_galox.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/cleveland_galox.py), [`build_cleeveland_rows`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/cleveland_galox.py#L64-L162) maps `protein_name` to `proteins.csv` and `substrate_name` to `substrates.csv`, parses `substrate notes` into `substrate_concentration` ($\text{mM}$), verifies zero missing or duplicate triplets, writes `data/interim/cleeveland.csv` (preserving `variance` and `units`), and transforms specific activity via $\log_{10}(\text{value})$ (`offset = 0.0`).
+1. **Provenance reconciliation (`10.1007/s00018-021-03981-w` vs. `10.1186/s13068-021-01984-0`)**: While [`scripts/data_prep/card_metadata.py`](../../scripts/data_prep/card_metadata.py) cites the companion *Fusarium* AAO paper by the same first and last authors (`Cleveland et al. 2021 Biotechnol. Biofuels 14:138`, `main`), the 12 proteins in `proteins.csv` and 385 specific activity rows in `og_dataset_clev.csv` are extracted directly from **Supplementary Tables S5–S10** of the 12-enzyme survey paper (`Cleveland et al. 2021 Cell. Mol. Life Sci. 78:8187–8208`, `review` / `si`).
+2. **Joining & validation**: In [`scripts/data_prep/real_cases/cleveland_galox.py`](../../scripts/data_prep/real_cases/cleveland_galox.py), [`build_cleeveland_rows`](../../scripts/data_prep/real_cases/cleveland_galox.py#L64-L162) maps `protein_name` to `proteins.csv` and `substrate_name` to `substrates.csv`, parses `substrate notes` into `substrate_concentration` ($\text{mM}$), verifies zero missing or duplicate triplets, writes `data/interim/cleeveland.csv` (preserving `variance` and `units`), and transforms specific activity via $\log_{10}(\text{value})$ (`offset = 0.0`).
 
 ---
 
@@ -78,7 +78,7 @@
 
 ## 7. Split Semantics, Leakage & Caveats
 
-- **Standardized split**: [`cleeveland_random_80_10_10_standardized.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv) partitions the `385` active pairs into **316 train / 34 val / 35 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split at the observation (`point`) level, standardizing both `substrate_concentration` and `log10_specific_activity` on the training split ($\mu_{\text{train}} = 0.0978$, $\sigma_{\text{train}} = 1.2464$).
+- **Standardized split**: [`cleeveland_random_80_10_10_standardized.csv`](../../data/processed/real_case/cleeveland_galox/cleeveland_random_80_10_10_standardized.csv) partitions the `385` active pairs into **316 train / 34 val / 35 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split at the observation (`point`) level, standardizing both `substrate_concentration` and `log10_specific_activity` on the training split ($\mu_{\text{train}} = 0.0978$, $\sigma_{\text{train}} = 1.2464$).
 - **Caveats & leakage analysis**:
   - **Seen-protein & seen-ligand matrix completion**: All 12 enzymes and nearly all 40 substrates appear in the training split; do not claim zero-shot protein or ligand generalization from the default split.
   - **`FoxGalOxB` length $>1024$ aa**: `FoxGalOxB` (`1,068` aa, 35 rows) exceeds 1,024 residues (`used_in_runs = 350` rows across 11 enzymes).

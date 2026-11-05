@@ -2,7 +2,7 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `5,745` unique variants (`4,595` train / `572` val / `578` test)
 > **Primary Citation:** Flynn, J. M. *et al.* Comprehensive fitness landscape of SARS-CoV-2 $\text{M}^{\text{pro}}$ reveals insights into viral resistance mechanisms. *eLife* **11**, e77433 (2022). [DOI: 10.7554/eLife.77433](https://doi.org/10.7554/eLife.77433)
-> **Machine-Readable Contract:** [`mpro_fret_cleavage_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/mpro_fret_cleavage_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/mpro_fret_cleavage/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/mpro_fret_cleavage/dataset_card.json)
+> **Machine-Readable Contract:** [`mpro_fret_cleavage_dataset_card_enriched.json`](../../docs/data_cards/mpro_fret_cleavage_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/mpro_fret_cleavage/dataset_card.json`](../../data/processed/real_case/mpro_fret_cleavage/dataset_card.json)
 
 ---
 
@@ -35,7 +35,7 @@
 ## 4. How the Dataset Was Built & Target Transformation
 
 - **Upstream Definition:** Fraction of variant barcode reads in the cleaved (low FRET) population relative to both populations, $F_{\text{cut}} / (F_{\text{cut}} + F_{\text{uncut}})$, linearly scaled per replicate so that the average wild-type barcode equals `1.0` and the average premature stop codon equals `0.0`.
-- **Enzymado Ingestion ([`mpro_fret.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/mpro_fret.py)):** Reads sheets `FRET scores rep 1` (`6,047` rows) and `FRET scores rep 2` (`6,040` rows) from `data/raw/real_cases/mpro_fret/elife-77433-fig2-data1-v2.xlsx`, filters out stop codons (`*`), collapses explicit `WT` and 304 single-codon synonymous control rows (`S1S`, `G2G`, etc.) into the single wild-type sequence (`functional_score = 1.000557`), averages `functional_score` across the two replicates for all `5,745` unique sequences, and z-score standardizes using the training split ($\mu_{\text{train}} = 0.719284$, $\sigma_{\text{train}} = 0.432227$).
+- **Enzymado Ingestion ([`mpro_fret.py`](../../scripts/data_prep/real_cases/mpro_fret.py)):** Reads sheets `FRET scores rep 1` (`6,047` rows) and `FRET scores rep 2` (`6,040` rows) from `data/raw/real_cases/mpro_fret/elife-77433-fig2-data1-v2.xlsx`, filters out stop codons (`*`), collapses explicit `WT` and 304 single-codon synonymous control rows (`S1S`, `G2G`, etc.) into the single wild-type sequence (`functional_score = 1.000557`), averages `functional_score` across the two replicates for all `5,745` unique sequences, and z-score standardizes using the training split ($\mu_{\text{train}} = 0.719284$, $\sigma_{\text{train}} = 0.432227$).
 
 ---
 

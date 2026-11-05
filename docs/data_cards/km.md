@@ -18,8 +18,8 @@ domain_review_doi: https://doi.org/10.1371/journal.pbio.3001402
 
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
-- **Primary Dataset Paper**: Boorla, V. S. & Maranas, C. D. *CatPred: a comprehensive framework for deep learning in vitro enzyme kinetic parameters.* **Nature Communications** 16, 2072 (2025). DOI: [`10.1038/s41467-025-57215-9`](https://doi.org/10.1038/s41467-025-57215-9) ([main PDF](../pdfs/catpred_boorla2025_natcommun.pdf), [SI PDF](../pdfs/catpred_boorla2025_suppinfo.pdf)).
-- **Domain Review / Companion Benchmark Paper**: Kroll, A., Engqvist, M. K. M., Heckmann, D. & Lercher, M. J. *Deep learning allows genome-scale prediction of Michaelis constants from structural features.* **PLOS Biology** 19(10), e3001402 (2021). DOI: [`10.1371/journal.pbio.3001402`](https://doi.org/10.1371/journal.pbio.3001402) ([review PDF](../pdfs/rev_km_kroll2021_plosbiol.pdf)).
+- **Primary Dataset Paper**: Boorla, V. S. & Maranas, C. D. *CatPred: a comprehensive framework for deep learning in vitro enzyme kinetic parameters.* **Nature Communications** 16, 2072 (2025). DOI: [`10.1038/s41467-025-57215-9`](https://doi.org/10.1038/s41467-025-57215-9) (main PDF, SI PDF).
+- **Domain Review / Companion Benchmark Paper**: Kroll, A., Engqvist, M. K. M., Heckmann, D. & Lercher, M. J. *Deep learning allows genome-scale prediction of Michaelis constants from structural features.* **PLOS Biology** 19(10), e3001402 (2021). DOI: [`10.1371/journal.pbio.3001402`](https://doi.org/10.1371/journal.pbio.3001402) (review PDF).
 - **Upstream Repositories**:
   - **BRENDA (Release 2022_2)** & **SABIO-RK (Release 2023_05)**: Literature-curated enzyme kinetic parameter databases providing raw $K_m$ values, substrate names, organism names, and database cross-references.
   - **UniProt & GenBank**: Queried dynamically to resolve full-length amino-acid sequences from protein accessions or organism + EC number + molecular-weight filters.

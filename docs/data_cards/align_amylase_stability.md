@@ -1,7 +1,7 @@
 # Dataset Card: `align_amylase_stability` — *Bacillus subtilis* $\alpha$-Amylase Thermostability (ALIGN Tournament)
 
-> ** JSON Companion**: [`align_amylase_stability_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/align_amylase_stability_dataset_card_enriched.json)
-> ** Computed Statistics**: [`data/processed/real_case/align_amylase_stability/dataset_card.json#/statistics`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_amylase_stability/dataset_card.json)
+> ** JSON Companion**: [`align_amylase_stability_dataset_card_enriched.json`](../../docs/data_cards/align_amylase_stability_dataset_card_enriched.json)
+> ** Computed Statistics**: [`data/processed/real_case/align_amylase_stability/dataset_card.json#/statistics`](../../data/processed/real_case/align_amylase_stability/dataset_card.json)
 
 ---
 
@@ -14,15 +14,15 @@
 | **Task / Label / Layout** | `protein_global` / `scalar_regression` / **Layout A (protein-only)** |
 | **Enzyme & EC Number** | Endo-1,4-$\alpha$-D-glucan glucanohydrolase ($\alpha$-amylase AmyE, GH13) — **EC `3.2.1.1`** |
 | **Source Organism & Wild-Type ID** | *Bacillus subtilis* — UniProt **`P00692`** (425 aa mature catalytic sequence; PDB `1BAG`, `1UA7`) |
-| **Primary Benchmark Paper** | Armer, C. et al. (2025). *Proteins: Structure, Function, and Bioinformatics*, 93(12), 2005–2014. DOI: `10.1002/prot.70008` ([`align_tournament2025_proteins.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/align_tournament2025_proteins.pdf), [`align_tournament2025_suppinfo.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/align_tournament2025_suppinfo.pdf)) |
+| **Primary Benchmark Paper** | Armer, C. et al. (2025). *Proteins: Structure, Function, and Bioinformatics*, 93(12), 2005–2014. DOI: `10.1002/prot.70008` (`align_tournament2025_proteins.pdf`, `align_tournament2025_suppinfo.pdf`) |
 | **Upstream Donor & Preprint** | Donated by **International Flavors and Fragrances (IFF)**; van der Flier et al. (2023) *bioRxiv* `10.1101/2023.09.25.559319v2`, OSF `10.17605/OSF.IO/QRN3C`, and patents EP 2,698,434 A1 / US 8,323,945 B2 / US 8,975,056 B2 / US 9,090,887 B2 |
-| **Processed Dataset Size** | **8,736** unique 425-aa protein variants (from 8,766 deduplicated measurements; **6,989** train / **874** val / **873** test) |
+| **Processed Dataset Size** | **8,736** unique 425-aa protein variants (from 8,766 deduplicated measurements; **6,990** train / **875** val / **871** test) |
 
 ---
 
 ## 2. How to Think About This Dataset
 
-- **What a row represents**: Each row in [`align_amylase_stability.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_amylase_stability/align_amylase_stability.csv) represents one unique 425-residue *Bacillus subtilis* $\alpha$-amylase (`AmyE`) variant sequence (`protein_sequence`), the number of deduplicated cross-campaign measurements averaged for that sequence (`n_measurements`, equal to `1` for 8,706 variants and `2` for 30 variants), and its base-10 log-transformed thermostability ratio (`log10_thermostability`).
+- **What a row represents**: Each row in [`align_amylase_stability.csv`](../../data/processed/real_case/align_amylase_stability/alpha_amylase__thermostability.csv) represents one unique 425-residue *Bacillus subtilis* $\alpha$-amylase (`AmyE`) variant sequence (`protein_sequence`), the number of deduplicated cross-campaign measurements averaged for that sequence (`n_measurements`, equal to `1` for 8,706 variants and `2` for 30 variants), and its base-10 log-transformed thermostability ratio (`log10_thermostability`).
 - **Biochemical meaning of the label**: Thermostability is measured as the **unitless residual activity ratio**—the starch-hydrolysis activity remaining after a high-temperature thermal stress challenge ($85\,^\circ\text{C}$ for 20 min in the generative round protocol; $58.5\,^\circ\text{C}$ for 30 min at pH 5.6 in the benchtop metadata) divided by the initial starch-hydrolysis activity of the same enzyme sample before thermal stress, normalized relative to the parent control on each plate. Because it divides post-stress activity by pre-stress activity of the same supernatant aliquot, it is self-normalized for secreted enzyme concentration and measures **kinetic resistance to irreversible thermal inactivation** (rather than equilibrium $T_m$). Raw values are strictly positive across `[0.008, 49.18]` (median $= 0.86$, `0` zeros), so $\log_{10}(\overline{\text{thermostability}})$ is computed with `offset = 0.0`, producing a nearly symmetric, bell-shaped target distribution ($\text{mean} = -0.1753$, $\text{SD} = 0.5495$, $\text{median} = -0.0655$, $\text{skewness} = -0.0729$, range `[-2.097, +1.692]`).
 - **What predictive success actually demonstrates**: Strong performance on `align_amylase_stability` demonstrates that a model can identify both thermally destabilizing single substitutions across the 425-residue GH13 scaffold (`7,560` unique variants from `dataset=1`) and strongly stabilizing multi-mutant combinations (`1,176` unique variants from `dataset=2` reaching up to $49.18\times$ parent residual activity). Under the default 80/10/10 random split, evaluation reflects pooled single-mutant interpolation and shared-background combinatorial regression.
 
@@ -51,7 +51,7 @@
 ## 5. How the Dataset Was Built & Cleaned
 
 1. **Upstream screening & tournament release**: IFF donated `11,724` training rows (`8,500` in `dataset=1`, `3,224` in `dataset=2`) and `570` test rows (`dataset=2`) from its *B. subtilis* AmyE engineering campaigns (van der Flier et al. 2023; EP 2,698,434 A1; US 8,323,945 B2; US 8,975,056 B2; US 9,090,887 B2).
-2. **Tournament test-set overlap removal**: In [`scripts/data_prep/real_cases/align_tournament.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py), [`load_align_rows`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py#L130-L195) drops all `570` rows from `test (with values).csv` because 100% of their sequences already appear in `train.csv` (`570 tournament test rows already in train`).
+2. **Tournament test-set overlap removal**: In [`scripts/data_prep/real_cases/align_tournament.py`](../../scripts/data_prep/real_cases/align_tournament.py), [`load_align_rows`](../../scripts/data_prep/real_cases/align_tournament.py#L130-L195) drops all `570` rows from `test (with values).csv` because 100% of their sequences already appear in `train.csv` (`570 tournament test rows already in train`).
 3. **Exact measurement deduplication**: `1,750` exact duplicate rows in `train.csv` are removed, leaving `9,974` unique interim rows in `data/interim/align/align_amylase.csv`.
 4. **Task filtering, repeat averaging, and $\log_{10}$ transformation**: Filtering for finite `thermostability` retains `8,766` measurements across `8,736` unique sequences (`1,208` interim rows lack a thermostability measurement). The `30` sequences with 2 distinct measurements (`dataset=1` and `dataset=2`) are averaged by arithmetic mean (`n_measurements = 2`), and the target is transformed via $\log_{10}(\overline{\text{thermostability}})$ (`offset = 0.0`).
 
@@ -71,7 +71,7 @@
 
 ## 7. Split Semantics, Leakage & Caveats
 
-- **Standardized split**: [`align_amylase_stability_random_80_10_10_standardized.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_amylase_stability/align_amylase_stability_random_80_10_10_standardized.csv) partitions the `8,736` unique variants into **6,989 train / 874 val / 873 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split keyed on unique sequence, with `z`-score standardization fit on the training split ($\mu_{\text{train}} = -0.1753$, $\sigma_{\text{train}} = 0.5495$).
+- **Standardized split**: [`align_amylase_stability_random_80_10_10_standardized.csv`](../../data/processed/real_case/align_amylase_stability/alpha_amylase__thermostability_random_80_10_10_standardized.csv) partitions the `8,736` unique variants into **6,990 train / 875 val / 871 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split keyed on unique sequence, with `z`-score standardization fit on the training split ($\mu_{\text{train}} = -0.1753$, $\sigma_{\text{train}} = 0.5495$).
 - **Caveats & leakage analysis**:
   - **Zero exact sequence overlap**, with $>97.4\%$ pairwise sequence identity across all 8,736 variants of *B. subtilis* AmyE.
   - **Pooled single + multi-mutant regime**: Both `dataset=1` single mutants and `dataset=2` combinatorial multi-mutants are distributed across train, val, and test; use `source_dataset` in `data/interim/align/align_amylase.csv` if evaluating strict single-to-multi-mutant generalization.

@@ -21,7 +21,7 @@ computed_statistics_ref: data/processed/real_case/amie_isobutyramide_dms/dataset
 
 # `amie_isobutyramide_dms` — *Pseudomonas aeruginosa* AmiE deep mutational scan on isobutyramide
 
-> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/amie_isobutyramide_dms/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/amie_isobutyramide_dms/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
+> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/amie_isobutyramide_dms/dataset_card.json`](../../data/processed/real_case/amie_isobutyramide_dms/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
 
 ## 0. How to think about this dataset
 
@@ -94,7 +94,7 @@ The raw Figshare file `data/raw/dms/amie/amiESelectionFitnessData_Isobutyramide.
 - **341 finite nonsense (`*`) rows** ($6,228\text{ missense} + 341\text{ nonsense} = \mathbf{6,569\text{ non-synonymous + nonsense variants}}$, matching the exact $n = 6,569$ reported for the global replicate correlation on Main p. 3!).
 - **251 `NA` rows** (all 251 are missense rows with $\le 5$ pre-selection reads or complete post-selection dropout).
 
-In [`scripts/data_prep/real_cases/amie_dms.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/amie_dms.py#L64-L117), `build_amie_rows` drops the 341 stop-codon (`*`) rows and 251 missense `NA` rows, constructs the 346-aa sequences, and collapses the 341 synonymous wild-type rows into **1 wild-type row** (`amie_isobutyramide_00001`), yielding **$1\text{ WT} + 6,228\text{ missense} = \mathbf{6,229\text{ unique sequences}}$**.
+In [`scripts/data_prep/real_cases/amie_dms.py`](../../scripts/data_prep/real_cases/amie_dms.py#L64-L117), `build_amie_rows` drops the 341 stop-codon (`*`) rows and 251 missense `NA` rows, constructs the 346-aa sequences, and collapses the 341 synonymous wild-type rows into **1 wild-type row** (`amie_isobutyramide_00001`), yielding **$1\text{ WT} + 6,228\text{ missense} = \mathbf{6,229\text{ unique sequences}}$**.
 
 ### 4.2 Target transformation
 
@@ -104,7 +104,7 @@ Enzymado applies an **Identity** transform to `normalized_fitness` ($\zeta_i = \
 
 ## 5. Split semantics and leakage caveats
 
-One split file is published: `amie_isobutyramide_random_80_10_10_standardized` ($4,989\text{ train} / 620\text{ val} / 620\text{ test} = 6,229\text{ total}$; see [`dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/amie_isobutyramide_dms/dataset_card.json) for exact split moments).
+One split file is published: `amie_isobutyramide_random_80_10_10_standardized` ($4,989\text{ train} / 620\text{ val} / 620\text{ test} = 6,229\text{ total}$; see [`dataset_card.json`](../../data/processed/real_case/amie_isobutyramide_dms/dataset_card.json) for exact split moments).
 
 1. **Position-level sharing across splits (`random_split_unit="point"`):** Every scanned residue position (1–341) is mutated $\sim 14.6$ times in `train` and $\sim 1.8$ times in `val` and `test`; the split evaluates within-position substitution interpolation.
 2. **Cross-task sequence overlap with `amie_acetamide_dms` and `amie_propionamide_dms`:** Over 6,100 protein sequences are shared across the three AmiE tasks; never leak labels or split information across tasks.

@@ -18,8 +18,8 @@ domain_review_doi: https://doi.org/10.1101/2023.06.22.544776
 
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
-- **Primary Database Paper**: Chang, A. et al. *BRENDA, the ELIXIR core data resource in 2021: new developments and updates.* **Nucleic Acids Research** 49, D498–D508 (2021). DOI: [`10.1093/nar/gkaa1025`](https://doi.org/10.1093/nar/gkaa1025) ([main PDF](../pdfs/brenda_chang2021_nar.pdf)).
-- **Domain Review / Companion Benchmark Paper**: Gado, J. E. et al. *Deep learning prediction of enzyme optimum pH.* **bioRxiv** (2023) / **Nature Machine Intelligence** (EpHod). DOI: [`10.1101/2023.06.22.544776`](https://doi.org/10.1101/2023.06.22.544776) ([review PDF](../pdfs/rev_phopt_ephod_gado2023_biorxiv.pdf), [SI PDF](../pdfs/rev_phopt_ephod_gado2023_suppinfo.pdf)).
+- **Primary Database Paper**: Chang, A. et al. *BRENDA, the ELIXIR core data resource in 2021: new developments and updates.* **Nucleic Acids Research** 49, D498–D508 (2021). DOI: [`10.1093/nar/gkaa1025`](https://doi.org/10.1093/nar/gkaa1025) (main PDF).
+- **Domain Review / Companion Benchmark Paper**: Gado, J. E. et al. *Deep learning prediction of enzyme optimum pH.* **bioRxiv** (2023) / **Nature Machine Intelligence** (EpHod). DOI: [`10.1101/2023.06.22.544776`](https://doi.org/10.1101/2023.06.22.544776) (review PDF, SI PDF).
 - **Upstream Repositories**:
   - **BRENDA (Release 2025_1 JSON dump, `data/raw/brenda/brenda_2025_1.json`)**: Source of `ph_optimum` functional annotations, EC numbers, organisms, and protein accession links extracted from $\sim 157,000$ primary literature references.
   - **UniProtKB**: Used by `src/enzymado/propertyprep/brenda.py` (`sequence_getter`) to retrieve canonical amino-acid sequences and by `scripts/data_prep/remove_uniprot_fragments.py` to prune incomplete sequence fragments.

@@ -2,7 +2,7 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `1,018` unique variants (`818` train / `100` val / `100` test)
 > **Primary Citation:** Markin, C. J. *et al.* Revealing enzyme functional architecture via high-throughput microfluidic enzyme kinetics. *Science* **373**, eabf8761 (2021). [DOI: 10.1126/science.abf8761](https://doi.org/10.1126/science.abf8761)
-> **Machine-Readable Contract:** [`pafa_htmek_kcat_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_kcat_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/pafa_htmek_kcat/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/pafa_htmek_kcat/dataset_card.json)
+> **Machine-Readable Contract:** [`pafa_htmek_kcat_dataset_card_enriched.json`](../../docs/data_cards/pafa_htmek_kcat_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/pafa_htmek_kcat/dataset_card.json`](../../data/processed/real_case/pafa_htmek_kcat/dataset_card.json)
 
 ---
 
@@ -10,7 +10,7 @@
 
 - **Gold-Standard Microfluidic Michaelis–Menten $k_{\text{cat}}$ Landscape:** `pafa_htmek_kcat` provides direct steady-state unimolecular turnover numbers ($\log_{10} k_{\text{cat}}$ in $\text{s}^{-1}$) for **1,018 purified variants** of *Elizabethkingia meningoseptica* (*Flavobacterium meningosepticum*) phosphate-irrepressible alkaline phosphatase **PafA** (529-aa construct) hydrolyzing the fluorogenic aryl phosphate monoester **cMUP**.
 - **Expression-Normalized, Yet Modulated by Kinetic Misfolding Traps ($f_a$):** Every microfluidic chamber measures immobilized PafA-eGFP concentration ($\text{[E]}$) via an eGFP calibration curve before dividing $V_{\max}$ by $\text{[E]}$. However, Markin *et al.* (2021) discovered that **232 mutations promote kinetic partitioning during $37\,^\circ\text{C}$ cell-free expression into a long-lived, catalytically inactive misfolded state (`M`)** whose C-terminal eGFP tag still folds and fluoresces normally. Thus, apparent $k_{\text{cat}}$ reflects the product of intrinsic catalytic turnover and the natively folded fraction $f_a$.
-- **Paired Multi-Parameter Architecture:** This dataset is directly paired with [`pafa_htmek_km`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_km.md) ($N = 1,018$) and [`pafa_htmek_kcat_km`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_kcat_km.md) ($N = 1,042$) on the exact same enzyme and substrate.
+- **Paired Multi-Parameter Architecture:** This dataset is directly paired with [`pafa_htmek_km`](../../docs/data_cards/pafa_htmek_km.md) ($N = 1,018$) and [`pafa_htmek_kcat_km`](../../docs/data_cards/pafa_htmek_kcat_km.md) ($N = 1,042$) on the exact same enzyme and substrate.
 
 ---
 
@@ -35,7 +35,7 @@
 
 ## 4. How the Dataset Was Built & Target Transformation
 
-- **Enzymado Ingestion ([`pafa_htmek.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/pafa_htmek.py)):** Reads `data/raw/real_cases/pafa_htmek/pafa_htmek_summary.csv` (`1,042` total rows), drops the **24 severely impaired/misfolded variants** (`D38V`, `G64V`, `T79G`, `T79V`, `G82V`, `G89V`, `G96V`, `I97G`, `W102G`, `S133V`, `S160V`, `I167G`, `G171V`, `W179G`, `S190V`, `Y193G`, `D305V`, `G312V`, `D326V`, `D352V`, `H353G`, `G354V`, `S464V`, `H495G`) that lack separate $k_{\text{cat}}$ and $K_M$ fits, and computes:
+- **Enzymado Ingestion ([`pafa_htmek.py`](../../scripts/data_prep/real_cases/pafa_htmek.py)):** Reads `data/raw/real_cases/pafa_htmek/pafa_htmek_summary.csv` (`1,042` total rows), drops the **24 severely impaired/misfolded variants** (`D38V`, `G64V`, `T79G`, `T79V`, `G82V`, `G89V`, `G96V`, `I97G`, `W102G`, `S133V`, `S160V`, `I167G`, `G171V`, `W179G`, `S190V`, `Y193G`, `D305V`, `G312V`, `D326V`, `D352V`, `H353G`, `G354V`, `S464V`, `H495G`) that lack separate $k_{\text{cat}}$ and $K_M$ fits, and computes:
   $$y_{\text{raw}} = \log_{10}\!\left(k_{\text{cat, cMUP}}\ [\text{s}^{-1}]\right)$$
   spanning $-1.7959$ ($0.016\text{ s}^{-1}$) to $+2.5051$ ($320.0\text{ s}^{-1}$), standardized with $\mu_{\text{train}} = 1.697428$, $\sigma_{\text{train}} = 0.611389$.
 

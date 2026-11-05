@@ -32,7 +32,7 @@ code: https://github.com/mheinzinger/ProstT5
 
 - **Best-suited dataset regimes:**
   - Globular enzyme properties tightly coupled to 3D fold, secondary/tertiary packing, thermostability, or catalytic scaffold geometry where explicit 3Di structural distillation enriches sequence embeddings beyond 1D evolutionary statistics.
-  - Remote-homology and low-sequence-identity regimes (such as `mmseqs2` 50% cluster splits or superfamily-level generalization) where 3Di structural conservation persists after 1D sequence identity decays.
+  - Remote-homology and low-sequence-identity regimes (such as the `similarity` split (MMseqs2 at 30% identity) or superfamily-level generalization) where 3Di structural conservation persists after 1D sequence identity decays.
   - Tasks paired with non-linear readout heads (`mlp`, `xgboost`) capable of decoding the multi-channel 3Di structural features prepared by the `<AA2fold>`-conditioned encoder.
 - **Expected vulnerabilities & blind spots:**
   - Tasks driven by intrinsically disordered regions (IDRs), flexible loops, or unstructured sorting/localization motifs—the authors explicitly note that filtering AFDB for $\text{pLDDT} \ge 70$ removes most disordered proteins and degrades subcellular localization accuracy relative to base `ProtT5`.

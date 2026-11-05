@@ -2,7 +2,7 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `1,018` unique variants (`818` train / `100` val / `100` test)
 > **Primary Citation:** Markin, C. J. *et al.* Revealing enzyme functional architecture via high-throughput microfluidic enzyme kinetics. *Science* **373**, eabf8761 (2021). [DOI: 10.1126/science.abf8761](https://doi.org/10.1126/science.abf8761)
-> **Machine-Readable Contract:** [`pafa_htmek_km_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_km_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/pafa_htmek_km/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/pafa_htmek_km/dataset_card.json)
+> **Machine-Readable Contract:** [`pafa_htmek_km_dataset_card_enriched.json`](../../docs/data_cards/pafa_htmek_km_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/pafa_htmek_km/dataset_card.json`](../../data/processed/real_case/pafa_htmek_km/dataset_card.json)
 
 ---
 
@@ -27,13 +27,13 @@
 
 ## 3. Specificity, Breadth & Construct Architecture
 
-- **Enzyme & Construct:** Identical 1,018-variant cohort to [`pafa_htmek_kcat`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/pafa_htmek_kcat.md): *Elizabethkingia meningoseptica* PafA (EC `3.1.3.1`, UniProt `Q935C6`, PDB `5TJ3`), 529-aa mature+linker sequence C-terminally fused to `GGGSGGGGSG-eGFP`, with preprotein mutation tokens shifted by `offset = -17`.
+- **Enzyme & Construct:** Identical 1,018-variant cohort to [`pafa_htmek_kcat`](../../docs/data_cards/pafa_htmek_kcat.md): *Elizabethkingia meningoseptica* PafA (EC `3.1.3.1`, UniProt `Q935C6`, PDB `5TJ3`), 529-aa mature+linker sequence C-terminally fused to `GGGSGGGGSG-eGFP`, with preprotein mutation tokens shifted by `offset = -17`.
 
 ---
 
 ## 4. How the Dataset Was Built & Target Transformation
 
-- **Enzymado Ingestion ([`pafa_htmek.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/pafa_htmek.py)):** Filters `pafa_htmek_summary.csv` (`1,042` rows) for the 1,018 rows with finite `km_cMUP_uM` (excluding the same 24 non-saturating variants as `pafa_htmek_kcat`) and computes:
+- **Enzymado Ingestion ([`pafa_htmek.py`](../../scripts/data_prep/real_cases/pafa_htmek.py)):** Filters `pafa_htmek_summary.csv` (`1,042` rows) for the 1,018 rows with finite `km_cMUP_uM` (excluding the same 24 non-saturating variants as `pafa_htmek_kcat`) and computes:
   $$y_{\text{raw}} = \log_{10}\!\left(K_{M,\text{ cMUP}}\ [\mu\text{M}]\right)$$
   spanning $0.6990$ ($5.0\,\mu\text{M}$) to $2.7634$ ($580.0\,\mu\text{M}$), standardized with $\mu_{\text{train}} = 1.837218$, $\sigma_{\text{train}} = 0.186899$.
 

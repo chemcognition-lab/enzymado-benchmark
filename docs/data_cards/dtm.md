@@ -18,8 +18,8 @@ domain_review_doi: https://doi.org/10.1016/j.csbj.2020.07.011
 
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
-- **Primary Database Paper**: Stourac, J. et al. *FireProtDB: database of manually curated protein stability data.* **Nucleic Acids Research** 49, D319–D324 (2021). DOI: [`10.1093/nar/gkaa981`](https://doi.org/10.1093/nar/gkaa981) ([main PDF](../pdfs/fireprotdb_musil2021_nar.pdf)).
-- **Domain Review Paper**: Sanavia, T. et al. *Limitations and open challenges in machine learning applications for protein stability prediction.* **Computational and Structural Biotechnology Journal** 18, 1968–1979 (2020). DOI: [`10.1016/j.csbj.2020.07.011`](https://doi.org/10.1016/j.csbj.2020.07.011) ([review PDF](../pdfs/rev_stability_sanavia2020_csbj.pdf)).
+- **Primary Database Paper**: Stourac, J. et al. *FireProtDB: database of manually curated protein stability data.* **Nucleic Acids Research** 49, D319–D324 (2021). DOI: [`10.1093/nar/gkaa981`](https://doi.org/10.1093/nar/gkaa981) (main PDF).
+- **Domain Review Paper**: Sanavia, T. et al. *Limitations and open challenges in machine learning applications for protein stability prediction.* **Computational and Structural Biotechnology Journal** 18, 1968–1979 (2020). DOI: [`10.1016/j.csbj.2020.07.011`](https://doi.org/10.1016/j.csbj.2020.07.011) (review PDF).
 - **Upstream Repositories**:
   - **FireProtDB (`data/raw/fireprotdb/fireprotdb_ec.tsv`)**: Manually curated single-point thermostability records integrating corrected ProTherm entries, ProtaBank, Varibench, and primary literature, filtered by `scripts/data_prep/download_fireprotdb_ec.py` to retain only entries with an explicit EC number.
   - **UniProtKB**: Queried via `UNIPROTKB` accession to fetch canonical wild-type sequences and verify 0 sequence fragments.

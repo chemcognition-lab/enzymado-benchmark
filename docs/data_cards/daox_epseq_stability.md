@@ -2,7 +2,7 @@
 
 > **Track:** `real_case` | **Task Type:** `regression` (`scalar`, `protein_level`) | **N:** `6,434` unique missense variants (`5,150` train / `642` val / `642` test)
 > **Primary Citation:** Vanella, R., Küng, C., Schoepfer, A. A., Doffini, V., Ren, J. & Nash, M. A. Understanding activity-stability tradeoffs in biocatalysts by enzyme proximity sequencing. *Nature Communications* **15**, 1807 (2024). [DOI: 10.1038/s41467-024-45630-3](https://doi.org/10.1038/s41467-024-45630-3)
-> **Machine-Readable Contract:** [`daox_epseq_stability_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/daox_epseq_stability_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/daox_epseq_stability/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/daox_epseq_stability/dataset_card.json)
+> **Machine-Readable Contract:** [`daox_epseq_stability_dataset_card_enriched.json`](../../docs/data_cards/daox_epseq_stability_dataset_card_enriched.json) | **Computed Stats:** [`data/processed/real_case/daox_epseq_stability/dataset_card.json`](../../data/processed/real_case/daox_epseq_stability/dataset_card.json)
 
 ---
 
@@ -10,7 +10,7 @@
 
 - **Near-Complete Yeast Surface Display Stability/Abundance DMS:** `daox_epseq_stability` measures **6,434 single missense variants** ($93.0\%$ of all $6,916$ possible single substitutions across positions 2–365) of **D-amino acid oxidase from *Rhodotorula gracilis* (RgDAOx, 365 aa)** displayed on *Saccharomyces cerevisiae* EBY100.
 - **Eukaryotic Secretory Quality Control as a Stability Proxy:** Because the yeast endoplasmic reticulum quality-control system retains and degrades misfolded or thermally unstable polypeptides, cell-surface display abundance quantified via immunofluorescence of the C-terminal `6xHis` tag (Alexa Fluor 594 across 4 FACS gates) tracks folding stability (correlating with FoldX $\Delta\Delta G$ at Spearman $\rho = -0.51$ and identifying thermally stabilized variants confirmed by purified DSF).
-- **Direct Biophysical Companion to [`daox_epseq_activity`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/daox_epseq_activity.md):** Comparing `log_stability` ($N = 6,434$) against `log_activity` ($N = 6,404$; $6,399$ shared variants) separates global Rossmann-core destabilization from specific catalytic, FAD-binding, or dimer-interface perturbations.
+- **Direct Biophysical Companion to [`daox_epseq_activity`](../../docs/data_cards/daox_epseq_activity.md):** Comparing `log_stability` ($N = 6,434$) against `log_activity` ($N = 6,404$; $6,399$ shared variants) separates global Rossmann-core destabilization from specific catalytic, FAD-binding, or dimer-interface perturbations.
 
 ---
 
@@ -36,7 +36,7 @@
 
 - **Upstream Definition:** Weighted average FACS gate score $\beta_v$ across 4 anti-6xHis Alexa Fluor 594 sorting bins ($\ge 100$ reads per variant), normalized to tile-internal synonymous wild-type variants $\beta_{\text{wt}}$:
   $$F_{\text{exp}} = \log_2\!\left(\frac{\beta_v}{\beta_{\text{wt}}}\right)$$
-- **Enzymado Ingestion ([`rgdaox_epseq.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/rgdaox_epseq.py)):** Extracts column `Expression score (log)` from `data/raw/real_cases/rgdaox_epseq/DMS_scores_DAOX.csv` for all `6,434` finite missense rows (excluding 334 nonsense `*` rows) as `log_stability`, and z-score standardizes using the training split ($\mu_{\text{train}} = -0.179484$, $\sigma_{\text{train}} = 0.196273$).
+- **Enzymado Ingestion ([`rgdaox_epseq.py`](../../scripts/data_prep/real_cases/rgdaox_epseq.py)):** Extracts column `Expression score (log)` from `data/raw/real_cases/rgdaox_epseq/DMS_scores_DAOX.csv` for all `6,434` finite missense rows (excluding 334 nonsense `*` rows) as `log_stability`, and z-score standardizes using the training split ($\mu_{\text{train}} = -0.179484$, $\sigma_{\text{train}} = 0.196273$).
 
 ---
 

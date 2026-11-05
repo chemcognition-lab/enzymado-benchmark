@@ -4,6 +4,8 @@
 > **computed statistics**: [`data/processed/real_case/ao_3fcr_transaminase/dataset_card.json`](../../data/processed/real_case/ao_3fcr_transaminase/dataset_card.json)
 > **track**: `real_case` | **task type**: `protein_ligand_global` (scalar regression) | **layout**: Layout B
 
+> **Note:** the identity table and split table on this card match the published CSV. The remaining text and the enriched JSON were written for an earlier version of this dataset and are pending review.
+
 ---
 
 ## 1. Identity & Provenance
@@ -11,12 +13,12 @@
 | Field | Value |
 |---|---|
 | **Task / Dataset ID** | `ao_3fcr_transaminase` |
-| **Property Name** | `ln_specific_activity` |
+| **Property Name** | `log10_specific_activity` |
 | **Biochemical Observable** | $\ln(\text{specific activity in mU mg}^{-1})$, measured via continuous UV ketone-formation time-courses ($245\text{–}310\text{ nm}$) in triplicate (`n = 3`) on IMAC-purified, PD-10-desalted enzymes across 76 engineered Fold Type I amine transaminase variants (`64` `3FCR` + `12` `3HMU`) and 30 enantiopure $(R)$- and $(S)$-primary aromatic amines (15 racemic pairs) |
 | **Primary Experimental Source** | Ao, Y.-F., Pei, S., Xiang, C., Menke, M. J., Shen, L., Sun, C., Dörr, M., Born, S., Höhne, M. & Bornscheuer, U. T. *Structure- and Data-Driven Protein Engineering of Transaminases for Improving Activity and Stereoselectivity*. *Angew. Chem. Int. Ed.* **62**, e202301660 (2023), DOI: [`10.1002/anie.202301660`](https://doi.org/10.1002/anie.202301660) |
 | **Raw Data Source** | Supporting Information Tables S2 & S4 (`data/raw/real_cases/ata_3fcr/ata_3fcr_data.xlsx`, sheets `Dataset of 3FCR variants` and `Dataset of 3HMU variants`) |
 | **Preprocessing Script** | [`scripts/data_prep/real_cases/ata_3fcr.py`](../../scripts/data_prep/real_cases/ata_3fcr.py) |
-| **Published Split** | `ao_3fcr_transaminase_random_80_10_10_standardized` (`1,520` train / `180` val / `180` test; `1,880` total rows) |
+| **Published Split** | `ao_3fcr_transaminase_random_80_10_10_standardized` (`1,628` train / `203` val / `203` test; `2,034` total rows) |
 
 ---
 
@@ -61,6 +63,6 @@
 
 | Split | Rows | Proteins | Ligands | Mean | Std | Min | p25 | Median | p75 | Max |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Train** | 1,520 | 76 | 30 | `0.0000` | `1.0000` | `-2.6470` | `-0.6836` | `0.0752` | `0.8315` | `2.2389` |
-| **Val** | 180 | 72 | 30 | `-0.0005` | `0.9854` | `-2.6470` | `-0.6746` | `0.0736` | `0.8065` | `2.1640` |
-| **Test** | 180 | 70 | 30 | `-0.0009` | `1.0080` | `-2.6470` | `-0.6881` | `0.0886` | `0.8351` | `2.2016` |
+| 1,628 | 79 | 30 | `0.0000` | `1.0000` | `-2.3484` | `-0.3951` | `0.2398` | `0.6629` | `1.8680` |
+| 203 | 69 | 29 | `0.0228` | `0.9579` | `-2.3484` | `-0.3568` | `0.1804` | `0.6832` | `1.8817` |
+| 203 | 69 | 30 | `0.1133` | `0.8702` | `-2.3484` | `-0.3241` | `0.2901` | `0.6949` | `1.6677` |

@@ -19,9 +19,9 @@ domain_review_doi: https://doi.org/10.1093/bib/bbab476
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
 - **Primary Database Papers**:
-  - Zhang, C., Zhang, X., Freddolino, L. & Zhang, Y. *BioLiP2: an updated structure database for biologically relevant ligand–protein interactions.* **Nucleic Acids Research** 52, D404–D412 (2024). DOI: [`10.1093/nar/gkad630`](https://doi.org/10.1093/nar/gkad630) ([main PDF](../pdfs/biolip2_zhang2024_nar.pdf)).
-  - Yang, J., Roy, A. & Zhang, Y. *BioLiP: a semi-manually curated database for biologically relevant ligand–protein interactions.* **Nucleic Acids Research** 41, D1096–D1103 (2013). DOI: [`10.1093/nar/gks966`](https://doi.org/10.1093/nar/gks966) ([SI/predecessor PDF](../pdfs/biolip_yang2013_nar.pdf)).
-- **Domain Review Paper**: Dhakal, A., McKay, C., Tanner, J. J. & Cheng, J. *Artificial intelligence in the prediction of protein–ligand interactions: recent advances and future directions.* **Briefings in Bioinformatics** 23(1), bbab476 (2022). DOI: [`10.1093/bib/bbab476`](https://doi.org/10.1093/bib/bbab476) ([review PDF](../pdfs/rev_binding_dhakal2022_bib.pdf)).
+  - Zhang, C., Zhang, X., Freddolino, L. & Zhang, Y. *BioLiP2: an updated structure database for biologically relevant ligand–protein interactions.* **Nucleic Acids Research** 52, D404–D412 (2024). DOI: [`10.1093/nar/gkad630`](https://doi.org/10.1093/nar/gkad630) (main PDF).
+  - Yang, J., Roy, A. & Zhang, Y. *BioLiP: a semi-manually curated database for biologically relevant ligand–protein interactions.* **Nucleic Acids Research** 41, D1096–D1103 (2013). DOI: [`10.1093/nar/gks966`](https://doi.org/10.1093/nar/gks966) (SI/predecessor PDF).
+- **Domain Review Paper**: Dhakal, A., McKay, C., Tanner, J. J. & Cheng, J. *Artificial intelligence in the prediction of protein–ligand interactions: recent advances and future directions.* **Briefings in Bioinformatics** 23(1), bbab476 (2022). DOI: [`10.1093/bib/bbab476`](https://doi.org/10.1093/bib/bbab476) (review PDF).
 - **Upstream Repositories**:
   - **BioLiP Non-Redundant Set (`data/raw/biolip/BioLiP_nr.txt.gz`)**: Weekly-updated archive of biologically relevant PDB protein–ligand complexes clustered by receptor sequence identity.
   - **wwPDB Chemical Component Dictionary (`Components-smiles-cactvs.smi`)**: Resolves 3-letter PDB ligand identifiers (`ccd_id` / `ligand_id`) to SMILES strings.

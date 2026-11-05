@@ -19,9 +19,9 @@ domain_review_doi: https://doi.org/10.1093/nar/gkx1012
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
 - **Primary Database Papers**:
-  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2025.* **Nucleic Acids Research** 53, D609–D617 (2025). DOI: [`10.1093/nar/gkae1010`](https://doi.org/10.1093/nar/gkae1010) ([main PDF](../pdfs/uniprot_consortium2025_nar.pdf)).
-  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2023.* **Nucleic Acids Research** 51, D523–D531 (2023). DOI: [`10.1093/nar/gkac1052`](https://doi.org/10.1093/nar/gkac1052) ([2023 PDF](../pdfs/uniprot_consortium2023_nar.pdf)).
-- **Domain Review / Mechanistic Atlas Paper**: Ribeiro, A. J. M. et al. *Mechanism and Catalytic Site Atlas (M-CSA): a database of enzyme reaction mechanisms and active sites.* **Nucleic Acids Research** 46, D618–D623 (2018). DOI: [`10.1093/nar/gkx1012`](https://doi.org/10.1093/nar/gkx1012) ([review PDF](../pdfs/rev_active_sites_mcsa_ribeiro2018_nar.pdf), [SI PDF](../pdfs/rev_active_sites_mcsa_ribeiro2018_suppinfo.pdf)).
+  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2025.* **Nucleic Acids Research** 53, D609–D617 (2025). DOI: [`10.1093/nar/gkae1010`](https://doi.org/10.1093/nar/gkae1010) (main PDF).
+  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2023.* **Nucleic Acids Research** 51, D523–D531 (2023). DOI: [`10.1093/nar/gkac1052`](https://doi.org/10.1093/nar/gkac1052) (2023 PDF).
+- **Domain Review / Mechanistic Atlas Paper**: Ribeiro, A. J. M. et al. *Mechanism and Catalytic Site Atlas (M-CSA): a database of enzyme reaction mechanisms and active sites.* **Nucleic Acids Research** 46, D618–D623 (2018). DOI: [`10.1093/nar/gkx1012`](https://doi.org/10.1093/nar/gkx1012) (review PDF, SI PDF).
 - **Upstream Repositories**:
   - **UniProtKB/Swiss-Prot (`data/raw/swissprot/swissprot_ec.tsv`, `Active site` / `ACT_SITE` column)**: Reviewed enzyme sequence records annotated with catalytic residue coordinates.
   - **M-CSA & InterPro / UniRule**: Primary mechanistic literature database (`961` curated reference enzyme mechanisms/sites) and rule-based orthologous transfer pipelines underpinning Swiss-Prot `ACT_SITE` annotations.

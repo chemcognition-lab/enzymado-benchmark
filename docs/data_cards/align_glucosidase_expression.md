@@ -1,7 +1,7 @@
 # Dataset Card: `align_glucosidase_expression` — $\beta$-Glucosidase Single-Mutant Soluble Expression (ALIGN Tournament / D2D)
 
-> ** JSON Companion**: [`align_glucosidase_expression_dataset_card_enriched.json`](file:///home/beangoben/github/enzymado-benchmark/docs/data_cards/align_glucosidase_expression_dataset_card_enriched.json)
-> ** Computed Statistics**: [`data/processed/real_case/align_glucosidase_expression/dataset_card.json#/statistics`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_glucosidase_expression/dataset_card.json)
+> ** JSON Companion**: [`align_glucosidase_expression_dataset_card_enriched.json`](../../docs/data_cards/align_glucosidase_expression_dataset_card_enriched.json)
+> ** Computed Statistics**: [`data/processed/real_case/align_glucosidase_expression/dataset_card.json#/statistics`](../../data/processed/real_case/align_glucosidase_expression/dataset_card.json)
 
 ---
 
@@ -14,15 +14,15 @@
 | **Task / Label / Layout** | `protein_global` / `scalar_regression` / **Layout A (protein-only)** |
 | **Enzyme & EC Number** | Family 1 Glycoside Hydrolase (GH1) $\beta$-glucosidase — **EC `3.2.1.21`** |
 | **Source Organism & Wild-Type ID** | *Paenibacillus polymyxa* $\beta$-glucosidase B (`BglB`, UniProt **`P22505`**, 445 aa, PDB `2O9P`/`2O9T` in D2D & ALIGN release; annotated as *Streptomyces sp.* `Bgl3`, UniProt **`Q59976`** in `card_metadata.py`) |
-| **Primary Benchmark Paper** | Armer, C. et al. (2025). *Proteins: Structure, Function, and Bioinformatics*, 93(12), 2005–2014. DOI: `10.1002/prot.70008` ([`align_tournament2025_proteins.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/align_tournament2025_proteins.pdf), [`align_tournament2025_suppinfo.pdf`](file:///home/beangoben/github/enzymado-benchmark/docs/pdfs/align_tournament2025_suppinfo.pdf)) |
+| **Primary Benchmark Paper** | Armer, C. et al. (2025). *Proteins: Structure, Function, and Bioinformatics*, 93(12), 2005–2014. DOI: `10.1002/prot.70008` (`align_tournament2025_proteins.pdf`, `align_tournament2025_suppinfo.pdf`) |
 | **Upstream Donor & Papers** | **Design to Data (D2D)** undergraduate research program at UC Davis (Vater & Siegel, `https://d2dcure.com/data/?protein=BglB`); Vater et al. (2020) *J. Chem. Educ.* 98, 400–409; Huang et al. (2020) *ACS Omega* 5, 6487–6493; Carlin et al. (2017) *PLoS One* 12, e0176255 |
-| **Processed Dataset Size** | **324** unique 445-aa protein variants (from 415 deduplicated measurements; **260** train / **32** val / **32** test) |
+| **Processed Dataset Size** | **324** unique 445-aa protein variants (from 415 deduplicated measurements; **264** train / **30** val / **30** test) |
 
 ---
 
 ## 2. How to Think About This Dataset
 
-- **What a row represents**: Each row in [`align_glucosidase_expression.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_glucosidase_expression/align_glucosidase_expression.csv) represents one unique 445-residue GH1 $\beta$-glucosidase sequence (`protein_sequence`; `1` wild-type + `323` single-amino-acid substitutions), the number of deduplicated cohort measurements averaged for that sequence (`n_measurements`, equal to `54` for `WT`, `2–3` for 35 repeated single mutants, and `1` for 288 single mutants), and its log-transformed soluble expression concentration (`log10_expression`).
+- **What a row represents**: Each row in [`align_glucosidase_expression.csv`](../../data/processed/real_case/align_glucosidase_expression/b_glucosidase__expression.csv) represents one unique 445-residue GH1 $\beta$-glucosidase sequence (`protein_sequence`; `1` wild-type + `323` single-amino-acid substitutions), the number of deduplicated cohort measurements averaged for that sequence (`n_measurements`, equal to `54` for `WT`, `2–3` for 35 repeated single mutants, and `1` for 288 single mutants), and its log-transformed soluble expression concentration (`log10_expression`).
 - **Why $N = 324$ instead of $354$**: In the 2023 Protein Engineering Tournament (`main` Table 1, p. 4), teams were scored only on `Activity` and `Melting point` for the $\beta$-glucosidase B challenge; `expression` was provided as an auxiliary training column in `train.csv` (`426` raw rows $\to 415$ deduplicated rows $\to 324$ unique sequences) and left blank in all `30` rows of `test (with values).csv`.
 - **Biochemical meaning of the label & the `1.0` spike**: Raw `expression` measures the soluble protein concentration ($\text{mg/mL}$) of $6\times\text{His}$-tagged $\beta$-glucosidase eluted from Ni-NTA spin columns after heterologous expression in *E. coli* BL21(DE3), quantified via Bradford / $A_{280}$ assay. Because all 415 interim values are strictly positive (`[0.0287, 35.9]`, `0` zeros), Enzymado applies $\log_{10}(\overline{\text{expression}})$ with `offset = 0.0` (range `[-1.3566, +1.5551]`, mean $= -0.1072$, SD $= 0.4534$, median $= 0.0000$, skewness $= -0.2581$). Crucially, **137 of the 415 interim rows (~33%)** have a raw expression value of **exact `1.0`** (`log10_expression = 0.0000`, standardized `+0.2361`), reflecting a subset of D2D entries recorded as WT-normalized (`1.0`) or default placeholder values alongside continuous $\text{mg/mL}$ entries.
 
@@ -50,8 +50,8 @@
 ## 5. How the Dataset Was Built & Cleaned
 
 1. **Upstream D2D curation & tournament release**: Donated by the UC Davis D2D program in `data/raw/align/b-glucosidase/train.csv` (`426` rows); the `30` rows in `test (with values).csv` have empty `expression` cells.
-2. **Exact deduplication**: In [`scripts/data_prep/real_cases/align_tournament.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py), [`load_align_rows`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py#L130-L195) removes `11` exact duplicate rows in `train.csv`, leaving `415` deduplicated training rows with finite `expression` in `data/interim/align/align_glucosidase.csv`.
-3. **Repeat collapse & $\log_{10}$ transformation**: [`build_align_rows`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/align_tournament.py#L254-L303) averages repeat measurements by unique 445-aa sequence (`54` distinct `WT` rows $\to 1$ `WT` row; `35` repeated single mutants averaged across 2–3 rows each), yielding **`324` unique protein sequences**, and applies $\log_{10}(\overline{\text{expression}})$ (`offset = 0.0`).
+2. **Exact deduplication**: In [`scripts/data_prep/real_cases/align_tournament.py`](../../scripts/data_prep/real_cases/align_tournament.py), [`load_align_rows`](../../scripts/data_prep/real_cases/align_tournament.py#L130-L195) removes `11` exact duplicate rows in `train.csv`, leaving `415` deduplicated training rows with finite `expression` in `data/interim/align/align_glucosidase.csv`.
+3. **Repeat collapse & $\log_{10}$ transformation**: [`build_align_rows`](../../scripts/data_prep/real_cases/align_tournament.py#L254-L303) averages repeat measurements by unique 445-aa sequence (`54` distinct `WT` rows $\to 1$ `WT` row; `35` repeated single mutants averaged across 2–3 rows each), yielding **`324` unique protein sequences**, and applies $\log_{10}(\overline{\text{expression}})$ (`offset = 0.0`).
 
 ---
 
@@ -68,7 +68,7 @@
 
 ## 7. Split Semantics, Leakage & Caveats
 
-- **Standardized split**: [`align_glucosidase_expression_random_80_10_10_standardized.csv`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/align_glucosidase_expression/align_glucosidase_expression_random_80_10_10_standardized.csv) partitions the `324` unique variants into **260 train / 32 val / 32 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split keyed on unique sequence, with `z`-score standardization fit on the training split ($\mu_{\text{train}} = -0.1072$, $\sigma_{\text{train}} = 0.4534$).
+- **Standardized split**: [`align_glucosidase_expression_random_80_10_10_standardized.csv`](../../data/processed/real_case/align_glucosidase_expression/b_glucosidase__expression_random_80_10_10_standardized.csv) partitions the `324` unique variants into **264 train / 30 val / 30 test** via a deterministic (seed 42) 10-decile stratified 80/10/10 random split keyed on unique sequence, with `z`-score standardization fit on the training split ($\mu_{\text{train}} = -0.1072$, $\sigma_{\text{train}} = 0.4534$).
 - **Caveats & leakage analysis**:
   - **High experimental noise floor**: $\sigma_{\text{WT}} = 0.416\;\log_{10}\text{ units}$ vs. $\sigma_{\text{dataset}} = 0.4534\;\log_{10}\text{ units}$, and repeat Spearman $\rho = 0.229$.
   - **Spike at `log10_expression = 0.0` (`+0.2361` standardized)**: ~33% of observations sit at raw `expression == 1.0`.

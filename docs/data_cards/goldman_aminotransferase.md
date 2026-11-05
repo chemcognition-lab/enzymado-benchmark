@@ -65,7 +65,7 @@
 | Split | Rows | Proteins | Ligands | Mean | Std | Min / p25 / Median | p75 | Max |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | **Train** | 336 | 24 | 18 | `0.0000` | `1.0000` | `-0.7719` | `0.7321` | `2.2636` |
-| **Val** | 48 | 22 | 16 | `0.0079` | `1.0102` | `-0.7719` | `0.8192` | `2.2752` |
-| **Test** | 48 | 21 | 18 | `-0.0268` | `1.0108` | `-0.7719` | `0.7619` | `1.9781` |
+| **Val** | 48 | 24 | 16 | `0.0079` | `1.0102` | `-0.7719` | `0.8192` | `2.2752` |
+| **Test** | 48 | 24 | 17 | `-0.0268` | `1.0108` | `-0.7719` | `0.7619` | `1.9781` |
 
 - **Caveat on `used_in_runs`**: Aminotransferases are obligate homodimers/oligomers whose catalytic pockets sit at the subunit interface; filtering by `used_in_runs == True` (single-chain monomer filter) retains only `90` rows (`5` proteins).

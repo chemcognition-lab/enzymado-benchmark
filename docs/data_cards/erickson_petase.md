@@ -20,14 +20,14 @@ computed_statistics_ref: data/processed/real_case/erickson_petase/dataset_card.j
 
 # `erickson_petase` — PET hydrolase activity across temperature, buffer, and pH
 
-> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/erickson_petase/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/erickson_petase/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
+> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/erickson_petase/dataset_card.json`](../../data/processed/real_case/erickson_petase/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
 
 ## 0. How to think about this dataset
 
 Four structural properties govern how this dataset behaves in machine learning benchmarks:
 
 1. **It is a $19 \times 30$ factorial grid, not 570 independent proteins.** Nineteen natural PET hydrolase scaffolds are each measured across all thirty combinations of five temperatures ($30, 40, 50, 60, 70\,^\circ\text{C}$) and six buffer/pH conditions. Every row belonging to a given scaffold carries the exact same amino acid sequence; only the reaction condition varies across its 30 rows. For any purely sequence-level question, the sample size is **$N = 19$ scaffolds**, not 570.
-2. **Under the published point-stratified split, the task tests condition-surface interpolation across seen scaffolds.** Because [`scripts/data_prep/generate_real_case_splits.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/generate_real_case_splits.py) splits real-case datasets at the observation level (`random_split_unit="point"`, stratified across 10 target deciles into $456\text{ train} / 57\text{ val} / 57\text{ test}$ rows), each of the 19 scaffolds has on average **24 of its 30 reaction conditions in `train`, 3 in `val`, and 3 in `test`**. A model that identifies which of the 19 scaffolds it is looking at and learns the smooth temperature $\times$ pH response surface will achieve high pooled $R^2$ without learning how to generalise to a 20th unseen scaffold.
+2. **Under the published point-stratified split, the task tests condition-surface interpolation across seen scaffolds.** Because [`scripts/data_prep/generate_real_case_splits.py`](../../scripts/data_prep/generate_real_case_splits.py) splits real-case datasets at the observation level (`random_split_unit="point"`, stratified across 10 target deciles into $456\text{ train} / 57\text{ val} / 57\text{ test}$ rows), each of the 19 scaffolds has on average **24 of its 30 reaction conditions in `train`, 3 in `val`, and 3 in `test`**. A model that identifies which of the 19 scaffolds it is looking at and learns the smooth temperature $\times$ pH response surface will achieve high pooled $R^2$ without learning how to generalise to a 20th unseen scaffold.
 3. **The label is a 96-hour solid-polymer endpoint yield, not a steady-state rate constant.** Cumulative aromatic product concentration released from a solid amorphous PET film over four days conflates intrinsic interfacial catalysis, polymer surface adsorption, and four-day thermal denaturation (which dominates the $60\text{–}70\,^\circ\text{C}$ rows). This observable should never be equated with or jointly modelled alongside solution $k_{\text{cat}}$.
 4. **The 19-protein panel is survivorship-filtered three times over.** Starting from 74 bioinformatically mined thermophilic candidates $\to$ 51 that expressed solubly in *E. coli* $\to$ the **19 best-performing scaffolds** across seven phylogenetic groups were chosen for the 30-condition grid. Dead and poorly expressing scaffolds are systematically absent.
 
@@ -117,7 +117,7 @@ In contrast to literature-aggregated databases, nearly every STRENDA state varia
 
 ### 4.2 Source-table bug fix in Enzymado (`ERICKSON_ROW_FIXES`)
 
-In the raw source table (`values.csv`), the seventh data row (0-based row index **6**) is labelled `"30°C, C6"` a second time immediately before the $40\,^\circ\text{C}$ block, which otherwise lacks a `C6` row, and its product yields fall smoothly between the $30\,^\circ\text{C}$ and $50\,^\circ\text{C}$ series. [`scripts/data_prep/real_cases/erickson_petase.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/erickson_petase.py#L33) deterministically relabels row index 6 from `("30°C", "C6")` to `("40°C", "C6")`, restoring the complete $5\text{ temperatures} \times 6\text{ buffers} = 30\text{ conditions} \times 19\text{ enzymes} = 570\text{ rows}$ factorial grid.
+In the raw source table (`values.csv`), the seventh data row (0-based row index **6**) is labelled `"30°C, C6"` a second time immediately before the $40\,^\circ\text{C}$ block, which otherwise lacks a `C6` row, and its product yields fall smoothly between the $30\,^\circ\text{C}$ and $50\,^\circ\text{C}$ series. [`scripts/data_prep/real_cases/erickson_petase.py`](../../scripts/data_prep/real_cases/erickson_petase.py#L33) deterministically relabels row index 6 from `("30°C", "C6")` to `("40°C", "C6")`, restoring the complete $5\text{ temperatures} \times 6\text{ buffers} = 30\text{ conditions} \times 19\text{ enzymes} = 570\text{ rows}$ factorial grid.
 
 ### 4.3 Target transformation and zero-floor rationale
 
@@ -131,9 +131,9 @@ where $(\mu_{\text{train}}, \sigma_{\text{train}})$ are fitted on the 456 traini
 
 ## 5. Split semantics and leakage caveats
 
-One split file is published: `erickson_random_80_10_10_standardized` ($456\text{ train} / 57\text{ val} / 57\text{ test} = 570\text{ total}$; see [`dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/erickson_petase/dataset_card.json) for exact split moments).
+One split file is published: `erickson_random_80_10_10_standardized` ($456\text{ train} / 57\text{ val} / 57\text{ test} = 570\text{ total}$; see [`dataset_card.json`](../../data/processed/real_case/erickson_petase/dataset_card.json) for exact split moments).
 
-- **How the split was constructed:** [`scripts/data_prep/generate_real_case_splits.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/generate_real_case_splits.py#L69-L75) generates splits for `real_case` tasks using **`random_split_unit="point"`** (observation-level splitting keyed on `dataset_id`, stratified across 10 deciles of `log10_sum_aromatic_products_plus_one` with `seed=42`).
+- **How the split was constructed:** [`scripts/data_prep/generate_real_case_splits.py`](../../scripts/data_prep/generate_real_case_splits.py#L69-L75) generates splits for `real_case` tasks using **`random_split_unit="point"`** (observation-level splitting keyed on `dataset_id`, stratified across 10 deciles of `log10_sum_aromatic_products_plus_one` with `seed=42`).
 - **Why there is no `similarity_mmseqs2` split:** With only 19 distinct scaffolds in total, an 80/10/10 cluster- or protein-grouped split would place at most $1\text{–}2$ scaffolds in `val` and $1\text{–}2$ scaffolds in `test`, yielding extreme variance across random seeds.
 
 ### Summary of leakage risks and structural caveats

@@ -19,9 +19,9 @@ domain_review_doi: https://doi.org/10.1093/nar/gkn582
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
 - **Primary Database Papers**:
-  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2025.* **Nucleic Acids Research** 53, D609–D617 (2025). DOI: [`10.1093/nar/gkae1010`](https://doi.org/10.1093/nar/gkae1010) ([main PDF](../pdfs/uniprot_consortium2025_nar.pdf)).
-  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2023.* **Nucleic Acids Research** 51, D523–D531 (2023). DOI: [`10.1093/nar/gkac1052`](https://doi.org/10.1093/nar/gkac1052) ([2023 PDF](../pdfs/uniprot_consortium2023_nar.pdf)).
-- **Domain Review / Nomenclature Paper**: McDonald, A. G., Boyce, S. & Tipton, K. F. *ExplorEnz: the primary source of the IUBMB enzyme list.* **Nucleic Acids Research** 37, D593–D597 (2009). DOI: [`10.1093/nar/gkn582`](https://doi.org/10.1093/nar/gkn582) ([review PDF](../pdfs/rev_ec_mcdonald2023_nar.pdf)).
+  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2025.* **Nucleic Acids Research** 53, D609–D617 (2025). DOI: [`10.1093/nar/gkae1010`](https://doi.org/10.1093/nar/gkae1010) (main PDF).
+  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2023.* **Nucleic Acids Research** 51, D523–D531 (2023). DOI: [`10.1093/nar/gkac1052`](https://doi.org/10.1093/nar/gkac1052) (2023 PDF).
+- **Domain Review / Nomenclature Paper**: McDonald, A. G., Boyce, S. & Tipton, K. F. *ExplorEnz: the primary source of the IUBMB enzyme list.* **Nucleic Acids Research** 37, D593–D597 (2009). DOI: [`10.1093/nar/gkn582`](https://doi.org/10.1093/nar/gkn582) (review PDF).
 - **Upstream Repositories**:
   - **UniProtKB/Swiss-Prot (`data/raw/swissprot/swissprot_ec.tsv`)**: Manually reviewed protein knowledgebase queried via `scripts/data_prep/download_swissprot_ec.sh` (`(reviewed:true) AND (ec:*)`).
   - **IUBMB Enzyme Nomenclature (ExplorEnz) & Rhea**: Formal four-part hierarchical reaction classification and ChEBI-linked biochemical reaction knowledgebase used by Swiss-Prot curators.

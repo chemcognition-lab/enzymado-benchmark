@@ -4,6 +4,8 @@
 > **computed statistics**: [`data/processed/real_case/mcba_reaction_activity/dataset_card.json`](../../data/processed/real_case/mcba_reaction_activity/dataset_card.json)
 > **track**: `real_case` | **task type**: `protein_ligand_global` (scalar regression) | **layout**: Layout B
 
+> **Note:** the identity table and split table on this card match the published CSV. The remaining text and the enriched JSON were written for an earlier version of this dataset and are pending review.
+
 ---
 
 ## 1. Identity & Provenance
@@ -16,7 +18,7 @@
 | **Primary Experimental Source** | Landwehr, G. M., Bogart, J. W., Magalhaes, C., Hammarlund, E. G., Karim, A. S. & Jewett, M. C. *Accelerated enzyme engineering by machine-learning guided cell-free expression*. *Nature Communications* **16**, 865 (2025), DOI: [`10.1038/s41467-024-55399-0`](https://doi.org/10.1038/s41467-024-55399-0) |
 | **Raw Data Source** | Supplementary Data 1 (`41467_2024_55399_MOESM4_ESM.xlsx`) / [`grantlandwehr/McbA_engineering`](https://github.com/grantlandwehr/McbA_engineering) |
 | **Preprocessing Script** | [`scripts/data_prep/real_cases/mcba_amide_synthetase.py`](../../scripts/data_prep/real_cases/mcba_amide_synthetase.py) |
-| **Published Split** | `mcba_reaction_activity_random_80_10_10_standardized` (`9,645` train / `1,213` val / `1,210` test; `12,068` total rows) |
+| **Published Split** | `mcba_reaction_activity_random_80_10_10_standardized` (`8,484` train / `1,217` val / `1,217` test; `10,918` total rows) |
 
 ---
 
@@ -61,6 +63,6 @@
 
 | Split | Rows | Proteins | Ligands (`acid`) | Mean | Std | Min | p25 | Median | p75 | Max |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Train** | 9,645 | 1,861 | 8 | `0.0000` | `1.0000` | `-2.1190` | `0.0257` | `0.4091` | `0.5892` | `3.7929` |
-| **Val** | 1,213 | 909 | 8 | `-0.0033` | `0.9963` | `-2.1190` | `0.0298` | `0.4091` | `0.5844` | `3.3210` |
-| **Test** | 1,210 | 895 | 8 | `-0.0038` | `1.0030` | `-2.1190` | `0.0235` | `0.4091` | `0.5858` | `3.7023` |
+| 8,484 | 1,217 | 9 | `0.0000` | `1.0000` | `-2.0319` | `-0.3598` | `0.4596` | `0.7032` | `2.0498` |
+| 1,217 | 1,217 | 9 | `0.0355` | `0.9646` | `-2.0319` | `-0.2741` | `0.4636` | `0.7035` | `1.9539` |
+| 1,217 | 1,217 | 9 | `0.0257` | `0.9841` | `-2.0319` | `-0.3069` | `0.4586` | `0.7089` | `2.2881` |

@@ -11,7 +11,7 @@
 | Field | Value |
 |---|---|
 | **Task / Dataset ID** | `koudelakova_hld_panel` |
-| **Property Name** | `log10_specific_activity` |
+| **Property Name** | `log10_activity` |
 | **Biochemical Observable** | $\log_{10}(w_{e,s} + 10^{-3})$, where $w_{e,s} = \frac{\log(a_{e,s} + 1)}{\sum_{s'} \log(a_{e,s'} + 1)}$ is the within-enzyme normalized log-specific-activity share from Supplementary Table S5 ($a_{e,s}$ in $\text{nmol s}^{-1}\text{ mg}^{-1}$ of IMAC-purified enzyme, measured via the Iwasaki $460\text{ nm}$ halide-release time-course assay across $\ge 3$ independent experiments) across 13 haloalkane dehalogenases and 30 statistically selected halogenated substrates |
 | **Primary Experimental Source** | Koudelakova, T., Chovancova, E., Brezovsky, J., Monincova, M., Fortova, A., Jarkovsky, J. & Damborsky, J. *Substrate specificity of haloalkane dehalogenases*. *Biochemical Journal* **435**(2), 345–354 (2011), DOI: [`10.1042/BJ20101405`](https://doi.org/10.1042/BJ20101405) |
 | **Raw Data Source** | Supplementary Online Data Table S5 (`Transformed data matrix`, p. 17 of `docs/pdfs/hld_koudelakova2011_biochemj.pdf`; raw rates in Table S3, pp. 15–16) |
@@ -64,5 +64,5 @@
 | Split | Rows | Proteins | Ligands | Mean | Std | Min | p25 | Median | p75 | Max |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | **Train** | 312 | 13 | 30 | `0.0000` | `1.0000` | `-1.4820` | `-0.6844` | `0.2145` | `0.7330` | `1.7016` |
-| **Val** | 39 | 12 | 25 | `0.0086` | `0.9963` | `-1.4820` | `-0.6001` | `0.2096` | `0.7131` | `1.3917` |
-| **Test** | 39 | 12 | 24 | `-0.0156` | `1.0127` | `-1.4820` | `-0.8315` | `0.2339` | `0.7375` | `1.6305` |
+| **Val** | 39 | 13 | 23 | `0.0086` | `0.9963` | `-1.4820` | `-0.6001` | `0.2096` | `0.7131` | `1.3917` |
+| **Test** | 39 | 13 | 19 | `-0.0156` | `1.0127` | `-1.4820` | `-0.8315` | `0.2339` | `0.7375` | `1.6305` |

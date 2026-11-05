@@ -20,14 +20,14 @@ computed_statistics_ref: data/processed/real_case/plpro_activity/dataset_card.js
 
 # `plpro_activity` — SARS-CoV-2 papain-like protease (PLpro) cellular proteolytic activity DMS
 
-> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/plpro_activity/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/plpro_activity/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
+> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/plpro_activity/dataset_card.json`](../../data/processed/real_case/plpro_activity/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
 
 ## 0. How to think about this dataset
 
 Four structural properties govern how this dataset behaves in machine learning benchmarks:
 
 1. **It is a dense single-site saturation landscape of the 315-aa SARS-CoV-2 PLpro domain assayed in human HEK293T cells.** Every one of the **5,335 rows** is a single canonical amino acid substitution (Hamming distance 1, $99.68\%$ sequence identity) of the SARS-CoV-2 Nsp3 papain-like protease domain (Nsp3 residues 746–1060, numbered 1–315), covering $89.1\%$ of all $315 \times 19 = 5,985$ theoretical missense mutations across the N-terminal ubiquitin-like (`Ubl2`) domain and the catalytic thumb, palm, and zinc-finger subdomains.
-2. **Cellular biosensor cleavage conflates catalytic efficiency with intracellular protein folding/abundance—unless paired with `plpro_abundance`.** Because the assay measures 24-hour doxycycline-induced cleavage of a stably integrated `mClover3–TLKGGAPTKV–mRuby3` FRET biosensor inside live HEK293T cells, any mutation that destabilizes PLpro or triggers cellular degradation lowers the activity score just like a catalytic-triad knockout (`C111`, `H272`, `D286`). Crucially, [`scripts/data_prep/real_cases/plpro_dms.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/plpro_dms.py) extracts both `plpro_activity` and `plpro_abundance` from the **exact same 5,335 variants** in worksheet `"Fig. 3"` of `plpro_flynn2024_MOESM9_ESM.xlsx`, enabling direct mechanistic deconvolution of folding defects vs. catalytic impairment.
+2. **Cellular biosensor cleavage conflates catalytic efficiency with intracellular protein folding/abundance—unless paired with `plpro_abundance`.** Because the assay measures 24-hour doxycycline-induced cleavage of a stably integrated `mClover3–TLKGGAPTKV–mRuby3` FRET biosensor inside live HEK293T cells, any mutation that destabilizes PLpro or triggers cellular degradation lowers the activity score just like a catalytic-triad knockout (`C111`, `H272`, `D286`). Crucially, [`scripts/data_prep/real_cases/plpro_dms.py`](../../scripts/data_prep/real_cases/plpro_dms.py) extracts both `plpro_activity` and `plpro_abundance` from the **exact same 5,335 variants** in worksheet `"Fig. 3"` of `plpro_flynn2024_MOESM9_ESM.xlsx`, enabling direct mechanistic deconvolution of folding defects vs. catalytic impairment.
 3. **Internal 13-barcode replication across 7 independent transductions yields an analytical $R^2_{\max}$ ceiling of `0.9713`.** Each variant was linked to an average of 13 distinct 16-bp 3' UTR barcodes (mapped by PacBio Revio long-read sequencing) and assayed across **7 independent lentiviral transductions** (from 4 viral productions), with per-variant DiMSum error bars (`Errors_activity`, median $\sigma = 0.0588$) preserved in the raw Source Data table.
 4. **Under the published point-stratified 80/10/10 split, every sequence position is seen $\sim 13.6$ times in `train`.** Because splitting is performed at the variant level (`random_split_unit="point"`), all 315 positions appear in the training set; the split therefore tests **within-position amino acid substitution interpolation** rather than unseen-site or unseen-scaffold extrapolation.
 
@@ -102,19 +102,19 @@ $$F_{\text{scaled}} = \frac{F_{\text{raw}} - F_{\text{avg-nonsense(res 1–304)}
 
 Variants with $\le 10$ reads at $t_0$ or $\sigma_{\text{scaled}} \ge 0.20$ were excluded.
 
-### 4.2 Source-to-benchmark reconciliation in [`plpro_dms.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/plpro_dms.py)
+### 4.2 Source-to-benchmark reconciliation in [`plpro_dms.py`](../../scripts/data_prep/real_cases/plpro_dms.py)
 
 Worksheet `"Fig. 3"` of `plpro_flynn2024_MOESM9_ESM.xlsx` places three tables side-by-side:
 - **Columns A–G (`#this is for all data`, 5,342 rows):** Contains all non-synonymous variants passing quality filters in **both** the activity screen ($\sigma < 0.20$) and the abundance screen ($\sigma < 0.45$). These 5,342 rows consist of **5,335 single-site missense variants** (`Mut` in the 20 canonical amino acids) plus **7 C-terminal nonsense (`*`) variants** after `Tyr305` (at positions `306, 307, 308, 309, 311, 312, 314`, which retain activity because the extreme C-terminal tail is dispensable).
 - **Columns I–M (`#this is for synonymous data`, 340 rows)** and **Columns O–U (`#this is for nonsense variants`, 285 rows at positions 1–305)**.
 
-[`scripts/data_prep/real_cases/plpro_dms.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/plpro_dms.py#L72-L99) reads Columns A–E and filters `mut_aa in CANONICAL_AA`, dropping the 7 C-terminal `*` rows and retaining all **5,335 unique missense variants** with zero duplicates. Because `fitness_activity` is already a calibrated log-enrichment ratio ($[-0.2799, +1.2867]$), Enzymado applies an **Identity** transformation followed by train-split z-score standardization ($\mu_{\text{train}} = 0.5999$, $\sigma_{\text{train}} = 0.3947$).
+[`scripts/data_prep/real_cases/plpro_dms.py`](../../scripts/data_prep/real_cases/plpro_dms.py#L72-L99) reads Columns A–E and filters `mut_aa in CANONICAL_AA`, dropping the 7 C-terminal `*` rows and retaining all **5,335 unique missense variants** with zero duplicates. Because `fitness_activity` is already a calibrated log-enrichment ratio ($[-0.2799, +1.2867]$), Enzymado applies an **Identity** transformation followed by train-split z-score standardization ($\mu_{\text{train}} = 0.5999$, $\sigma_{\text{train}} = 0.3947$).
 
 ---
 
 ## 5. Split semantics and leakage caveats
 
-One split file is published: `plpro_activity_random_80_10_10_standardized` ($4,270\text{ train} / 533\text{ val} / 532\text{ test} = 5,335\text{ total}$; see [`dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/plpro_activity/dataset_card.json) for exact split moments).
+One split file is published: `plpro_activity_random_80_10_10_standardized` ($4,270\text{ train} / 533\text{ val} / 532\text{ test} = 5,335\text{ total}$; see [`dataset_card.json`](../../data/processed/real_case/plpro_activity/dataset_card.json) for exact split moments).
 
 1. **Position-level sharing across splits (`random_split_unit="point"`):** Every one of the 315 sequence positions is mutated $\sim 13.6$ times in `train` and $\sim 1.7$ times in `val` and `test`. High pooled $R^2$ on this split reflects accurate interpolation across amino acid substitutions at known positions rather than de novo structural generalization to unseen positions.
 2. **Identical variant set with `plpro_abundance`:** All 5,335 variants in `plpro_activity` also appear in `plpro_abundance`. Never leak `plpro_abundance` targets when benchmarking `plpro_activity`.

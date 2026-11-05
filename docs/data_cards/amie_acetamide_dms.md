@@ -21,7 +21,7 @@ computed_statistics_ref: data/processed/real_case/amie_acetamide_dms/dataset_car
 
 # `amie_acetamide_dms` — *Pseudomonas aeruginosa* AmiE deep mutational scan on acetamide
 
-> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/amie_acetamide_dms/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/amie_acetamide_dms/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
+> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/amie_acetamide_dms/dataset_card.json`](../../data/processed/real_case/amie_acetamide_dms/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
 
 ## 0. How to think about this dataset
 
@@ -104,7 +104,7 @@ The raw Figshare file `data/raw/dms/amie/amiESelectionFitnessData_Acetamide.txt`
 - **338 finite nonsense (`*`) rows** (note that $6,289\text{ missense} + 338\text{ nonsense} = \mathbf{6,627\text{ non-synonymous + nonsense variants}}$, matching the exact $n = 6,627$ reported for the global replicate correlation on Main p. 3!).
 - **193 `NA` rows** (190 missense + 3 `*`, corresponding to variants with $\le 5$ pre-selection reads or post-selection depletion $e_i \le -8$ where Eq. 3 has a non-positive argument inside $\log_2$).
 
-In [`scripts/data_prep/real_cases/amie_dms.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/amie_dms.py#L64-L99), `build_amie_rows` drops the 341 stop-codon (`*`) rows and the 190 missense `NA` rows, constructs the full 346-aa sequence for each row, and calls `collapse_duplicate_rows`, which collapses the 341 identical wild-type rows (`normalized_fitness = 0.0`) into **1 wild-type row** (`amie_acetamide_00001`), yielding **$1\text{ WT} + 6,289\text{ missense} = \mathbf{6,290\text{ unique sequences}}$**.
+In [`scripts/data_prep/real_cases/amie_dms.py`](../../scripts/data_prep/real_cases/amie_dms.py#L64-L99), `build_amie_rows` drops the 341 stop-codon (`*`) rows and the 190 missense `NA` rows, constructs the full 346-aa sequence for each row, and calls `collapse_duplicate_rows`, which collapses the 341 identical wild-type rows (`normalized_fitness = 0.0`) into **1 wild-type row** (`amie_acetamide_00001`), yielding **$1\text{ WT} + 6,289\text{ missense} = \mathbf{6,290\text{ unique sequences}}$**.
 
 ### 4.2 Target transformation
 
@@ -114,7 +114,7 @@ Because `normalized_fitness` ($\zeta_i = \log_2(\mu_{S,i}/\mu_{S,\text{wt}})$) i
 
 ## 5. Split semantics and leakage caveats
 
-One split file is published: `amie_acetamide_random_80_10_10_standardized` ($5,030\text{ train} / 630\text{ val} / 630\text{ test} = 6,290\text{ total}$; see [`dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/amie_acetamide_dms/dataset_card.json) for exact split moments).
+One split file is published: `amie_acetamide_random_80_10_10_standardized` ($5,030\text{ train} / 630\text{ val} / 630\text{ test} = 6,290\text{ total}$; see [`dataset_card.json`](../../data/processed/real_case/amie_acetamide_dms/dataset_card.json) for exact split moments).
 
 1. **Position-level sharing across splits (`random_split_unit="point"`):** Every scanned residue position (1–341) is mutated $\sim 14.8$ times in `train` and $\sim 1.8$ times in `val` and `test`; the split evaluates within-position substitution interpolation.
 2. **Cross-task sequence overlap with `amie_propionamide_dms` and `amie_isobutyramide_dms`:** Over 6,100 of the 6,290 protein sequences are shared verbatim across all three AmiE tasks, and their fitness scores correlate strongly across folding-sensitive core residues ($r = 0.87$ between ACT and PR above the lower bound; Main p. 6). Never leak labels or split information across the three AmiE datasets.

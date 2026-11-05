@@ -21,7 +21,7 @@ computed_statistics_ref: data/processed/real_case/trpb3_epistasis/dataset_card.j
 
 # `trpb3_epistasis` — *Thermotoga maritima* TrpB (`Tm9D8*`) 3-site combinatorial epistasis landscape (Library 3A: positions 104, 105, 106)
 
-> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/trpb3_epistasis/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/trpb3_epistasis/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
+> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, and per-split label distributions are maintained programmatically in [`data/processed/real_case/trpb3_epistasis/dataset_card.json`](../../data/processed/real_case/trpb3_epistasis/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
 
 ## 0. How to think about this dataset
 
@@ -34,7 +34,7 @@ Four structural properties govern how this dataset behaves in machine learning b
 
 **Practical consequences for use:**
 - **Do not rely solely on pooled $R^2$ or MSE:** In the 800-row `test` split, $\sim 795$ rows are dead variants sitting near $0.0\text{ SD}$ and only $\sim 4\text{–}5$ rows are active variants sitting up to **`+16.05 SD`**. Pooled $R^2$ is overwhelmingly governed by those $4\text{–}5$ extreme right-tail points. Always report **active-variant AUPRC / ROC-AUC** (e.g., at $\text{fitness} > 0.10$ or $> 0.15$) and **Top-K recall** alongside $R^2$.
-- Note the **1-row `"NAN"` parser drop**: out of 7,971 rows in `Johnston2024_TrpB3A.csv`, row 4390 is the valid tripeptide **`NAN` (`Asn104–Ala105–Asn106`, inactive with `fitness = -0.063185`)**, which [`utils.clean_text`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/utils.py#L148-L155) treats as a null string (`text.lower() in {"nan", "none", "null"}`), yielding 7,970 rows in `trpb3_epistasis.csv`.
+- Note the **1-row `"NAN"` parser drop**: out of 7,971 rows in `Johnston2024_TrpB3A.csv`, row 4390 is the valid tripeptide **`NAN` (`Asn104–Ala105–Asn106`, inactive with `fitness = -0.063185`)**, which [`utils.clean_text`](../../scripts/data_prep/real_cases/utils.py#L148-L155) treats as a null string (`text.lower() in {"nan", "none", "null"}`), yielding 7,970 rows in `trpb3_epistasis.csv`.
 - Never pass `dataset_id` (`trpb3_00001` … `trpb3_07970`, ordered lexicographically from `AAA` to `YYY`) as a model input.
 
 ---
@@ -84,7 +84,7 @@ Four structural properties govern how this dataset behaves in machine learning b
 
 1. **Theoretical 3-site combinatorial space:** $20^3 = \mathbf{8,000}$ canonical tripeptides at positions `104, 105, 106`.
 2. **Upstream sequencing depth filter (`Johnston2024_TrpB3A.csv`):** 29 combinations had $< 10$ reads at $t = 0$ or $0$ reads at $t = 18\text{ h}/44\text{ h}$, leaving **7,971 rows** in `data/raw/dms/trpb3/Johnston2024_TrpB3A.csv`.
-3. **The 1-row `"NAN"` string-cleaner drop in [`trpb3_epistasis.py`](file:///home/beangoben/github/enzymado-benchmark/scripts/data_prep/real_cases/trpb3_epistasis.py#L46-L78):** In `build_trpb3_rows`, `mutation_code = utils.clean_text(row.get("sequences"))` passes each 3-letter amino acid code through `clean_text`, which returns `""` whenever `text.lower() in {"nan", "none", "null"}`. For row 4390 of `Johnston2024_TrpB3A.csv`, the valid tripeptide **`"NAN"` (`Asn104–Ala105–Asn106`, `fitness = -0.063185`)** matches `"nan"` case-insensitively and is skipped, yielding **7,970 unique 397-aa sequences**.
+3. **The 1-row `"NAN"` string-cleaner drop in [`trpb3_epistasis.py`](../../scripts/data_prep/real_cases/trpb3_epistasis.py#L46-L78):** In `build_trpb3_rows`, `mutation_code = utils.clean_text(row.get("sequences"))` passes each 3-letter amino acid code through `clean_text`, which returns `""` whenever `text.lower() in {"nan", "none", "null"}`. For row 4390 of `Johnston2024_TrpB3A.csv`, the valid tripeptide **`"NAN"` (`Asn104–Ala105–Asn106`, `fitness = -0.063185`)** matches `"nan"` case-insensitively and is skipped, yielding **7,970 unique 397-aa sequences**.
 
 ### 4.2 Target transformation
 
@@ -94,7 +94,7 @@ Enzymado applies an **Identity** transform to `fitness` ($(\mu_i - \mu_{\text{st
 
 ## 5. Split semantics and leakage caveats
 
-One split file is published: `trpb3_random_80_10_10_standardized` ($6,370\text{ train} / 800\text{ val} / 800\text{ test} = 7,970\text{ total}$; see [`dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/real_case/trpb3_epistasis/dataset_card.json) for exact split moments).
+One split file is published: `trpb3_random_80_10_10_standardized` ($6,370\text{ train} / 800\text{ val} / 800\text{ test} = 7,970\text{ total}$; see [`dataset_card.json`](../../data/processed/real_case/trpb3_epistasis/dataset_card.json) for exact split moments).
 
 1. **Higher-order epistasis at seen sites (`random_split_unit="point"`):** All 7,970 variants mutate the same three positions (`104, 105, 106`), so every single substitution is seen $\sim 318$ times in `train` and every double substitution is seen $\sim 16$ times in `train`. The split evaluates **3-body epistatic combination prediction** at positions 104–106.
 2. **Extreme right-tail sensitivity ($\sim 0.54\%$ active variants):** Because 99.46% of rows are inactive noise around $-0.045$ (`-0.11` standardized) and the $\sim 43$ active rows reach $+1.000$ (`+20.17` standardized), always supplement $R^2$ with active-hit classification metrics (AUPRC, Top-K recall).

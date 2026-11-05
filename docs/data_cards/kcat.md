@@ -21,7 +21,7 @@ computed_statistics_ref: data/processed/properties/kcat/dataset_card.json#/stati
 
 # `catpred_kcat` — Enzyme turnover number ($k_{\text{cat}}$)
 
-> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, MMseqs2 diversity metrics, and per-split label moments are maintained programmatically in [`data/processed/properties/kcat/dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/properties/kcat/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
+> **Computed statistics pointer:** Tabular counts, sequence-length quantiles, MMseqs2 diversity metrics, and per-split label moments are maintained programmatically in [`data/processed/properties/kcat/dataset_card.json`](../../data/processed/properties/kcat/dataset_card.json). This card documents the **non-computable experimental, curation, and methodological provenance** required to use and interpret the dataset correctly.
 
 ## 0. How to think about this dataset
 
@@ -133,7 +133,7 @@ Because `catpred_kcat` aggregates thousands of primary papers, **no single assay
 
 ## 5. Split semantics and leakage caveats
 
-Two 80/10/10 split protocols are published (`catpred_kcat_random_80_10_10_standardized` and `catpred_kcat_similarity_mmseqs2_80_10_10_standardized`; see [`dataset_card.json`](file:///home/beangoben/github/enzymado-benchmark/data/processed/properties/kcat/dataset_card.json) for exact split counts and moments):
+Two 80/10/10 split protocols are published (`catpred_kcat_random_80_10_10_standardized` and `catpred_kcat_similarity_mmseqs2_80_10_10_standardized`; see [`dataset_card.json`](../../data/processed/properties/kcat/dataset_card.json) for exact split counts and moments):
 
 - **What `random_80_10_10` tests:** Proteins (`uniprot_id`) are partitioned 80/10/10 at random so all substrates of a given UniProt accession stay in the same split. However, because it does not cluster by sequence similarity, orthologous or isozymic proteins with $>90\%$ sequence identity frequently straddle `train` and `test`.
 - **What `similarity_mmseqs2_80_10_10` tests:** Whole MMseqs2 sequence clusters built at **30% sequence identity** (`--min-seq-id 0.3`) are assigned intact to `train`, `val`, or `test`, guaranteeing that no test enzyme shares $\ge 30\%$ sequence identity with any training enzyme.

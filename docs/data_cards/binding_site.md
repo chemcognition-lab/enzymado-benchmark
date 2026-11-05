@@ -19,9 +19,9 @@ domain_review_doi: https://doi.org/10.1186/s13321-024-00907-z
 ## 0. Provenance & Upstream-vs-Enzymado Comparison
 
 - **Primary Database Papers**:
-  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2025.* **Nucleic Acids Research** 53, D609–D617 (2025). DOI: [`10.1093/nar/gkae1010`](https://doi.org/10.1093/nar/gkae1010) ([main PDF](../pdfs/uniprot_consortium2025_nar.pdf)).
-  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2023.* **Nucleic Acids Research** 51, D523–D531 (2023). DOI: [`10.1093/nar/gkac1052`](https://doi.org/10.1093/nar/gkac1052) ([2023 PDF](../pdfs/uniprot_consortium2023_nar.pdf)).
-- **Domain Review / Structural Pocket Analysis Paper**: Vavra, O. et al. *Large-scale annotation of biochemically relevant pockets and tunnels in cognate enzyme–ligand complexes.* **Journal of Cheminformatics** 16, 114 (2024). DOI: [`10.1186/s13321-024-00907-z`](https://doi.org/10.1186/s13321-024-00907-z) ([review PDF](../pdfs/rev_binding_site_pockets2024_jcheminf.pdf)).
+  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2025.* **Nucleic Acids Research** 53, D609–D617 (2025). DOI: [`10.1093/nar/gkae1010`](https://doi.org/10.1093/nar/gkae1010) (main PDF).
+  - The UniProt Consortium. *UniProt: the Universal Protein Knowledgebase in 2023.* **Nucleic Acids Research** 51, D523–D531 (2023). DOI: [`10.1093/nar/gkac1052`](https://doi.org/10.1093/nar/gkac1052) (2023 PDF).
+- **Domain Review / Structural Pocket Analysis Paper**: Vavra, O. et al. *Large-scale annotation of biochemically relevant pockets and tunnels in cognate enzyme–ligand complexes.* **Journal of Cheminformatics** 16, 114 (2024). DOI: [`10.1186/s13321-024-00907-z`](https://doi.org/10.1186/s13321-024-00907-z) (review PDF).
 - **Upstream Repositories**:
   - **UniProtKB/Swiss-Prot (`data/raw/swissprot/swissprot_ec.tsv`, `Binding site` / `BINDING` column)**: Reviewed enzyme sequence records annotated with ChEBI-standardized substrate, cofactor, and metal ion binding positions.
   - **ChEBI, PDBe/SIFTS & InterPro / UniRule**: Chemical ontology and homology rule systems used by Swiss-Prot to annotate and propagate binding-pocket residues.
