@@ -121,8 +121,7 @@ def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
     plms = [e for e in grid.columns if e != "noplm"]
     grid = grid[plms + ["noplm"]]  # the reference without a PLM closes each row
     metric = df.groupby("task").metric.first()
-    # top_h leaves the longest rotated name (prot5_xl_half) clear of the note.
-    cell_w, cell_h, gap, head_w, top_h, ref_gap = 62, 32, 4, 128, 152, 12
+    cell_w, cell_h, gap, head_w, top_h, ref_gap = 62, 26, 4, 128, 88, 12
     xs = [
         head_w + j * (cell_w + gap) + ref_gap * (emb == "noplm")
         for j, emb in enumerate(grid.columns)
@@ -137,17 +136,14 @@ def heatmap(out: Path, scores: pd.DataFrame, split: str = "similarity") -> None:
         "note",
         va="baseline",
     )
-    for x, emb in zip(xs, grid.columns):
-        c.text(
-            x + cell_w / 2,
-            top_h - 8,
-            vis.short(emb),
-            "tick",
-            ha="left",
-            va="bottom",
-            rotation=45,
-            rotation_mode="anchor",
-        )
+    # Names alternate between two rows, so each can be wider than its column; a
+    # tick ties the upper row to its cells. The longest name sits on the upper row.
+    for j, (x, emb) in enumerate(zip(xs, grid.columns)):
+        xc, upper = x + cell_w / 2, j % 2 == 0
+        y = top_h - (30 if upper else 7)
+        c.text(xc, y, vis.short(emb), "tick", ha="center", va="bottom")
+        if upper:
+            c.line([xc, xc], [y + 3, top_h - 3], color=vis.INK_3, linewidth=0.8)
     for i, (task, row) in enumerate(grid.iterrows()):
         y = top_h + i * (cell_h + gap)
         c.text(head_w - 10, y + cell_h / 2, vis.TASK_LABEL[task], "label")
@@ -222,7 +218,7 @@ def split_gap_box(out: Path, scores: pd.DataFrame) -> None:
         groups.append((name, [(t, by_task.get_group(t).to_numpy()) for t in order]))
 
     # Wide enough for the group headings, which sit in the label column.
-    m_left, header_h, row_h = 172, 20, 26
+    m_left, header_h, row_h = 172, 18, 21
     n_rows = sum(len(rows) for _, rows in groups)
     height = vis.Y_PLOT + n_rows * row_h + len(groups) * header_h + vis.M_BOT
     c = vis.Canvas(vis.CANVAS_W, height)

@@ -6,6 +6,7 @@ Test run: python scripts/figures/question_figures.py --out /tmp/q
 
 import argparse
 from collections.abc import Callable
+import itertools
 from pathlib import Path
 import textwrap
 
@@ -47,9 +48,9 @@ GROUPS = {
     "T5 denoising + completion": ["ankh3_xl", "ankh3_large"],
     "Structure in training": ["prost5", "esm3_open"],
     "Masked LM, encoder only": ["esm2_650M", "esm2_3B", "esmc_600m", "esmc_300m"],
-    "Masked LM with homologs": ["profluent_e1_300m", "profluent_e1_600m"],
+    "Masked LM + homologs": ["profluent_e1_300m", "profluent_e1_600m"],
 }
-NOPLM = {"No PLM, sequence descriptors": ["noplm"]}
+NOPLM = {"Sequence descriptors": ["noplm"]}
 # Name and marker of each predictor head: shape by head, colour by pooling.
 HEADS = {
     "mlp/no_attention": ("MLP", vis.TEAL, "o"),
@@ -275,17 +276,16 @@ def _ideal_key(c: vis.Canvas) -> None:
     c.text(30, y, "ideal: each newer PLM rates higher", "legend", ha="left")
 
 
-def _marker_key(
-    c: vis.Canvas, items: list[tuple[vis.Colour, str, str]], gap: float = 22
+def _head_key(
+    c: vis.Canvas, top: float, panel_h: float, key_w: float, row_h: float = 18
 ) -> None:
-    """One row of (colour, shape, label) markers at the foot of the card."""
-    y, x = c.h - 12, 0
-    renderer = c.fig.canvas.get_renderer()
-    inverse = c.ax.transData.inverted()
-    for colour, shape, name in items:
-        c.dot(x + 4.6, y, colour, shape, r=SHAPE_R[shape])
-        box = c.text(x + 14, y, name, "legend", ha="left").get_window_extent(renderer)
-        x = inverse.transform((box.x1, 0))[0] + gap
+    """Key of the predictor heads down the right edge, centred on the panel."""
+    x_key = c.w - key_w
+    y = top + (panel_h - len(HEADS) * row_h) / 2 + row_h / 2
+    for name, colour, shape in HEADS.values():
+        c.dot(x_key + 6, y, colour, shape, r=SHAPE_R[shape])
+        c.text(x_key + 16, y, name, "legend", ha="left")
+        y += row_h
 
 
 def _release_panel(
@@ -463,7 +463,7 @@ def over_time_scatter(out: Path) -> None:
 
     Each PLM has its own marker, named in a key down the right edge.
     """
-    panel_h, top, left, gap, key_w = 250, 52, 64, 56, 116
+    panel_h, top, left, gap, key_w = 206, 52, 64, 56, 116
     c = vis.Canvas(vis.CANVAS_W, top + panel_h + 36)
     c.title("Rating of each PLM by release date")
     panel_w = (c.w - left - 2 * gap - key_w) / 2
@@ -482,7 +482,7 @@ def over_time_scatter(out: Path) -> None:
         va="center",
         rotation=90,
     )
-    _plm_key(c, top, panel_h, key_w)
+    _plm_key(c, top, panel_h, key_w, row_h=14)
     c.text(
         c.w - 4,
         vis.Y_TITLE,
@@ -531,8 +531,9 @@ def attributes(out: Path) -> None:
         ["embedding_model", lb.model_family + "/" + lb.pool_type]
     ).rating
     groups = GROUPS | NOPLM
-    top, panel_h, left, gap, names_h = 36, 260, 64, 14, 122
-    c = vis.Canvas(vis.CANVAS_W, top + panel_h + names_h + 70)
+    top, panel_h, left, gap, names_h, key_w = 36, 200, 64, 12, 54, 108
+    c = vis.Canvas(vis.CANVAS_W, top + panel_h + names_h + 40)
+    right = c.w - key_w - 10
     c.title("Comparing the performance of PLM representations")
     c.text(
         c.w - 4,
@@ -542,14 +543,14 @@ def attributes(out: Path) -> None:
         va="baseline",
     )
     n = sum(len(m) for m in groups.values())
-    slot = (c.w - left - 8 - gap * (len(groups) - 1)) / n
+    slot = (right - left - gap * (len(groups) - 1)) / n
     lo, hi = vis.padded(list(rating), 0.06)
 
     def y_of(v: float) -> float:
         return top + panel_h - (v - lo) / (hi - lo) * panel_h
 
     for v in np.arange(np.ceil(lo / 50) * 50, hi, 50):
-        c.line([left, c.w - 8], [y_of(v)] * 2, color=vis.RULE_2, linewidth=1, zorder=1)
+        c.line([left, right], [y_of(v)] * 2, color=vis.RULE_2, linewidth=1, zorder=1)
         c.text(left - 6, y_of(v), f"{v:.0f}", "tick")
     c.text(
         left - 50,
@@ -563,6 +564,9 @@ def attributes(out: Path) -> None:
     renderer = c.fig.canvas.get_renderer()
     inverse = c.ax.transData.inverted()
     y_axis, y_bracket = top + panel_h + 4, top + panel_h + names_h
+    # Far and near row of the names. The longest name goes on the far row, where
+    # no tick crosses it.
+    name_rows = itertools.cycle((34, 16))
     x0 = left
     for group, members in groups.items():
         for k, emb in enumerate(members):
@@ -577,17 +581,11 @@ def attributes(out: Path) -> None:
                     shape,
                     r=0.8 * SHAPE_R[shape],
                 )
-            # A tick ties the box to its name, written upright beneath it.
-            c.line([x, x], [y_axis, y_axis + 5], color=vis.INK_3, linewidth=0.8)
-            c.text(
-                x,
-                y_axis + 9,
-                vis.short(emb),
-                "row",
-                va="center",
-                rotation=90,
-                rotation_mode="anchor",
-            )
+            # Names alternate between two rows, so each can be wider than its slot;
+            # a tick ties the box to its name.
+            y_name = y_axis + next(name_rows)
+            c.line([x, x], [y_axis, y_name - 8], color=vis.INK_3, linewidth=0.8)
+            c.text(x, y_name, vis.short(emb), "tick", ha="center", color=vis.INK_2)
         x1 = x0 + len(members) * slot
         c.line([x0 + 3, x1 - 3], [y_axis] * 2, color=vis.INK_3, linewidth=0.8)
         # A bracket open to the top spans the representations of one kind.
@@ -613,7 +611,7 @@ def attributes(out: Path) -> None:
                 break
             t.remove()
         x0 = x1 + gap
-    _marker_key(c, [(colour, shape, name) for name, colour, shape in HEADS.values()])
+    _head_key(c, top, panel_h, key_w)
     c.save(out, "plm_attributes")
 
 
@@ -642,28 +640,21 @@ def _head_panel(
     def y_of(v: float) -> float:
         return top + panel_h - (v - lo) / (hi - lo) * panel_h
 
-    c.text(
-        x0,
-        top - 12,
-        BOARDS[board],
-        "label",
-        ha="left",
-        va="baseline",
-        fontweight="bold",
-    )
     for v in np.arange(np.ceil(lo / 100) * 100, hi, 100):
         c.line(
             [x0, x0 + panel_w], [y_of(v)] * 2, color=vis.RULE_2, linewidth=1, zorder=1
         )
         c.text(x0 - 6, y_of(v), f"{v:.0f}", "tick")
+    # The board's name runs up the left edge; the note names the rating axis.
     c.text(
-        x0 - 50,
+        x0 - 46,
         top + panel_h / 2,
-        "Bradley–Terry rating",
-        "axis",
+        BOARDS[board],
+        "label",
         ha="center",
         va="center",
         rotation=90,
+        fontweight="bold",
     )
     for j, (head, (name, _, _)) in enumerate(HEADS.items()):
         x = x0 + (j + 0.5) * slot
@@ -682,33 +673,12 @@ def _head_panel(
         c.text(x, top + panel_h + 14, name, "row", ha="center", va="baseline")
 
 
-HEAD_NOTE = "one point per PLM · box: quartiles · whiskers: range"
-
-
-def head_boxes(out: Path) -> None:
-    """Rating of each predictor head across the 14 PLMs, the boards stacked."""
-    panel_h, top, left, gap, key_w = 190, 52, 64, 56, 116
-    c = vis.Canvas(vis.CANVAS_W, top + 2 * panel_h + gap + 26)
-    c.title("Rating of each predictor head across the 14 PLMs")
-    c.text(c.w - 4, vis.Y_TITLE, HEAD_NOTE.upper(), "note", va="baseline")
-    panel_w = c.w - left - 24 - key_w
-    for k, board in enumerate(BOARDS):
-        colour = vis.TEAL if k == 0 else vis.BROWN
-        _head_panel(c, board, left, top + k * (panel_h + gap), panel_w, panel_h, colour)
-    _plm_key(c, top, 2 * panel_h + gap, key_w, noplm=True)
-    c.save(out, "head_rating")
-
-
-def head_boxes_board(out: Path, board: str) -> None:
-    """Rating of each predictor head across the 14 PLMs on one board."""
-    panel_h, top, left, key_w = 340, 52, 64, 116
-    c = vis.Canvas(vis.CANVAS_W, top + panel_h + 26)
-    c.title("Rating of each predictor head across the 14 PLMs")
-    c.text(c.w - 4, vis.Y_TITLE, HEAD_NOTE.upper(), "note", va="baseline")
-    colour = vis.TEAL if board == "properties" else vis.BROWN
-    _head_panel(c, board, left, top, c.w - left - 24 - key_w, panel_h, colour)
-    _plm_key(c, top, panel_h, key_w, noplm=True)
-    c.save(out, f"{BOARD_NAME[board]}_head_rating")
+HEAD_NOTE = (
+    "y: Bradley–Terry rating · one point per PLM · box: quartiles · whiskers: range"
+)
+MERGED_NOTE = (
+    "y: Bradley–Terry rating · box: quartiles · whiskers: range · bars: 95% interval"
+)
 
 
 def _linear_gap(board: str) -> pd.DataFrame:
@@ -734,67 +704,97 @@ def _linear_gap(board: str) -> pd.DataFrame:
     return pd.DataFrame.from_dict(rows, orient="index", columns=["gap", "lo", "hi"])
 
 
-GAP_NOTE = "one point per PLM · bars: 95% interval · box: quartiles"
+def _gain_panel(
+    c: vis.Canvas,
+    g: pd.DataFrame,
+    span: tuple[float, float],
+    x0: float,
+    top: float,
+    panel_w: float,
+    panel_h: float,
+    colour: vis.Colour,
+) -> None:
+    """One board: the rating the best head of each PLM gains over its linear probe.
 
-
-def linear_gap(out: Path) -> None:
-    """Rating the best head of each PLM gains over a linear probe, on both boards."""
-    panel_h, top, left, key_w = 300, 52, 64, 116
-    c = vis.Canvas(vis.CANVAS_W, top + panel_h + 26)
-    c.title("Rating difference between the best and the linear predictor head")
-    c.text(c.w - 4, vis.Y_TITLE, GAP_NOTE.upper(), "note", va="baseline")
-    gaps = {board: _linear_gap(board) for board in BOARDS}
-    # 0, the linear probe itself, stays on the axis as the reference.
-    lo, hi = vis.padded([0, *(v for g in gaps.values() for v in (*g.lo, *g.hi))], 0.04)
-    panel_w = c.w - left - 24 - key_w
-    slot = panel_w / len(BOARDS)
-    hw = 0.36 * slot
+    span is the rating range, shared by both boards so their gains compare.
+    """
+    lo, hi = span
+    x, hw = x0 + panel_w / 2, panel_w / 2 - 6
     step = 2 * (hw - 4) / (len(PLM_ORDER) - 1)
 
     def y_of(v: float) -> float:
         return top + panel_h - (v - lo) / (hi - lo) * panel_h
 
-    for v in np.arange(np.ceil(lo / 50) * 50, hi, 50) + 0.0:  # + 0.0 turns -0 into 0
-        rule = vis.INK_3 if v == 0 else vis.RULE_2
-        c.line([left, left + panel_w], [y_of(v)] * 2, color=rule, linewidth=1, zorder=1)
-        c.text(left - 6, y_of(v), f"{v:.0f}", "tick")
-    c.text(left + 4, y_of(0) - 5, "linear probe", "legend", ha="left", va="baseline")
+    for v in np.arange(0, hi, 100):
+        rule = vis.INK_3 if v == 0 else vis.RULE_2  # 0 is the linear probe itself
+        c.line([x0, x0 + panel_w], [y_of(v)] * 2, color=rule, linewidth=1, zorder=1)
+        c.text(x0 - 6, y_of(v), f"{v:.0f}", "tick")
+    _box(c, x, g.gap.drop("noplm"), y_of, hw)
+    _dashes(c, x - hw, x + hw, y_of(g.gap["noplm"]))
+    for i, emb in enumerate(PLM_ORDER):
+        xi = x - hw + 4 + i * step
+        c.line(
+            [xi, xi],
+            [y_of(g.lo[emb]), y_of(g.hi[emb])],
+            color=colour,
+            linewidth=1,
+            alpha=0.5,
+            zorder=2.5,
+        )
+        shape, hollow = MARKER[emb]
+        c.dot(
+            xi,
+            y_of(g.gap[emb]),
+            colour,
+            shape,
+            0.85 * SHAPE_R[shape],
+            hollow=hollow,
+        )
     c.text(
-        left - 50,
-        top + panel_h / 2,
-        "best head − linear probe (rating)",
-        "axis",
-        ha="center",
-        va="center",
-        rotation=90,
+        x, top + panel_h + 14, "best \u2212 linear", "row", ha="center", va="baseline"
     )
-    for k, (board, g) in enumerate(gaps.items()):
+
+
+def head_boxes(out: Path) -> None:
+    """Rating of each predictor head across the 14 PLMs, and its gain over linear.
+
+    One row per board: the five heads, then what the best head of each PLM adds to
+    its linear probe, on an axis of its own.
+    """
+    panel_h, top, left, gap, key_w = 150, 48, 64, 30, 116
+    gain_w, gain_pad = 120, 44
+    c = vis.Canvas(vis.CANVAS_W, top + 2 * panel_h + gap + 26)
+    c.title("Rating of each predictor head across the 14 PLMs")
+    c.text(c.w - 4, vis.Y_TITLE, MERGED_NOTE.upper(), "note", va="baseline")
+    panel_w = c.w - left - 14 - key_w - gain_w - gain_pad
+    gains = {board: _linear_gap(board) for board in BOARDS}
+    # 0, the linear probe itself, stays on the axis as the reference.
+    span = vis.padded([0, *(v for g in gains.values() for v in (*g.lo, *g.hi))], 0.04)
+    x_gain = left + panel_w + gain_pad
+    style = dict(ha="left", va="baseline", fontweight="bold")
+    c.text(left, top - 12, "a) Rating of each head", "label", **style)
+    c.text(x_gain, top - 12, "b) Gain over linear", "label", **style)
+    # A rule sets the gains, on their own axis, apart from the ratings.
+    c.line([x_gain - 36] * 2, [top - 22, c.h - 6], color=vis.INK_3, linewidth=0.8)
+    for k, board in enumerate(BOARDS):
         colour = vis.TEAL if k == 0 else vis.BROWN
-        x = left + (k + 0.5) * slot
-        _box(c, x, g.gap.drop("noplm"), y_of, hw)
-        _dashes(c, x - hw, x + hw, y_of(g.gap["noplm"]))
-        for i, emb in enumerate(PLM_ORDER):
-            xi = x - hw + 4 + i * step
-            c.line(
-                [xi, xi],
-                [y_of(g.lo[emb]), y_of(g.hi[emb])],
-                color=colour,
-                linewidth=1,
-                alpha=0.5,
-                zorder=2.5,
-            )
-            shape, hollow = MARKER[emb]
-            c.dot(
-                xi,
-                y_of(g.gap[emb]),
-                colour,
-                shape,
-                0.85 * SHAPE_R[shape],
-                hollow=hollow,
-            )
-        c.text(x, top + panel_h + 14, BOARDS[board], "row", ha="center", va="baseline")
+        y = top + k * (panel_h + gap)
+        _head_panel(c, board, left, y, panel_w, panel_h, colour)
+        _gain_panel(c, gains[board], span, x_gain, y, gain_w, panel_h, colour)
+    _plm_key(c, top, 2 * panel_h + gap, key_w, noplm=True)
+    c.save(out, "head_rating")
+
+
+def head_boxes_board(out: Path, board: str) -> None:
+    """Rating of each predictor head across the 14 PLMs on one board."""
+    panel_h, top, left, key_w = 340, 34, 64, 116
+    c = vis.Canvas(vis.CANVAS_W, top + panel_h + 26)
+    c.title("Rating of each predictor head across the 14 PLMs")
+    c.text(c.w - 4, vis.Y_TITLE, HEAD_NOTE.upper(), "note", va="baseline")
+    colour = vis.TEAL if board == "properties" else vis.BROWN
+    _head_panel(c, board, left, top, c.w - left - 24 - key_w, panel_h, colour)
     _plm_key(c, top, panel_h, key_w, noplm=True)
-    c.save(out, "linear_gap")
+    c.save(out, f"{BOARD_NAME[board]}_head_rating")
 
 
 def main() -> None:
@@ -812,7 +812,6 @@ def main() -> None:
     head_boxes(out)
     head_boxes_board(out, "properties")
     head_boxes_board(out, "real_case")
-    linear_gap(out)
 
 
 if __name__ == "__main__":

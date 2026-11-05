@@ -41,15 +41,15 @@ SEQ_CMAP = {
 INK, INK_2, INK_3 = "#131e1d", "#3f4e4d", "#5a6665"
 RULE, RULE_2, SURFACE, PAGE = "#b7c0bf", "#c9cfcf", "#dfe2e7", "#ffffff"
 
-# 6.25 in of canvas plus the 0.1 in card padding on each side and the save margin
+# 6.35 in of canvas plus the 0.05 in card padding on each side and the save margin
 # fill the 6.5 in \textwidth of the paper, so figures are included at \linewidth.
-TEXT_WIDTH = 6.25  # inches
-CANVAS_W = 848  # site pixels, same pixel size as the earlier 746 px at 5.5 in
+TEXT_WIDTH = 6.35  # inches
+CANVAS_W = 862  # site pixels, same pixel size as the earlier 746 px at 5.5 in
 PANEL_RADIUS = 7.2184558 / 213.43906  # card corner, as in the diagram SVGs
 PANEL_MARGIN = 2.49 / 605.02
-CARD_PAD = 0.1 / TEXT_WIDTH
+CARD_PAD = 0.05 / TEXT_WIDTH
 Y_TITLE, Y_AXIS, Y_TICKS, Y_PLOT = 18, 44, 60, 68
-ROW_H, M_BOT = 21, 36
+ROW_H, M_BOT = 18, 36
 
 STYLE = {
     "title": dict(fontsize=8.2, color=INK, fontfamily=SANS, fontweight="bold"),
