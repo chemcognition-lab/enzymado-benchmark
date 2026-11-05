@@ -13,7 +13,7 @@
 | **Task / Dataset ID** | `goldman_aminotransferase` |
 | **Property Name** | `log10_specific_activity` |
 | **Biochemical Observable** | $\log_{10}(\text{specific activity in U mg}^{-1})$ for transamination of 18 canonical L-amino acids to 2-ketoacids using 2-ketoglutarate as amino acceptor |
-| **Primary Experimental Source** | Li, T. et al. *Exploration of transaminase diversity for the oxidative conversion of natural amino acids into 2-ketoacids and high-value chemicals*. *ACS Catalysis* **10**, 7950–7962 (2020), DOI: [`10.1021/acscatal.0c01895`](https://doi.org/10.1021/acscatal.0c01895) |
+| **Primary Experimental Source** | Li, T. et al. *Exploration of transaminase diversity for the oxidative conversion of natural amino acids into 2-ketoacids and high-value chemicals*. *ACS Catalysis* **10**, 7950–7957 (2020), DOI: [`10.1021/acscatal.0c01895`](https://doi.org/10.1021/acscatal.0c01895) |
 | **Benchmark Curation Source** | Goldman, S., Das, R., Yang, K. K. & Coley, C. W. *Machine learning modeling of family wide enzyme-substrate specificity screens*. *PLoS Comput. Biol.* **18**(2), e1009853 (2022), DOI: [`10.1371/journal.pcbi.1009853`](https://doi.org/10.1371/journal.pcbi.1009853) |
 | **Preprocessing Script** | [`scripts/data_prep/real_cases/goldman_aminotransferase.py`](../../scripts/data_prep/real_cases/goldman_aminotransferase.py) |
 | **Published Split** | `goldman_aminotransferase_random_80_10_10_standardized` (`336` train / `48` val / `48` test; `432` total rows) |
