@@ -64,12 +64,28 @@ minus the wild type's, so it has to learn what the mutation changed, not which
 protein it is.
 
 **Case studies** (need `--task_scope real_case`; regression, `random` split
-only): `align_amylase_activity`, `align_amylase_expression`,
+only), 36 in all: `align_amylase_activity`, `align_amylase_expression`,
 `align_amylase_stability`, `align_glucosidase_activity`,
 `align_glucosidase_expression`, `align_glucosidase_melting`,
-`cleeveland_galox` (protein + substrate) and `erickson_petase`. The six
-`align_*` datasets are libraries of variants of one enzyme, differing by a few
-residues.
+`amie_acetamide_dms`, `amie_isobutyramide_dms`, `amie_propionamide_dms`,
+`ao_3fcr_transaminase`, `cleeveland_galox`, `cyp2c9_abundance`,
+`cyp2c9_activity`, `daox_epseq_activity`, `daox_epseq_stability`,
+`erickson_petase`, `fisher_fdh_nabr`, `fisher_fdh_nacl`,
+`goase_variant_substrate`, `goldman_aminotransferase`,
+`goldman_olea_thiolase`, `huang_had_phosphatase_c0`,
+`huang_had_phosphatase_c1`, `huang_had_phosphatase_c2`,
+`koudelakova_hld_panel`, `martinez_esterase_panel`, `mcba_reaction_activity`,
+`mpro_fret_cleavage`, `pafa_htmek_kcat`, `pafa_htmek_kcat_km`,
+`pafa_htmek_km`, `plpro_abundance`, `plpro_activity`, `pyks_solubility`,
+`trpb3_epistasis`, `welo5_soraphen_activity`. The six `align_*` datasets are
+libraries of variants of one enzyme, differing by a few residues. Thirteen
+case studies are protein + substrate: `cleeveland_galox`,
+`goase_variant_substrate`, `goldman_olea_thiolase`,
+`goldman_aminotransferase`, `fisher_fdh_nacl`, `fisher_fdh_nabr`,
+`martinez_esterase_panel`, `huang_had_phosphatase_c0`,
+`huang_had_phosphatase_c1`, `huang_had_phosphatase_c2`,
+`mcba_reaction_activity`, `ao_3fcr_transaminase`, `koudelakova_hld_panel`.
+Each has a card in [`docs/data_cards/`](docs/data_cards/).
 
 ## What one run trains
 
@@ -160,9 +176,9 @@ environment in `envs_files/`.
 
 ### 2. Train
 
-Tasks with a substrate (`binding`, `kcat`, `km`, `cleeveland_galox`) also read
-its RDKit descriptors from `data/ligand_features/descriptastorus.npz`, which is
-not tracked. Build it once; it takes about 3 minutes on 8 CPUs:
+Tasks with a substrate (`binding`, `kcat`, `km` and the 13 case studies listed
+under [The tasks](#the-tasks)) also read its RDKit descriptors from
+`data/ligand_features/descriptastorus.npz`, which is not tracked. Build it once; it takes about 3 minutes on 8 CPUs:
 
 ```bash
 python scripts/data_prep/build_ligand_features.py --workers 8

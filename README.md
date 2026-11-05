@@ -11,7 +11,7 @@ the numbers are comparable.
 
 <p align="center">
   <img src="assets/representation_question_enzymado_palette.png"
-       alt="One enzyme has many properties, from optimal pH, kcat and Km to EC number, binding, active and binding sites, ddG and solubility. Enzymado asks whether a PLM embedding can predict all of them."
+       alt="One enzyme has many properties, from optimal pH, kcat and Km to EC number, binding, active and binding sites, ddG and solubility. Enzymado asks whether a PLM embedding can predict all of them, and offers an Elo-like rating, data and model cards, and agentic benchmark extensibility."
        width="820">
 </p>
 
@@ -61,12 +61,17 @@ what the representation already carries, not what a full fine-tune could extract
 
 Every model competes on the **same proteins**. The embedding stores do not cover the
 sequence index identically, so `scripts/embeddings/build_embedding_intersection.py`
-computes their intersection once and every run is restricted to it via `--allowed_ids`.
-The published runs use **269,409 shared sequence IDs**: of the 270,029 sequences in
-`data/processed/protein_pool.csv`, the 620 left out are 2,645 residues or longer
-and ran out of GPU memory in ESM3. (`excluded_ids.txt` also lists IDs of an earlier, larger index
-that no dataset uses any more.) `results/embedding_intersection/report.tsv` records the
-per-model coverage.
+computes their intersection once, and runs are restricted to it via `--allowed_ids`.
+`data/processed/protein_pool.csv` holds **319,791 unique sequences**; the 620 that are 2,645
+residues or longer ran out of GPU memory in ESM3 and are dropped, so every model sees the
+same **319,171 sequences**.
+
+That shared set is tracked in two pieces, because the sequence index grew after the
+intersection was first computed. `results/embedding_intersection/common_ids.txt` holds the
+269,409 IDs of the index as it stood then, and the 28 case studies added on 2026-10-30
+brought 49,762 more, embedded with the same 14 models; together they are the 319,171.
+(`excluded_ids.txt` also lists IDs of an earlier, larger index that no dataset uses any
+more.) `results/embedding_intersection/report.tsv` records the per-model coverage.
 
 Every published run uses **training seed 42**. Seeds 43 and 44 retrain a subset of the runs
 to measure training noise (see [Ratings](#ratings)).
@@ -87,11 +92,12 @@ reading the results:
   The fragment list and its UniProt release are in `data/processed/uniprot_fragments.{csv,json}`.
   Residue tasks keep fragments: their labels are positions on the deposited sequence and all
   fall inside it.
-- **Case-study targets that span two or more orders of magnitude are modeled as log10**
-  (GalOx and PETase activity, amylase activity and stability, glucosidase activity and
-  expression), with zeros offset by the smallest positive value at one significant figure
-  (`scripts/data_prep/clean_real.py`). PETase rows also carry the reaction temperature, pH
-  and buffer as numeric features.
+- **24 of the 36 case studies are modeled on a log scale** (target columns starting with
+  `log10_` or `log_`). The offset for zeros depends on the dataset: the smallest positive
+  value at one significant figure for the `align_*` datasets, +1 for PETase and a small
+  fixed value for others, such as 1e-3. Each dataset's preprocessing lives in
+  `scripts/data_prep/real_cases/`. PETase rows also carry the reaction temperature, pH and
+  buffer as numeric features, and GalOx rows the substrate concentration.
 
 Similarity splits use MMseqs2 at a minimum identity of 0.3. The 0.5 threshold recorded in
 the dataset cards belongs to a separate whole-dataset diversity analysis and does not define
@@ -138,9 +144,9 @@ wrapper.
 
 | route | tasks | input |
 |---|---|---|
-| `protein_global` + `binary` / `scalar_regression` | `solubility`, `ph_opt`, case studies | pooled protein vector |
+| `protein_global` + `binary` / `scalar_regression` | `solubility`, `ph_opt`, the 23 case studies without a substrate | pooled protein vector |
 | `protein_global` + `multilabel_ec` | `ec_number` | pooled vector; hierarchical multi-head classifier, or one flat concatenated target for XGBoost with unknown descendants masked per column |
-| `protein_ligand_global` | `binding`, `kcat`, `km`, `cleeveland_galox` | pooled vector joined with the 200 descriptastorus `RDKit2DNormalized` descriptors of the substrate (`data/ligand_features/descriptastorus.npz`, not tracked: build it once with `scripts/data_prep/build_ligand_features.py`) |
+| `protein_ligand_global` | `binding`, `kcat`, `km`, and 13 case studies: `cleeveland_galox`, `goase_variant_substrate`, `goldman_olea_thiolase`, `goldman_aminotransferase`, `fisher_fdh_nacl`, `fisher_fdh_nabr`, `martinez_esterase_panel`, `huang_had_phosphatase_c0`, `huang_had_phosphatase_c1`, `huang_had_phosphatase_c2`, `mcba_reaction_activity`, `ao_3fcr_transaminase`, `koudelakova_hld_panel` | pooled vector joined with the 200 descriptastorus `RDKit2DNormalized` descriptors of the substrate (`data/ligand_features/descriptastorus.npz`, not tracked: build it once with `scripts/data_prep/build_ligand_features.py`) |
 | `mutation_delta_global` | `ddg`, `dtm` | mutant minus wild-type embedding |
 | `protein_residue` + `residue_binary_vector` | `active_sites`, `binding_site` | one embedding per residue, through `DataLoader` batches |
 
@@ -398,6 +404,8 @@ histograms so the bootstrap stays fast.
 
 ```
 results/
+  all_runs.csv            one row per published run
+  leaderboard_*.csv       the two leaderboards as plain tables
   predictions/            per-run artifacts; metrics.json and hparams.json are published
   bootstrap/              1,000-replicate metric distributions per run
   ratings/                the two global leaderboards and their per-round ratings
@@ -414,8 +422,12 @@ produced it.
 
 Only the numbers are published. Prediction tensors, model weights and per-epoch logs stay
 local: they are gigabytes of LFS, and every figure and leaderboard is recomputable from the
-tracked `metrics.json`, `hparams.json` and bootstrap distributions. Per-dataset cards live
-next to the data, at `data/processed/properties/<task>/dataset_card.json`.
+tracked `metrics.json`, `hparams.json` and bootstrap distributions.
+
+Computed statistics for each dataset live next to the data, at
+`data/processed/<scope>/<task>/dataset_card.json`. Curated cards, with sources, label noise
+and caveats, are in [`docs/data_cards/`](docs/data_cards/) (46 datasets) and
+[`docs/model_cards/`](docs/model_cards/) (the 14 language models).
 
 ---
 

@@ -62,12 +62,8 @@ it as `my_enzyme.csv`.
 If your source needs reshaping, write the conversion as a script rather than
 editing by hand: it keeps the dataset reproducible, and it is the only way to
 share one whose licence does not let you redistribute the data.
-`scripts/data_prep/convert_biolip_to_csv.py` is a working example, and
-`scripts/data_prep/convert_enzyarena_to_csv.py` is another: it produced the
-two EnzyArena datasets in `data/processed/real_case/enzyarena_kcat` and
-`data/processed/real_case/enzyarena_km`. Those are converted and split but not
-registered yet, so no published number depends on them; registering one
-follows Steps 4 to 7.
+The modules in `scripts/data_prep/real_cases/` are working examples, one per
+source.
 
 Pick the layout that matches your data.
 
@@ -190,44 +186,57 @@ assigns whole clusters, which keeps relatives together:
 It needs `mmseqs` on your PATH; binaries are at
 <https://github.com/soedinglab/MMseqs2/releases>.
 
-Either way it writes `my_enzyme_<mode>_80_10_10_standardized.csv` into the
-same folder, with two new columns, `split` and `melting_point_standardized`.
+It writes `my_enzyme_random_80_10_10_standardized.csv` (or
+`my_enzyme_similarity_mmseqs2_80_10_10_standardized.csv`) into the same folder, with two new columns, `split` and `melting_point_standardized`.
 
 For data where every row is an independent protein and you want the target
 balanced across splits, use `--random-split-unit point --point-id-col
-dataset_id --stratify-col melting_point` instead.
+dataset_id --stratify-col melting_point` instead. This is the split the
+published case studies use (`scripts/data_prep/generate_real_case_splits.py`).
 
 ## Step 4. Register the task
 
-Open `src/enzymado/data_loading/data_registry.py` and find `TASK_REGISTRY`.
-Add this entry just before its closing `}`, after the last existing entry:
+Open `src/enzymado/data_loading/data_registry.py` and find `_REAL_CASE_TASKS`.
+For layouts A and B with a random split, add one line after the last
+`_real_case_task(...)` entry:
 
 ```python
-    "my_enzyme": TaskConfig(
-        name="my_enzyme",
-        batch_kind=TaskType.PROTEIN_GLOBAL,
-        label_kind=LabelType.SCALAR_REGRESSION,
-        task_scope="real_case",
-        dataset_paths={
-            SplitType.RANDOM: _DATA / "real_case/my_enzyme/my_enzyme_random_80_10_10_standardized.csv",
-        },
-        target_column="melting_point_standardized",
-        index_columns=("dataset_id",),
-    ),
+        _real_case_task("my_enzyme", "melting_point"),
 ```
 
 Then adjust it:
 
-- Replace `my_enzyme` (four places) and `melting_point` with your names. Keep
-  `_standardized` at the end of `target_column`.
-- **Layout B only:** change `TaskType.PROTEIN_GLOBAL` to
-  `TaskType.PROTEIN_LIGAND_GLOBAL` and add the line `ligand_column="smiles",`.
-- **Layout C only:** change `TaskType.PROTEIN_GLOBAL` to
-  `TaskType.MUTATION_DELTA_GLOBAL` and add the line
-  `wildtype_sequence_column="wildtype_sequence",`. The model then sees the
-  mutant's embedding minus the wild type's.
+- Replace `my_enzyme` and `melting_point` with your names. Do not add
+  `_standardized`: the helper adds it.
+- **Layout B only:** add `has_ligand=True`, which reads the `smiles` column.
 - **Optional:** to let the model use a numeric condition column such as
-  temperature, add `numeric_feature_columns=("temperature",),`.
+  temperature, add `numeric_feature_columns=("temperature",)`.
+
+**Layout C, or a similarity split:** the helper does not cover these. Add a
+full entry on the line just before `TASK_REGISTRY`:
+
+```python
+_REAL_CASE_TASKS["my_enzyme"] = TaskConfig(
+    name="my_enzyme",
+    batch_kind=TaskType.MUTATION_DELTA_GLOBAL,
+    label_kind=LabelType.SCALAR_REGRESSION,
+    task_scope="real_case",
+    dataset_paths={
+        SplitType.RANDOM: _P.data_processed_real_case
+        / "my_enzyme/my_enzyme_random_80_10_10_standardized.csv",
+    },
+    target_column="delta_tm_standardized",
+    wildtype_sequence_column="wildtype_sequence",
+    index_columns=(_C.dataset_id,),
+)
+```
+
+Replace `my_enzyme` and `delta_tm` with your names, keeping `_standardized`.
+The model then sees the mutant's embedding minus the wild type's. For layout A
+with a similarity split, use `TaskType.PROTEIN_GLOBAL` and delete the
+`wildtype_sequence_column` line. For any similarity split, use
+`SplitType.SIMILARITY` with the file Step 3 wrote, and add
+`--split_variant similarity` in Step 7.
 
 `task_scope="real_case"` keeps your dataset out of the property tasks. Do not
 change it. Registering a task changes no published number: the leaderboards
@@ -256,7 +265,8 @@ or `erickson_petase` otherwise. In your copy, change:
 
 Then add your dataset's provenance and a description of its label to
 `SOURCES` in `scripts/data_prep/card_metadata.py`, copying the
-`erickson_petase` entry, and run:
+`erickson_petase` entry, and run the commands below. Published datasets also
+have a curated card in `docs/data_cards/`; copy one if you write yours.
 
 ```bash
 python scripts/data_prep/enrich_dataset_cards.py
@@ -381,8 +391,6 @@ published tasks that use them are good examples to copy from
 
 - yes/no labels (like `solubility`), EC numbers (`ec_number`), or labels on
   individual residues (`active_sites`)
-- the similarity split (`--mode similarity`, used by all property tasks),
-  which keeps similar proteins out of the test set
 - the attention heads, which need the much larger per-residue embeddings
 
 ---
