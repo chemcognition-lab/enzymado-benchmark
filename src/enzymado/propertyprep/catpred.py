@@ -81,6 +81,53 @@ def prep_kcat(
     )
 
 
+def prep_kcat_expanded(
+    paths: contracts.Paths,
+    constants: contracts.Constants,
+) -> dict[str, object]:
+    """Prepare CatPred kcat keeping products, reactions and assay conditions.
+
+    Unlike `prep_kcat`, rows missing pH, temperature or products are dropped so
+    every row carries a complete reaction measured under known conditions. The
+    target is that single measurement, not the per-pair maximum `prep_kcat` uses.
+    """
+    raw = pd.read_csv(paths.data_raw_catpred_dir / "CatPred_kcat.csv", index_col=0)
+    stats = common.start_stats(len(raw))
+    columns = {
+        "uniprot": constants.uniprot_id,
+        "sequence": constants.protein_sequence,
+        "reactant_smiles": constants.smiles,
+        "product_smiles": "product_smiles",
+        "temperature": "temperature",
+        "ph": "ph",
+        "log10_value": "kcat",
+    }
+    data = raw[list(columns)].rename(columns=columns).copy()
+    seqs = data[constants.protein_sequence].astype(str).str.strip().str.upper()
+    data[constants.protein_sequence] = seqs
+    required = [c for c in data.columns if c != constants.uniprot_id]
+    rows_before = len(data)
+    data = data.dropna(subset=required)
+    stats["removed_by_reason"]["missing_values"] += rows_before - len(data)
+
+    invalid_count = 0
+    for column in (constants.smiles, "product_smiles"):
+        canonical, valid = chemistry.canonicalize_smiles_column(data[column])
+        invalid_count += int((~valid).sum())
+        data = data[valid].copy()
+        data[column] = canonical[valid].values
+    stats["smiles_invalid_removed"] = invalid_count
+    stats["removed_by_reason"]["other"] += invalid_count
+
+    reaction = data[constants.smiles] + ">>" + data["product_smiles"]
+    data.insert(4, "reaction_smiles", reaction)  # raw is exactly reactants>>products
+
+    destination = paths.data_processed_properties / "kcat"
+    destination.mkdir(parents=True, exist_ok=True)
+    data.to_csv(destination / "kcat_expanded.csv", index=False)
+    return common.finish_stats(stats, len(data))
+
+
 def prep_km(
     paths: contracts.Paths,
     constants: contracts.Constants,

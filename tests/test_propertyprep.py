@@ -8,6 +8,9 @@ import types
 import pandas as pd
 import scripts.data_prep.propertyprep as propertyprep
 
+from enzymado import paths_and_constants
+import enzymado.propertyprep.catpred as catpred
+
 _OUTPUT_PATHS = (
     "data/interim/swissprot/swissprot_active_site.csv",
     "data/interim/swissprot/swissprot_binding_site.csv",
@@ -337,3 +340,39 @@ def test_propertyprep_pipeline_matches_frozen_outputs(
 
     assert _snapshot(tmp_path, raw_paths) == raw_before
     assert _snapshot(tmp_path, _OUTPUT_PATHS) == _EXPECTED_OUTPUT_HASHES
+
+
+def test_kcat_expanded_keeps_reactions_and_complete_conditions(
+    tmp_path: Path,
+) -> None:
+    """Drop rows without pH, T, product or valid SMILES; rebuild the reaction."""
+    paths = _paths(tmp_path)
+    base = {"uniprot": "P1", "sequence": " acd ", "log10_value": 1.2}
+    rows = [
+        base | {"reactant_smiles": "C(C)O", "product_smiles": "CC=O", "ph": 7},
+        base | {"reactant_smiles": "CCO", "product_smiles": "CC=O", "ph": None},
+        base | {"reactant_smiles": "CCO", "product_smiles": None, "ph": 7},
+        base | {"reactant_smiles": "CCO", "product_smiles": "not-smiles", "ph": 7},
+    ]
+    rows = [r | {"temperature": 25, "reaction_smiles": "ignored"} for r in rows]
+    rows.append(rows[0] | {"temperature": None})
+    _write_csv(paths.data_raw_catpred_dir / "CatPred_kcat.csv", rows, index=True)
+
+    stats = catpred.prep_kcat_expanded(paths, paths_and_constants.Constants())
+
+    out = pd.read_csv(paths.data_processed_properties / "kcat/kcat_expanded.csv")
+    assert out.to_dict("records") == [
+        {
+            "uniprot_id": "P1",
+            "protein_sequence": "ACD",
+            "smiles": "CCO",
+            "product_smiles": "CC=O",
+            "reaction_smiles": "CCO>>CC=O",
+            "temperature": 25.0,
+            "ph": 7.0,
+            "kcat": 1.2,
+        }
+    ]
+    removed = stats["amount_of_removed_data"]["removed_by_reason"]
+    assert removed["missing_values"] == 3
+    assert removed["other"] == 1
