@@ -286,12 +286,136 @@ class LazySafetensorsResidueEmbeddingStore(ResidueEmbeddingStore):
         return self._key_shape(key)
 
 
+CONCAT_SPEC_NAME = "concat.json"
+
+
+def concat_parts(source_path: str | Path) -> list[Path] | None:
+    """Return the part sources of a concatenated embedding, or None for a plain one.
+
+    A concatenated embedding is a directory holding ``concat.json`` with
+    ``{"parts": ["<source>", "<source>", ...]}``, each part an ordinary embedding
+    source (a safetensors file or shard directory). Its vectors are the parts'
+    vectors joined along the feature axis, in the listed order.
+    """
+    spec = Path(source_path) / CONCAT_SPEC_NAME
+    if not spec.is_file():
+        return None
+    parts = json.loads(spec.read_text(encoding="utf-8"))["parts"]
+    if len(parts) < 2:
+        raise ValueError(f"{spec} must list at least two parts; found {parts}.")
+    return [Path(part) for part in parts]
+
+
+def _part_ids(part: ResidueEmbeddingStore) -> set[str]:
+    if isinstance(part, LazySafetensorsResidueEmbeddingStore):
+        return set(part._available_ids)
+    return set(part.by_id)
+
+
+def _part_sequences(part: ResidueEmbeddingStore) -> set[str]:
+    if isinstance(part, LazySafetensorsResidueEmbeddingStore):
+        return set(part._seq_to_key)
+    return set(part.by_sequence)
+
+
+class ConcatResidueEmbeddingStore(ResidueEmbeddingStore):
+    """Join the residue embeddings of several stores along the feature axis.
+
+    A row resolves only when every part has it, and the parts must agree on its
+    residue count; the joined tensor is built per lookup, so a materialized
+    concatenation holds no more RAM than its parts.
+    """
+
+    def __init__(self, parts: list[ResidueEmbeddingStore]):
+        super().__init__(by_id={}, by_sequence={})
+        if len(parts) < 2:
+            raise ValueError("A concatenated store needs at least two parts.")
+        self.parts = parts
+        # Residue XGBoost spills its binned matrix to disk when the store streams.
+        self.lazy = any(
+            isinstance(part, LazySafetensorsResidueEmbeddingStore) for part in parts
+        )
+
+    @property
+    def _available_ids(self) -> set[str]:
+        return set.intersection(*(_part_ids(part) for part in self.parts))
+
+    @property
+    def _seq_to_key(self) -> set[str]:
+        return set.intersection(*(_part_sequences(part) for part in self.parts))
+
+    @staticmethod
+    def _join(tensors: list[torch.Tensor], what: str) -> torch.Tensor:
+        lengths = [int(tensor.shape[0]) for tensor in tensors]
+        if len(set(lengths)) != 1:
+            raise ValueError(
+                f"Concatenated parts disagree on the residue count of {what}: {lengths}."
+            )
+        if len({tensor.dtype for tensor in tensors}) != 1:
+            tensors = [tensor.float() for tensor in tensors]
+        return torch.cat(tensors, dim=1)
+
+    @staticmethod
+    def _same_length(lengths: list[int], what: str) -> int:
+        if len(set(lengths)) != 1:
+            raise ValueError(
+                f"Concatenated parts disagree on the residue count of {what}: {lengths}."
+            )
+        return lengths[0]
+
+    def has_id(self, identifier: str) -> bool:
+        return all(part.has_id(identifier) for part in self.parts)
+
+    def has_sequence(self, sequence: str) -> bool:
+        return all(part.has_sequence(sequence) for part in self.parts)
+
+    def lookup_id(self, identifier: str) -> torch.Tensor:
+        return self._join(
+            [part.lookup_id(identifier) for part in self.parts], f"id '{identifier}'"
+        )
+
+    def lookup_sequence(self, sequence: str) -> torch.Tensor:
+        return self._join(
+            [part.lookup_sequence(sequence) for part in self.parts], "a sequence"
+        )
+
+    def lookup_id_length(self, identifier: str) -> int:
+        return self._same_length(
+            [part.lookup_id_length(identifier) for part in self.parts],
+            f"id '{identifier}'",
+        )
+
+    def lookup_sequence_length(self, sequence: str) -> int:
+        return self._same_length(
+            [part.lookup_sequence_length(sequence) for part in self.parts],
+            "a sequence",
+        )
+
+
+def _join_pooled(dicts: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
+    """Concatenate pooled vectors key by key, keeping keys every part has."""
+    first, rest = dicts[0], dicts[1:]
+    return {
+        key: torch.cat([vector, *(other[key] for other in rest)])
+        for key, vector in first.items()
+        if all(key in other for other in rest)
+    }
+
+
 def load_lazy_safetensors_embedding_store(
     source_path: str | Path,
     needed_ids: set[str],
     needed_sequences: set[str],
-) -> LazySafetensorsResidueEmbeddingStore:
+) -> LazySafetensorsResidueEmbeddingStore | ConcatResidueEmbeddingStore:
     """Index safetensors keys needed for lazy residue-embedding training."""
+    parts = concat_parts(source_path)
+    if parts is not None:
+        return ConcatResidueEmbeddingStore(
+            [
+                load_lazy_safetensors_embedding_store(part, needed_ids, needed_sequences)
+                for part in parts
+            ]
+        )
     source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
@@ -313,6 +437,16 @@ def load_safetensors_embedding_store_subset(
     needed_sequences: set[str],
 ) -> ResidueEmbeddingStore:
     """Materialize only the required residue embeddings from safetensors."""
+    parts = concat_parts(source_path)
+    if parts is not None:
+        return ConcatResidueEmbeddingStore(
+            [
+                load_safetensors_embedding_store_subset(
+                    part, needed_ids, needed_sequences
+                )
+                for part in parts
+            ]
+        )
     source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
     available_keys = set(key_to_file)
@@ -337,6 +471,20 @@ def load_pooled_safetensors_subset(
     needed_sequences: set[str],
 ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """Load needed embeddings and mean-pool residue tensors when needed."""
+
+    parts = concat_parts(source_path)
+    if parts is not None:
+        loaded = [
+            load_pooled_safetensors_subset(part, needed_ids, needed_sequences)
+            for part in parts
+        ]
+        by_id = _join_pooled([ids for ids, _ in loaded])
+        by_seq = _join_pooled([seqs for _, seqs in loaded])
+        log(
+            f"      concatenated {len(parts)} parts: {len(by_id)} ids and "
+            f"{len(by_seq)} seqs present in every part"
+        )
+        return by_id, by_seq
 
     source = resolve_embedding_source(source_path)
     key_to_file = _index_safetensors(source)
@@ -834,12 +982,15 @@ def filter_rows_to_allowed_ids(
 
 
 __all__ = [
+    "CONCAT_SPEC_NAME",
+    "ConcatResidueEmbeddingStore",
     "LazySafetensorsResidueEmbeddingStore",
     "build_ec_arrays",
     "build_flat_ec_arrays",
     "build_pooled_embedding_store",
     "build_xy_pooled",
     "collect_needed_lookup_keys",
+    "concat_parts",
     "filter_rows_to_allowed_ids",
     "get_dataloader",
     "get_target_payload",

@@ -276,6 +276,8 @@ class XGBResidueBinaryClassifier:
         # chosen because the residue embeddings did not fit RAM, so hold the
         # binned matrix externally too rather than risk a host-RAM OOM.
         store = self._dataloader_embedding_store(dataloader)
+        if isinstance(store, stores.ConcatResidueEmbeddingStore):
+            return store.lazy
         return isinstance(store, stores.LazySafetensorsResidueEmbeddingStore)
 
     def _resolve_cache_base(self) -> str:

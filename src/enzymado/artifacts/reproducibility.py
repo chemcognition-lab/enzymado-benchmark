@@ -155,6 +155,15 @@ def fingerprint_directory(path: str | Path) -> dict[str, object]:
 def fingerprint_embedding(path: str | Path) -> dict[str, object]:
     """Use a bounded fingerprint appropriate to one embedding artifact layout."""
     embedding_path = Path(path)
+    spec = embedding_path / "concat.json"  # stores.CONCAT_SPEC_NAME
+    if spec.is_file():
+        parts = json.loads(spec.read_text(encoding="utf-8"))["parts"]
+        return {
+            "path": results_layout.format_repo_path(embedding_path),
+            "kind": "concatenation",
+            "spec": fingerprint_file(spec, complete=True),
+            "parts": [fingerprint_embedding(part) for part in parts],
+        }
     if embedding_path.is_dir():
         return fingerprint_directory(embedding_path)
     return fingerprint_file(embedding_path, complete=False)
