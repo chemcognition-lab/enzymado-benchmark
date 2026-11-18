@@ -333,12 +333,11 @@ are skipped, so after a `TIMEOUT` or `OUT_OF_MEMORY`, submit the same command
 again to continue. A failed run leaves `training_failure.json` in its folder;
 delete it before resubmitting, or the run is not retried.
 
-**5. Score and rate.**
+**5. Score and rate.** The bootstrap and the ratings are the only two steps
+the leaderboards need:
 
 ```bash
 RUN=results_rerun
-python scripts/results/compute_metrics.py \
-  --predictions-root $RUN/predictions --statistics-root $RUN/evaluation_statistics
 python scripts/results/compute_bootstrap_metrics.py \
   --predictions-root $RUN/predictions --statistics-root $RUN/evaluation_statistics \
   --bootstrap-root $RUN/bootstrap --n-replicates 1000 --seed 0
@@ -351,6 +350,14 @@ python scripts/results/compute_ratings.py \
   --real-case-attention-bootstrap-root $RUN/bootstrap \
   --ratings-root $RUN/ratings --n-battles 1000
 ```
+
+If you only want the ratings, you do not need `compute_metrics.py`. The
+bootstrap reads the predictions and writes the test scores and their intervals
+into each `metrics.json` itself, and `compute_ratings.py` reads only the
+bootstrap files. Run `compute_metrics.py` only if you also want the train
+scores, which `compute_tie_margins.py` needs for a task missing from
+`results/noise_seeds/tie_margins_v4.csv`. In that case, run it before the
+bootstrap (see Level 2).
 
 Compare `$RUN/ratings/*.csv` with `results/ratings/seed_42_two_leaderboards/`,
 or compare run by run with the Level 2 snippet using
