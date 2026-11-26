@@ -79,10 +79,12 @@ results/dataprep_datacards/
 
 # Working notes and agent configuration (not part of the release).
 # README images live in assets/ instead, which stays tracked.
-# Model cards and dataset cards in docs/ are tracked as part of the release.
+# Model cards, dataset cards and the ingestion workflow in docs/ are tracked as
+# part of the release.
 docs/*
 !docs/model_cards/
 !docs/data_cards/
+!docs/AGENTIC_INGESTION_WORKFLOW.md
 skills/
 
 # Diagram sources stay local: the SVGs carry Inkscape-specific markup and refer
